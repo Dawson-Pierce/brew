@@ -43,7 +43,7 @@ distributions::GGIW GGIWEKF::predict(
     // IW prediction (exponential dof decay + extent propagation)
     const int d = prev.extent_dim();
     const double dof_floor = 2.0 * d + 2.0;
-    double next_v = dof_floor + std::exp(-dt / tau_) * (prev.v() - dof_floor);
+    double next_v = dof_floor + std::exp(-dt / tau_) * (prev.v() - dof_floor) + 1e-5;
 
     double scale = (next_v - dof_floor) / std::max(prev.v() - dof_floor, 1e-12);
     Eigen::MatrixXd next_V = scale * dyn_obj_->propagate_extent(dt, prev.mean(), prev.V());

@@ -12,21 +12,21 @@ RUN apt-get update && apt-get install -y \
     libgmock-dev \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace
+WORKDIR /app
 
-COPY . /workspace/cpp
+COPY . /app
 
-WORKDIR /workspace/cpp/build
+# WORKDIR /cpp/build
 
 # RUN cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release \
 #     && ninja
 
 # Use:
-RUN rm -rf CMakeCache.txt CMakeFiles && \
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release && \
-    ninja
+# RUN rm -rf CMakeCache.txt CMakeFiles && \
+#     cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release && \
+#     ninja
 
-## Best Practice
-# Add `cpp/build/` to your `.dockerignore` file so the build directory isn't copied into the Docker container at all:
+RUN cmake -S . -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /build
 
 CMD ["ctest", "--output-on-failure"]
