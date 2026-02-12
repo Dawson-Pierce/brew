@@ -8,6 +8,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Dependencies
 include(FetchContent)
 
+# Options
+option(BREW_ENABLE_PLOTTING "Enable plotting utilities (matplot++)" ON)
+
 # Eigen: try system install first, fall back to FetchContent
 find_package(Eigen3 3.4 QUIET NO_MODULE)
 if(NOT Eigen3_FOUND)
@@ -31,6 +34,21 @@ add_subdirectory(src/brew/filters)
 add_subdirectory(src/brew/fusion)
 add_subdirectory(src/brew/multi_target)
 add_subdirectory(src/brew/clustering)
+if(BREW_ENABLE_PLOTTING)
+    # --- Fetch matplot++ ---
+    FetchContent_Declare(
+        matplotplusplus
+        GIT_REPOSITORY https://github.com/alandefreitas/matplotplusplus
+        GIT_TAG v1.2.1
+    )
+    # Suppress GCC 13+ warnings in matplot++ third-party code before building it
+    set(_prev_cxx_flags "${CMAKE_CXX_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-truncation -Wno-ignored-attributes")
+    FetchContent_MakeAvailable(matplotplusplus)
+    set(CMAKE_CXX_FLAGS "${_prev_cxx_flags}")
+
+    add_subdirectory(src/brew/plot_utils)
+endif()
 
 # Umbrella library that links all modules
 add_library(brew INTERFACE)
@@ -42,6 +60,10 @@ target_link_libraries(brew INTERFACE
     brew_multi_target
     brew_clustering
 )
+if(BREW_ENABLE_PLOTTING)
+    target_link_libraries(brew INTERFACE brew_plot_utils)
+    target_compile_definitions(brew INTERFACE BREW_ENABLE_PLOTTING)
+endif()
 
 # Testing
 option(BREW_BUILD_TESTS "Build tests" ON)
