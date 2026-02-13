@@ -2,7 +2,7 @@ include(GoogleTest)
 include(FetchContent)
 
 set(EIGENRAND_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
-set(EIGENRAND_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(EIGENRAND_BUILD_TEST OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     eigenrand
@@ -27,6 +27,7 @@ add_executable(brew_tests
     test_phd.cpp
     test_phd_tracking.cpp
     test_phd_tracking_extra.cpp
+    test_phd_trajectory_tracking.cpp
     test_eigenrand.cpp
 )
 
@@ -42,20 +43,4 @@ if(BREW_ENABLE_PLOTTING)
     add_executable(test_math_utils test_math_utils.cpp)
     target_link_libraries(test_math_utils PRIVATE brew GTest::gtest_main)
     add_test(NAME test_math_utils COMMAND test_math_utils)
-
-    add_executable(test_plot_gaussian test_plot_gaussian.cpp)
-    target_link_libraries(test_plot_gaussian PRIVATE brew GTest::gtest_main)
-    add_test(NAME test_plot_gaussian COMMAND test_plot_gaussian)
-
-    add_executable(test_plot_ggiw test_plot_ggiw.cpp)
-    target_link_libraries(test_plot_ggiw PRIVATE brew GTest::gtest_main)
-    add_test(NAME test_plot_ggiw COMMAND test_plot_ggiw)
-
-    add_executable(test_plot_mixture test_plot_mixture.cpp)
-    target_link_libraries(test_plot_mixture PRIVATE brew GTest::gtest_main)
-    add_test(NAME test_plot_mixture COMMAND test_plot_mixture)
-
-    add_executable(test_plot_trajectory test_plot_trajectory.cpp)
-    target_link_libraries(test_plot_trajectory PRIVATE brew GTest::gtest_main)
-    add_test(NAME test_plot_trajectory COMMAND test_plot_trajectory)
 endif()

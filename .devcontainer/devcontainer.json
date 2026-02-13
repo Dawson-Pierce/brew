@@ -1,0 +1,21 @@
+{
+	"name": "brew",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"args": {
+			"BREW_ENABLE_PLOTTING": "ON"
+		}
+	},
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspace/brew,type=bind",
+	"workspaceFolder": "/workspace/brew",
+	"remoteUser": "root",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools",
+				"ms-vscode.cmake-tools"
+			]
+		}
+	},
+	"postCreateCommand": "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBREW_ENABLE_PLOTTING=ON -DBREW_BUILD_TESTS=ON && cmake --build build"
+}

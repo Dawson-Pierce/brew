@@ -41,6 +41,9 @@ if(BREW_ENABLE_PLOTTING)
         GIT_REPOSITORY https://github.com/alandefreitas/matplotplusplus
         GIT_TAG v1.2.1
     )
+    # Disable matplot++ examples and tests to speed up build
+    set(MATPLOTPP_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(MATPLOTPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     # Suppress GCC 13+ warnings in matplot++ third-party code before building it
     set(_prev_cxx_flags "${CMAKE_CXX_FLAGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-truncation -Wno-ignored-attributes")

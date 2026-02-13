@@ -9,6 +9,15 @@
 #include <vector>
 #include <cmath>
 
+#ifdef BREW_ENABLE_PLOTTING
+#include <matplot/matplot.h>
+#include <brew/plot_utils/plot_options.hpp>
+#include <brew/plot_utils/plot_gaussian.hpp>
+#include <brew/plot_utils/plot_ggiw.hpp>
+#include <brew/plot_utils/color_palette.hpp>
+#include <filesystem>
+#endif
+
 using namespace brew;
 
 // ---- Helpers for generating truth and measurements ----
@@ -148,6 +157,12 @@ TEST(PHDTracking, TwoPointTargets) {
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(25.0);
 
+#ifdef BREW_ENABLE_PLOTTING
+    std::vector<double> truth_ax_vec, truth_ay_vec, truth_bx_vec, truth_by_vec;
+    std::vector<double> meas_all_x, meas_all_y;
+    std::vector<double> est_all_x, est_all_y;
+#endif
+
     std::cout << "\n=== Gaussian PHD Tracking - Two Point Targets ===\n";
     std::cout << std::setw(5) << "Step"
               << std::setw(10) << "N_meas"
@@ -199,6 +214,21 @@ TEST(PHDTracking, TwoPointTargets) {
                 converged_steps++;
             }
         }
+
+#ifdef BREW_ENABLE_PLOTTING
+        truth_ax_vec.push_back(truth_a(0));
+        truth_ay_vec.push_back(truth_a(1));
+        truth_bx_vec.push_back(truth_b(0));
+        truth_by_vec.push_back(truth_b(1));
+        for (int j = 0; j < meas.cols(); ++j) {
+            meas_all_x.push_back(meas(0, j));
+            meas_all_y.push_back(meas(1, j));
+        }
+        for (std::size_t i = 0; i < latest.size(); ++i) {
+            est_all_x.push_back(latest.component(i).mean()(0));
+            est_all_y.push_back(latest.component(i).mean()(1));
+        }
+#endif
     }
 
     std::cout << "\nConverged steps (k>=10, both errors < 5.0): "
@@ -206,6 +236,56 @@ TEST(PHDTracking, TwoPointTargets) {
 
     // We expect most steps after convergence to track both targets
     EXPECT_GE(converged_steps, 10) << "PHD should track both targets for most of the run";
+
+#ifdef BREW_ENABLE_PLOTTING
+    {
+        std::filesystem::create_directories("/workspace/brew/output");
+        auto fig = matplot::figure(true);
+        fig->width(1000);
+        fig->height(800);
+        auto ax = fig->current_axes();
+        ax->hold(true);
+
+        // Measurements (light gray dots)
+        if (!meas_all_x.empty()) {
+            auto mp = ax->plot(meas_all_x, meas_all_y, ".");
+            mp->color({0.f, 0.7f, 0.7f, 0.7f});
+            mp->marker_size(4.0f);
+        }
+
+        // Truth trajectory A (solid black)
+        auto ta = ax->plot(truth_ax_vec, truth_ay_vec);
+        ta->color({0.f, 0.f, 0.f, 0.f});
+        ta->line_width(2.5f);
+
+        // Truth trajectory B (dashed black)
+        auto tb = ax->plot(truth_bx_vec, truth_by_vec, "--");
+        tb->color({0.f, 0.f, 0.f, 0.f});
+        tb->line_width(2.5f);
+
+        // Estimates (MATLAB blue dots)
+        if (!est_all_x.empty()) {
+            auto ep = ax->plot(est_all_x, est_all_y, ".");
+            ep->color({0.f, 0.f, 0.4470f, 0.7410f});
+            ep->marker_size(8.0f);
+        }
+
+        // Covariance ellipses at every timestep
+        const auto& all_extracted = phd.extracted_mixtures();
+        for (const auto& mix_ptr : all_extracted) {
+            for (std::size_t i = 0; i < mix_ptr->size(); ++i) {
+                brew::plot_utils::plot_gaussian_2d(ax, mix_ptr->component(i),
+                    {0, 1}, {0.f, 0.f, 0.4470f, 0.7410f}, 2.0, 0.7f);
+            }
+        }
+
+        ax->title("Gaussian PHD - Two Point Targets");
+        ax->xlabel("x");
+        ax->ylabel("y");
+
+        brew::plot_utils::save_figure(fig, "/workspace/brew/output/phd_gaussian_two_targets.png");
+    }
+#endif
 }
 
 // ---- GGIW PHD tracking test (extended target) ----
@@ -262,6 +342,12 @@ TEST(PHDTracking, ExtendedTargetGGIW) {
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(25.0);
     phd.set_extended_target(true);
+
+#ifdef BREW_ENABLE_PLOTTING
+    std::vector<double> truth_x_vec, truth_y_vec;
+    std::vector<double> meas_all_x, meas_all_y;
+    std::vector<double> est_all_x, est_all_y;
+#endif
 
     std::cout << "\n=== GGIW PHD Tracking - Single Extended Target ===\n";
     std::cout << std::setw(5) << "Step"
@@ -321,10 +407,68 @@ TEST(PHDTracking, ExtendedTargetGGIW) {
         if (k >= 5 && latest.size() >= 1 && err < 10.0) {
             tracked_steps++;
         }
+
+#ifdef BREW_ENABLE_PLOTTING
+        truth_x_vec.push_back(truth_pos(0));
+        truth_y_vec.push_back(truth_pos(1));
+        for (int j = 0; j < meas.cols(); ++j) {
+            meas_all_x.push_back(meas(0, j));
+            meas_all_y.push_back(meas(1, j));
+        }
+        for (std::size_t i = 0; i < latest.size(); ++i) {
+            est_all_x.push_back(latest.component(i).mean()(0));
+            est_all_y.push_back(latest.component(i).mean()(1));
+        }
+#endif
     }
 
     std::cout << "\nTracked steps (k>=5, error < 10.0): "
               << tracked_steps << " / " << (num_steps - 5) << "\n";
 
     EXPECT_GE(tracked_steps, 5) << "GGIW PHD should track the extended target";
+
+#ifdef BREW_ENABLE_PLOTTING
+    {
+        std::filesystem::create_directories("/workspace/brew/output");
+        auto fig = matplot::figure(true);
+        fig->width(1000);
+        fig->height(800);
+        auto ax = fig->current_axes();
+        ax->hold(true);
+
+        // Measurements (light gray dots)
+        if (!meas_all_x.empty()) {
+            auto mp = ax->plot(meas_all_x, meas_all_y, ".");
+            mp->color({0.f, 0.7f, 0.7f, 0.7f});
+            mp->marker_size(4.0f);
+        }
+
+        // Truth trajectory (solid black)
+        auto tl = ax->plot(truth_x_vec, truth_y_vec);
+        tl->color({0.f, 0.f, 0.f, 0.f});
+        tl->line_width(2.5f);
+
+        // Estimates (MATLAB blue dots)
+        if (!est_all_x.empty()) {
+            auto ep = ax->plot(est_all_x, est_all_y, ".");
+            ep->color({0.f, 0.f, 0.4470f, 0.7410f});
+            ep->marker_size(8.0f);
+        }
+
+        // GGIW extent ellipses at every timestep
+        const auto& all_extracted = phd.extracted_mixtures();
+        for (const auto& mix_ptr : all_extracted) {
+            for (std::size_t i = 0; i < mix_ptr->size(); ++i) {
+                brew::plot_utils::plot_ggiw_2d(ax, mix_ptr->component(i),
+                    {0, 1}, {0.f, 0.f, 0.4470f, 0.7410f});
+            }
+        }
+
+        ax->title("GGIW PHD - Extended Target Tracking");
+        ax->xlabel("x");
+        ax->ylabel("y");
+
+        brew::plot_utils::save_figure(fig, "/workspace/brew/output/phd_ggiw_extended_target.png");
+    }
+#endif
 }

@@ -7,6 +7,15 @@
 #include <vector>
 #include <limits>
 
+#ifdef BREW_ENABLE_PLOTTING
+#include <matplot/matplot.h>
+#include <brew/plot_utils/plot_options.hpp>
+#include <brew/plot_utils/plot_gaussian.hpp>
+#include <brew/plot_utils/plot_ggiw.hpp>
+#include <brew/plot_utils/color_palette.hpp>
+#include <filesystem>
+#endif
+
 using namespace brew;
 
 struct TruthTarget {
@@ -150,6 +159,12 @@ TEST(PHDTracking, GMWithClutterAndDropouts) {
     Eigen::Vector2d clutter_min(-25.0, -25.0);
     Eigen::Vector2d clutter_max(70.0, 70.0);
 
+#ifdef BREW_ENABLE_PLOTTING
+    std::vector<double> truth_ax_vec, truth_ay_vec, truth_bx_vec, truth_by_vec;
+    std::vector<double> meas_all_x, meas_all_y;
+    std::vector<double> est_all_x, est_all_y;
+#endif
+
     int good_steps = 0;
     int eval_steps = 0;
 
@@ -175,10 +190,75 @@ TEST(PHDTracking, GMWithClutterAndDropouts) {
                 good_steps++;
             }
         }
+
+#ifdef BREW_ENABLE_PLOTTING
+        truth_ax_vec.push_back(target_a.states[k](0));
+        truth_ay_vec.push_back(target_a.states[k](1));
+        truth_bx_vec.push_back(target_b.states[k](0));
+        truth_by_vec.push_back(target_b.states[k](1));
+        for (int j = 0; j < meas.cols(); ++j) {
+            meas_all_x.push_back(meas(0, j));
+            meas_all_y.push_back(meas(1, j));
+        }
+        for (std::size_t i = 0; i < latest.size(); ++i) {
+            est_all_x.push_back(latest.component(i).mean()(0));
+            est_all_y.push_back(latest.component(i).mean()(1));
+        }
+#endif
     }
 
     EXPECT_GE(good_steps, 8) << "GM-PHD should maintain both tracks despite clutter";
     EXPECT_GE(eval_steps, 1);
+
+#ifdef BREW_ENABLE_PLOTTING
+    {
+        std::filesystem::create_directories("/workspace/brew/output");
+        auto fig = matplot::figure(true);
+        fig->width(1000);
+        fig->height(800);
+        auto ax = fig->current_axes();
+        ax->hold(true);
+
+        // Measurements including clutter (light gray dots)
+        if (!meas_all_x.empty()) {
+            auto mp = ax->plot(meas_all_x, meas_all_y, ".");
+            mp->color({0.f, 0.7f, 0.7f, 0.7f});
+            mp->marker_size(4.0f);
+        }
+
+        // Truth trajectory A (solid black)
+        auto ta = ax->plot(truth_ax_vec, truth_ay_vec);
+        ta->color({0.f, 0.f, 0.f, 0.f});
+        ta->line_width(2.5f);
+
+        // Truth trajectory B (dashed black)
+        auto tb = ax->plot(truth_bx_vec, truth_by_vec, "--");
+        tb->color({0.f, 0.f, 0.f, 0.f});
+        tb->line_width(2.5f);
+
+        // Estimates (MATLAB blue dots)
+        if (!est_all_x.empty()) {
+            auto ep = ax->plot(est_all_x, est_all_y, ".");
+            ep->color({0.f, 0.f, 0.4470f, 0.7410f});
+            ep->marker_size(8.0f);
+        }
+
+        // Covariance ellipses at every timestep
+        const auto& all_extracted = phd.extracted_mixtures();
+        for (const auto& mix_ptr : all_extracted) {
+            for (std::size_t i = 0; i < mix_ptr->size(); ++i) {
+                brew::plot_utils::plot_gaussian_2d(ax, mix_ptr->component(i),
+                    {0, 1}, {0.f, 0.f, 0.4470f, 0.7410f}, 2.0, 0.7f);
+            }
+        }
+
+        ax->title("GM-PHD - Clutter and Dropouts");
+        ax->xlabel("x");
+        ax->ylabel("y");
+
+        brew::plot_utils::save_figure(fig, "/workspace/brew/output/phd_gaussian_clutter.png");
+    }
+#endif
 }
 
 TEST(PHDTracking, GGIWExtendedSparseMeasurements) {
@@ -237,6 +317,12 @@ TEST(PHDTracking, GGIWExtendedSparseMeasurements) {
     Eigen::LLT<Eigen::MatrixXd> llt(extent);
     Eigen::MatrixXd L_ext = llt.matrixL();
 
+#ifdef BREW_ENABLE_PLOTTING
+    std::vector<double> truth_x_vec, truth_y_vec;
+    std::vector<double> meas_all_x, meas_all_y;
+    std::vector<double> est_all_x, est_all_y;
+#endif
+
     int tracked_steps = 0;
 
     for (int k = 0; k < num_steps; ++k) {
@@ -266,7 +352,65 @@ TEST(PHDTracking, GGIWExtendedSparseMeasurements) {
         if (k >= 6 && latest.size() >= 1 && err < 9.0) {
             tracked_steps++;
         }
+
+#ifdef BREW_ENABLE_PLOTTING
+        truth_x_vec.push_back(truth_pos(0));
+        truth_y_vec.push_back(truth_pos(1));
+        for (int j = 0; j < meas.cols(); ++j) {
+            meas_all_x.push_back(meas(0, j));
+            meas_all_y.push_back(meas(1, j));
+        }
+        for (std::size_t i = 0; i < latest.size(); ++i) {
+            est_all_x.push_back(latest.component(i).mean()(0));
+            est_all_y.push_back(latest.component(i).mean()(1));
+        }
+#endif
     }
 
     EXPECT_GE(tracked_steps, 6) << "GGIW-PHD should track with sparse measurements";
+
+#ifdef BREW_ENABLE_PLOTTING
+    {
+        std::filesystem::create_directories("/workspace/brew/output");
+        auto fig = matplot::figure(true);
+        fig->width(1000);
+        fig->height(800);
+        auto ax = fig->current_axes();
+        ax->hold(true);
+
+        // Measurements (light gray dots)
+        if (!meas_all_x.empty()) {
+            auto mp = ax->plot(meas_all_x, meas_all_y, ".");
+            mp->color({0.f, 0.7f, 0.7f, 0.7f});
+            mp->marker_size(4.0f);
+        }
+
+        // Truth trajectory (solid black)
+        auto tl = ax->plot(truth_x_vec, truth_y_vec);
+        tl->color({0.f, 0.f, 0.f, 0.f});
+        tl->line_width(2.5f);
+
+        // Estimates (MATLAB blue dots)
+        if (!est_all_x.empty()) {
+            auto ep = ax->plot(est_all_x, est_all_y, ".");
+            ep->color({0.f, 0.f, 0.4470f, 0.7410f});
+            ep->marker_size(8.0f);
+        }
+
+        // GGIW extent ellipses at every timestep
+        const auto& all_extracted = phd.extracted_mixtures();
+        for (const auto& mix_ptr : all_extracted) {
+            for (std::size_t i = 0; i < mix_ptr->size(); ++i) {
+                brew::plot_utils::plot_ggiw_2d(ax, mix_ptr->component(i),
+                    {0, 1}, {0.f, 0.f, 0.4470f, 0.7410f});
+            }
+        }
+
+        ax->title("GGIW PHD - Sparse Measurements");
+        ax->xlabel("x");
+        ax->ylabel("y");
+
+        brew::plot_utils::save_figure(fig, "/workspace/brew/output/phd_ggiw_sparse.png");
+    }
+#endif
 }
