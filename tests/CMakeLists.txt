@@ -28,6 +28,15 @@ add_executable(brew_tests
     test_phd_tracking.cpp
     test_phd_tracking_extra.cpp
     test_phd_trajectory_tracking.cpp
+    test_cphd.cpp
+    test_cphd_tracking.cpp
+    test_assignment.cpp
+    test_mbm.cpp
+    test_mbm_tracking.cpp
+    test_mbm_trajectory_tracking.cpp
+    test_pmbm.cpp
+    test_pmbm_tracking.cpp
+    test_pmbm_trajectory_tracking.cpp
     test_eigenrand.cpp
 )
 

@@ -32,6 +32,7 @@ add_subdirectory(src/brew/distributions)
 add_subdirectory(src/brew/dynamics)
 add_subdirectory(src/brew/filters)
 add_subdirectory(src/brew/fusion)
+add_subdirectory(src/brew/assignment)
 add_subdirectory(src/brew/multi_target)
 add_subdirectory(src/brew/clustering)
 if(BREW_ENABLE_PLOTTING)
@@ -60,6 +61,7 @@ target_link_libraries(brew INTERFACE
     brew_dynamics
     brew_filters
     brew_fusion
+    brew_assignment
     brew_multi_target
     brew_clustering
 )
