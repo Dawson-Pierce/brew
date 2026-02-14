@@ -27,11 +27,13 @@ public:
 
     void set_temporal_decay(double eta) { eta_ = eta; }
     void set_forgetting_factor(double tau) { tau_ = tau; }
+    void set_scaling_parameter(double rho) { rho_ = rho; }
     void set_window_size(int L) { l_window_ = L; }
 
 private:
     double eta_ = 1.0;
     double tau_ = 1.0;
+    double rho_ = 1.0;   ///< Scaling parameter for extent in measurement noise
     int l_window_ = 50;
 };
 

@@ -43,7 +43,7 @@ distributions::GGIW GGIWEKF::predict(
     // IW prediction (exponential dof decay + extent propagation)
     const int d = prev.extent_dim();
     const double dof_floor = 2.0 * d + 2.0;
-    double next_v = dof_floor + std::exp(-dt / tau_) * (prev.v() - dof_floor) + 1e-5;
+    double next_v = dof_floor + std::exp(-dt / tau_) * (prev.v() - dof_floor);
 
     double scale = (next_v - dof_floor) / std::max(prev.v() - dof_floor, 1e-12);
     Eigen::MatrixXd next_V = scale * dyn_obj_->propagate_extent(dt, prev.mean(), prev.V());
@@ -159,11 +159,16 @@ double GGIWEKF::gate(
     const Eigen::VectorXd& measurement,
     const distributions::GGIW& predicted) const {
 
+    const int d = predicted.extent_dim();
+    const double dof_floor = 2.0 * d + 2.0;
+    Eigen::MatrixXd X_hat = predicted.V() / std::max(predicted.v() - dof_floor, 1e-12);
+
     const auto H = get_measurement_matrix(predicted.mean());
     const Eigen::VectorXd z_hat = estimate_measurement(predicted.mean());
     const Eigen::VectorXd nu = measurement - z_hat;
 
-    Eigen::MatrixXd S = H * predicted.covariance() * H.transpose() + measurement_noise_;
+    Eigen::MatrixXd S = H * predicted.covariance() * H.transpose()
+                       + rho_ * X_hat + measurement_noise_;
     S = 0.5 * (S + S.transpose());
 
     return nu.transpose() * S.ldlt().solve(nu);

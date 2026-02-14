@@ -14,8 +14,9 @@ void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
         throw std::invalid_argument("plot_trajectory_ggiw_2d: plt_inds must have 2 elements");
     }
 
-    // Draw trajectory line from rearranged states
-    auto states = tg.rearrange_states();  // state_dim x T
+    // Use full mean_history when available (shows entire trajectory, not just window)
+    Eigen::MatrixXd states = (tg.mean_history().cols() > 0)
+        ? tg.mean_history() : tg.rearrange_states();
     const int T = static_cast<int>(states.cols());
 
     std::vector<double> x(T), y(T);
@@ -58,8 +59,9 @@ void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
         throw std::invalid_argument("plot_trajectory_ggiw_3d: plt_inds must have 3 elements");
     }
 
-    // Draw trajectory line
-    auto states = tg.rearrange_states();
+    // Use full mean_history when available (shows entire trajectory, not just window)
+    Eigen::MatrixXd states = (tg.mean_history().cols() > 0)
+        ? tg.mean_history() : tg.rearrange_states();
     const int T = static_cast<int>(states.cols());
 
     std::vector<double> x(T), y(T), z(T);

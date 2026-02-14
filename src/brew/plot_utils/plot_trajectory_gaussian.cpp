@@ -14,7 +14,9 @@ void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
     }
 
     const int idx = plt_inds[0];
-    auto states = tg.rearrange_states();  // state_dim x T
+    // Use full mean_history when available (shows entire trajectory, not just window)
+    Eigen::MatrixXd states = (tg.mean_history().cols() > 0)
+        ? tg.mean_history() : tg.rearrange_states();
     const int T = static_cast<int>(states.cols());
     const int t0 = tg.init_idx;
 
@@ -56,7 +58,9 @@ void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
         throw std::invalid_argument("plot_trajectory_gaussian_2d: plt_inds must have 2 elements");
     }
 
-    auto states = tg.rearrange_states();  // state_dim x T
+    // Use full mean_history when available (shows entire trajectory, not just window)
+    Eigen::MatrixXd states = (tg.mean_history().cols() > 0)
+        ? tg.mean_history() : tg.rearrange_states();
     const int T = static_cast<int>(states.cols());
 
     std::vector<double> x(T), y(T);
@@ -95,7 +99,9 @@ void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
         throw std::invalid_argument("plot_trajectory_gaussian_3d: plt_inds must have 3 elements");
     }
 
-    auto states = tg.rearrange_states();  // state_dim x T
+    // Use full mean_history when available (shows entire trajectory, not just window)
+    Eigen::MatrixXd states = (tg.mean_history().cols() > 0)
+        ? tg.mean_history() : tg.rearrange_states();
     const int T = static_cast<int>(states.cols());
 
     std::vector<double> x(T), y(T), z(T);

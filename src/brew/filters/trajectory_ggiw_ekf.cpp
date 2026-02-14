@@ -23,6 +23,7 @@ std::unique_ptr<Filter<distributions::TrajectoryGGIW>> TrajectoryGGIWEKF::clone(
     c->measurement_noise_ = measurement_noise_;
     c->eta_ = eta_;
     c->tau_ = tau_;
+    c->rho_ = rho_;
     c->l_window_ = l_window_;
     return c;
 }
@@ -179,17 +180,17 @@ TrajectoryGGIWEKF::CorrectionResult TrajectoryGGIWEKF::correct(
     Eigen::VectorXd epsilon = mean_meas - est_meas;
     Eigen::MatrixXd N = epsilon * epsilon.transpose();
 
+    Eigen::MatrixXd R_hat = rho_ * X_hat + measurement_noise_;
     Eigen::MatrixXd S = H_dot * prev_cov * H_dot.transpose()
-                       + X_hat / static_cast<double>(W)
-                       + measurement_noise_;
+                       + R_hat / static_cast<double>(W);
 
     Eigen::MatrixXd K = prev_cov * H_dot.transpose() * S.inverse();
 
-    // N_hat with -1/2 exponent convention
+    // N_hat: use R_hat (not S) per GGIW literature
     Eigen::MatrixXd sqrt_X = sqrtm_spd(X_hat);
-    Eigen::MatrixXd sqrt_S = sqrtm_spd(S);
-    Eigen::MatrixXd sqrt_S_inv = sqrt_S.ldlt().solve(Eigen::MatrixXd::Identity(d, d));
-    Eigen::MatrixXd N_hat = sqrt_X * sqrt_S_inv * N * sqrt_S_inv.transpose() * sqrt_X.transpose();
+    Eigen::MatrixXd sqrt_R = sqrtm_spd(R_hat);
+    Eigen::MatrixXd sqrt_R_inv = sqrt_R.ldlt().solve(Eigen::MatrixXd::Identity(d, d));
+    Eigen::MatrixXd N_hat = sqrt_X * sqrt_R_inv * N * sqrt_R_inv.transpose() * sqrt_X.transpose();
 
     // Update
     Eigen::VectorXd new_mean = predicted.mean() + K * epsilon;
@@ -282,11 +283,15 @@ double TrajectoryGGIWEKF::gate(
     const Eigen::VectorXd state = predicted.get_last_state();
     const Eigen::MatrixXd P = predicted.get_last_cov();
 
+    const int d = static_cast<int>(predicted.V().rows());
+    const double dof_floor = 2.0 * d + 2.0;
+    Eigen::MatrixXd X_hat = predicted.V() / std::max(predicted.v() - dof_floor, 1e-12);
+
     const Eigen::VectorXd z_hat = estimate_measurement(state);
     const Eigen::MatrixXd H = get_measurement_matrix(state);
 
     Eigen::VectorXd nu = measurement - z_hat;
-    Eigen::MatrixXd S = H * P * H.transpose() + measurement_noise_;
+    Eigen::MatrixXd S = H * P * H.transpose() + rho_ * X_hat + measurement_noise_;
     S = 0.5 * (S + S.transpose());
 
     return nu.transpose() * S.ldlt().solve(nu);
