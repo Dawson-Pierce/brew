@@ -156,9 +156,15 @@ public:
             }
 
             // Normalize weights with clutter
+            // For extended targets, the clutter term for a cluster of W
+            // measurements is the product of independent clutter intensities.
             double w_sum = 0.0;
             for (double w : w_lst) w_sum += w;
-            double denom = clutter_rate_ * clutter_density_ + w_sum;
+            const int W = static_cast<int>(meas.cols());
+            double clutter_term = (W > 1)
+                ? std::pow(clutter_rate_ * clutter_density_, W)
+                : clutter_rate_ * clutter_density_;
+            double denom = clutter_term + w_sum;
 
             for (std::size_t i = 0; i < w_lst.size(); ++i) {
                 corrected_mix.add_component(std::move(d_lst[i]), w_lst[i] / denom);

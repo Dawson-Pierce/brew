@@ -176,7 +176,15 @@ public:
         }
 
         const int m = static_cast<int>(meas_groups.size());
-        const double kappa = clutter_rate_ * clutter_density_;
+        const double kappa_base = clutter_rate_ * clutter_density_;
+
+        // Pre-compute per-cluster clutter term: for a cluster of W measurements,
+        // the clutter likelihood is the product of independent clutter intensities.
+        std::vector<double> kappa_vec(m);
+        for (int j = 0; j < m; ++j) {
+            const int W = static_cast<int>(meas_groups[j].cols());
+            kappa_vec[j] = (W > 1) ? std::pow(kappa_base, W) : kappa_base;
+        }
 
         // --- Create new Bernoulli tracks from Poisson for each measurement ---
         // For each measurement, compute the likelihood against all Poisson components
@@ -220,15 +228,16 @@ public:
                 }
             }
 
+            const double kappa_j = kappa_vec[j];
             if (total_weight > 0.0 && best_dist) {
                 // Existence probability for new Bernoulli from Poisson
-                double r_new = total_weight / (kappa + total_weight);
+                double r_new = total_weight / (kappa_j + total_weight);
                 auto bern = std::make_unique<distributions::Bernoulli<T>>(
                     r_new, std::move(best_dist), next_track_id_++);
                 new_tracks[j].bernoulli = std::move(bern);
-                new_tracks[j].log_likelihood = std::log(kappa + total_weight);
+                new_tracks[j].log_likelihood = std::log(kappa_j + total_weight);
             } else {
-                new_tracks[j].log_likelihood = std::log(kappa);
+                new_tracks[j].log_likelihood = std::log(std::max(kappa_j, 1e-300));
             }
         }
 
@@ -304,8 +313,8 @@ public:
                         cache[i][j].likelihood = qz;
 
                         double det_likelihood = prob_detection_ * r * qz;
-                        if (det_likelihood > 0.0 && kappa > 0.0) {
-                            cost(i, j) = -std::log(det_likelihood / kappa);
+                        if (det_likelihood > 0.0 && kappa_vec[j] > 0.0) {
+                            cost(i, j) = -std::log(det_likelihood / kappa_vec[j]);
                         }
                     }
                 }

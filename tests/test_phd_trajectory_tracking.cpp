@@ -4,6 +4,7 @@
 #include "brew/filters/trajectory_gaussian_ekf.hpp"
 #include "brew/filters/trajectory_ggiw_ekf.hpp"
 #include "brew/dynamics/integrator_2d.hpp"
+#include "brew/clustering/dbscan.hpp"
 
 using namespace brew;
 
@@ -172,6 +173,7 @@ TEST(PHDTrajectoryTracking, ExtendedTargetGGIW) {
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(25.0);
     phd.set_extended_target(true);
+    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(5.0, 2));
 
 #ifdef BREW_ENABLE_PLOTTING
     test::TrackingPlotData plot_data(static_cast<int>(scenario.targets.size()));

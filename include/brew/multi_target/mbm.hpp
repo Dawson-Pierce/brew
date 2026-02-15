@@ -190,7 +190,15 @@ public:
             return;
         }
 
-        const double kappa = clutter_rate_ * clutter_density_;
+        const double kappa_base = clutter_rate_ * clutter_density_;
+
+        // Pre-compute per-cluster clutter term: for a cluster of W measurements,
+        // the clutter likelihood is the product of independent clutter intensities.
+        std::vector<double> kappa_vec(m);
+        for (int j = 0; j < m; ++j) {
+            const int W = static_cast<int>(meas_groups[j].cols());
+            kappa_vec[j] = (W > 1) ? std::pow(kappa_base, W) : kappa_base;
+        }
 
         std::vector<GlobalHypothesis> new_hypotheses;
 
@@ -241,8 +249,8 @@ public:
 
                         // Cost = -log(detection_likelihood / clutter_likelihood)
                         double det_likelihood = prob_detection_ * r * qz;
-                        if (det_likelihood > 0.0 && kappa > 0.0) {
-                            cost(i, j) = -std::log(det_likelihood / kappa);
+                        if (det_likelihood > 0.0 && kappa_vec[j] > 0.0) {
+                            cost(i, j) = -std::log(det_likelihood / kappa_vec[j]);
                         }
                     }
                 }
