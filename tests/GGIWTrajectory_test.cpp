@@ -15,110 +15,65 @@ protected:
     }
 };
 
-TEST_F(GGIWTrajectoryTracking, PHD) {
+TEST_F(GGIWTrajectoryTracking, Comparison) {
+    // PHD
     auto phd = test::make_phd<distributions::TrajectoryGGIW>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
-
-    auto result = test::run_tracking<decltype(phd), distributions::TrajectoryGGIW>(
+    auto phd_result = test::run_tracking<decltype(phd), distributions::TrajectoryGGIW>(
         phd, scenario, "GGIW Trajectory PHD Tracking", 10.0, 5);
-
-    EXPECT_GE(result.converged_steps, 10)
+    EXPECT_GE(phd_result.converged_steps, 10)
         << "Trajectory GGIW PHD should track both extended targets";
 
-#ifdef BREW_ENABLE_PLOTTING
-    test::plot_trajectory_intensity_estimator(phd, result.plot_data,
-        "GGIW Trajectory PHD - Extended Targets", "ggiw_traj_phd.png");
-#endif
-}
-
-TEST_F(GGIWTrajectoryTracking, CPHD) {
+    // CPHD
     auto cphd = test::make_cphd<distributions::TrajectoryGGIW>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
-
-#ifdef BREW_ENABLE_PLOTTING
-    test::TrackingPlotData plot_data(static_cast<int>(scenario.targets.size()));
-    std::vector<double> est_card_vec;
-#endif
-
-    test::print_tracking_header("GGIW Trajectory CPHD Tracking");
-
-    int converged_steps = 0;
-
-    for (int k = 0; k < scenario.num_steps; ++k) {
-        cphd.predict(k, scenario.dt);
-
-        const auto& meas = scenario.measurements[k];
-        cphd.correct(meas);
-        cphd.cleanup();
-
-        const auto& extracted = cphd.extracted_mixtures();
-        const auto& latest = *extracted.back();
-
-        bool all_good = (k >= 5);
-        for (const auto& tgt : scenario.targets) {
-            if (k >= tgt.birth_time && k <= tgt.death_time) {
-                int idx = k - tgt.birth_time;
-                Eigen::VectorXd truth_pos = tgt.states[idx].head(2);
-                double err = test::closest_estimate_error(latest, truth_pos);
-                if (err >= 10.0) all_good = false;
-            }
-        }
-        if (all_good) converged_steps++;
-
-#ifdef BREW_ENABLE_PLOTTING
-        test::accumulate_plot_step(plot_data, scenario, k, meas, latest);
-        est_card_vec.push_back(cphd.estimated_cardinality());
-#endif
-    }
-
-    std::cout << "Converged steps (k>=5, err<10): "
-              << converged_steps << " / " << (scenario.num_steps - 5) << "\n";
-
+    auto cphd_result = test::run_tracking_cphd<decltype(cphd), distributions::TrajectoryGGIW>(
+        cphd, scenario, "GGIW Trajectory CPHD Tracking", 10.0, 5);
     // CPHD+TrajectoryGGIW is a new combination; cardinality estimation with
     // extended targets may need further parameter tuning.
-    EXPECT_GE(converged_steps, 0)
+    EXPECT_GE(cphd_result.converged_steps, 0)
         << "Trajectory GGIW CPHD should not crash";
 
-#ifdef BREW_ENABLE_PLOTTING
-    test::plot_trajectory_intensity_estimator(cphd, plot_data,
-        "GGIW Trajectory CPHD - Extended Targets", "ggiw_traj_cphd.png");
-    test::plot_cardinality_comparison(scenario, est_card_vec,
-        "GGIW Trajectory CPHD - Estimated Cardinality", "ggiw_traj_cphd_cardinality.png");
-#endif
-}
-
-TEST_F(GGIWTrajectoryTracking, MBM) {
+    // MBM
     auto mbm = test::make_mbm<distributions::TrajectoryGGIW>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
-
-    auto result = test::run_tracking<decltype(mbm), distributions::TrajectoryGGIW>(
+    auto mbm_result = test::run_tracking<decltype(mbm), distributions::TrajectoryGGIW>(
         mbm, scenario, "GGIW Trajectory MBM Tracking", 10.0, 5);
-
-    EXPECT_GE(result.converged_steps, 10)
+    EXPECT_GE(mbm_result.converged_steps, 10)
         << "Trajectory GGIW MBM should track both extended targets";
 
-#ifdef BREW_ENABLE_PLOTTING
-    test::plot_track_estimator(mbm, result.plot_data,
-        "GGIW Trajectory MBM - Extended Targets", "ggiw_traj_mbm.png");
-#endif
-}
-
-TEST_F(GGIWTrajectoryTracking, PMBM) {
+    // PMBM
     auto pmbm = test::make_pmbm<distributions::TrajectoryGGIW>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
-
-    auto result = test::run_tracking<decltype(pmbm), distributions::TrajectoryGGIW>(
+    auto pmbm_result = test::run_tracking<decltype(pmbm), distributions::TrajectoryGGIW>(
         pmbm, scenario, "GGIW Trajectory PMBM Tracking", 10.0, 5);
-
-    EXPECT_GE(result.converged_steps, 10)
+    EXPECT_GE(pmbm_result.converged_steps, 10)
         << "Trajectory GGIW PMBM should track both extended targets";
 
 #ifdef BREW_ENABLE_PLOTTING
-    test::plot_track_estimator(pmbm, result.plot_data,
-        "GGIW Trajectory PMBM - Extended Targets", "ggiw_traj_pmbm.png");
+    // 2x2 comparison figure
+    auto fig = test::create_comparison_figure();
+
+    auto ax1 = test::comparison_subplot(fig, 0);
+    test::populate_estimator_axes(ax1, phd, phd_result.plot_data, "PHD", true);
+
+    auto ax2 = test::comparison_subplot(fig, 1);
+    test::populate_estimator_axes(ax2, cphd, cphd_result.plot_data, "CPHD", true);
+
+    auto ax3 = test::comparison_subplot(fig, 2);
+    test::populate_estimator_axes(ax3, mbm, mbm_result.plot_data, "MBM", true);
+
+    auto ax4 = test::comparison_subplot(fig, 3);
+    test::populate_estimator_axes(ax4, pmbm, pmbm_result.plot_data, "PMBM", true);
+
+    brew::plot_utils::save_figure(fig, test::output_dir() + "/ggiw_traj_comparison.png");
+
+    // Cardinality figure
+    test::plot_cardinality_comparison(scenario, cphd_result.cardinality,
+        "GGIW Trajectory CPHD - Estimated Cardinality", "ggiw_traj_cphd_cardinality.png");
 #endif
 }

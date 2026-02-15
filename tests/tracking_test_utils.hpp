@@ -402,6 +402,14 @@ struct is_ggiw_type<T,
 template <typename T>
 constexpr bool is_extended_distribution_v = is_ggiw_type<T>::value;
 
+template <typename T, typename = void>
+struct has_track_histories : std::false_type {};
+
+template <typename T>
+struct has_track_histories<T,
+    std::void_t<decltype(std::declval<const T&>().track_histories())>
+> : std::true_type {};
+
 template <typename T>
 inline Eigen::VectorXd extract_position(const T& component) {
     if constexpr (has_get_last_state<T>::value) {
@@ -898,65 +906,50 @@ inline void plot_final_extracted(
 
 inline std::string output_dir() { return "output"; }
 
+/// Populate a single subplot axes with the appropriate plot elements for an estimator.
+/// MBM/PMBM (has track_histories): track history lines + final extracted distributions.
+/// Trajectory PHD/CPHD (is_trajectory=true): final extracted (trajectory encodes history).
+/// Plain PHD/CPHD: all extracted distributions across all timesteps.
 template <typename Estimator>
-inline void plot_intensity_estimator(
-    Estimator& est, const TrackingPlotData& plot_data,
-    const std::string& title, const std::string& filename)
+inline void populate_estimator_axes(
+    matplot::axes_handle ax,
+    Estimator& est,
+    const TrackingPlotData& plot_data,
+    const std::string& subtitle,
+    bool is_trajectory = false)
 {
-    std::filesystem::create_directories(output_dir());
-    auto fig = matplot::figure(true);
-    fig->width(1000); fig->height(800);
-    auto ax = fig->current_axes();
-    ax->hold(true);
-
     plot_common_elements(ax, plot_data);
-    plot_all_extracted(ax, est.extracted_mixtures());
 
-    ax->title(title);
+    if constexpr (has_track_histories<Estimator>::value) {
+        plot_track_histories(ax, est.track_histories());
+        plot_final_extracted(ax, est.extracted_mixtures());
+    } else {
+        if (is_trajectory) {
+            plot_final_extracted(ax, est.extracted_mixtures());
+        } else {
+            plot_all_extracted(ax, est.extracted_mixtures());
+        }
+    }
+
+    ax->title(subtitle);
     ax->xlabel("x");
     ax->ylabel("y");
-    brew::plot_utils::save_figure(fig, output_dir() + "/" + filename);
 }
 
-template <typename Estimator>
-inline void plot_trajectory_intensity_estimator(
-    Estimator& est, const TrackingPlotData& plot_data,
-    const std::string& title, const std::string& filename)
-{
+/// Create a figure for the 2x2 comparison layout.
+inline matplot::figure_handle create_comparison_figure(int width = 1600, int height = 1200) {
     std::filesystem::create_directories(output_dir());
     auto fig = matplot::figure(true);
-    fig->width(1000); fig->height(800);
-    auto ax = fig->current_axes();
-    ax->hold(true);
-
-    plot_common_elements(ax, plot_data);
-    plot_final_extracted(ax, est.extracted_mixtures());
-
-    ax->title(title);
-    ax->xlabel("x");
-    ax->ylabel("y");
-    brew::plot_utils::save_figure(fig, output_dir() + "/" + filename);
+    fig->width(width);
+    fig->height(height);
+    return fig;
 }
 
-template <typename Estimator>
-inline void plot_track_estimator(
-    Estimator& est, const TrackingPlotData& plot_data,
-    const std::string& title, const std::string& filename)
-{
-    std::filesystem::create_directories(output_dir());
-    auto fig = matplot::figure(true);
-    fig->width(1000); fig->height(800);
-    auto ax = fig->current_axes();
+/// Create a subplot axes at the given index (0-3) in a 2x2 grid.
+inline matplot::axes_handle comparison_subplot(matplot::figure_handle fig, int index) {
+    auto ax = matplot::subplot(fig, 2, 2, index);
     ax->hold(true);
-
-    plot_common_elements(ax, plot_data);
-    plot_track_histories(ax, est.track_histories());
-    plot_final_extracted(ax, est.extracted_mixtures());
-
-    ax->title(title);
-    ax->xlabel("x");
-    ax->ylabel("y");
-    brew::plot_utils::save_figure(fig, output_dir() + "/" + filename);
+    return ax;
 }
 
 inline void plot_cardinality_comparison(
@@ -1035,6 +1028,65 @@ inline TrackingResult run_tracking(
         }
 
         if (all_good) result.converged_steps++;
+
+#ifdef BREW_ENABLE_PLOTTING
+        accumulate_plot_step(result.plot_data, scenario, k, meas, latest);
+#endif
+    }
+
+    std::cout << "Converged steps (k>=" << warmup_steps
+              << ", err<" << error_threshold << "): "
+              << result.converged_steps << " / "
+              << (scenario.num_steps - warmup_steps) << "\n";
+
+    return result;
+}
+
+// ---- CPHD tracking loop (also collects estimated cardinality) ----
+
+struct CPHDTrackingResult {
+    int converged_steps = 0;
+    std::vector<double> cardinality;
+#ifdef BREW_ENABLE_PLOTTING
+    TrackingPlotData plot_data;
+    explicit CPHDTrackingResult(int num_targets) : plot_data(num_targets) {}
+#else
+    explicit CPHDTrackingResult(int /*num_targets*/) {}
+#endif
+};
+
+template <typename Estimator, typename T>
+inline CPHDTrackingResult run_tracking_cphd(
+    Estimator& est, const ScenarioData& scenario,
+    const std::string& label,
+    double error_threshold = 5.0, int warmup_steps = 10)
+{
+    CPHDTrackingResult result(static_cast<int>(scenario.targets.size()));
+
+    print_tracking_header(label);
+
+    for (int k = 0; k < scenario.num_steps; ++k) {
+        est.predict(k, scenario.dt);
+
+        const auto& meas = scenario.measurements[k];
+        est.correct(meas);
+        est.cleanup();
+
+        const auto& extracted = est.extracted_mixtures();
+        const auto& latest = *extracted.back();
+
+        bool all_good = (k >= warmup_steps);
+        for (const auto& tgt : scenario.targets) {
+            if (k >= tgt.birth_time && k <= tgt.death_time) {
+                int idx = k - tgt.birth_time;
+                Eigen::VectorXd truth_pos = tgt.states[idx].head(2);
+                double err = closest_estimate_error(latest, truth_pos);
+                if (err >= error_threshold) all_good = false;
+            }
+        }
+
+        if (all_good) result.converged_steps++;
+        result.cardinality.push_back(est.estimated_cardinality());
 
 #ifdef BREW_ENABLE_PLOTTING
         accumulate_plot_step(result.plot_data, scenario, k, meas, latest);

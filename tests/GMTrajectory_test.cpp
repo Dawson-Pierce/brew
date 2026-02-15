@@ -15,108 +15,63 @@ protected:
     }
 };
 
-TEST_F(GMTrajectoryTracking, PHD) {
+TEST_F(GMTrajectoryTracking, Comparison) {
+    // PHD
     auto phd = test::make_phd<distributions::TrajectoryGaussian>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.05), params);
-
-    auto result = test::run_tracking<decltype(phd), distributions::TrajectoryGaussian>(
+    auto phd_result = test::run_tracking<decltype(phd), distributions::TrajectoryGaussian>(
         phd, scenario, "GM Trajectory PHD Tracking", 5.0, 10);
-
-    EXPECT_GE(result.converged_steps, 10)
+    EXPECT_GE(phd_result.converged_steps, 10)
         << "Trajectory Gaussian PHD should track both targets";
 
-#ifdef BREW_ENABLE_PLOTTING
-    test::plot_trajectory_intensity_estimator(phd, result.plot_data,
-        "GM Trajectory PHD - Two Point Targets", "gm_traj_phd.png");
-#endif
-}
-
-TEST_F(GMTrajectoryTracking, CPHD) {
+    // CPHD
     auto cphd = test::make_cphd<distributions::TrajectoryGaussian>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.05), params);
-
-#ifdef BREW_ENABLE_PLOTTING
-    test::TrackingPlotData plot_data(static_cast<int>(scenario.targets.size()));
-    std::vector<double> est_card_vec;
-#endif
-
-    test::print_tracking_header("GM Trajectory CPHD Tracking");
-
-    int converged_steps = 0;
-
-    for (int k = 0; k < scenario.num_steps; ++k) {
-        cphd.predict(k, scenario.dt);
-
-        const auto& meas = scenario.measurements[k];
-        cphd.correct(meas);
-        cphd.cleanup();
-
-        const auto& extracted = cphd.extracted_mixtures();
-        const auto& latest = *extracted.back();
-
-        bool all_good = (k >= 10);
-        for (const auto& tgt : scenario.targets) {
-            if (k >= tgt.birth_time && k <= tgt.death_time) {
-                int idx = k - tgt.birth_time;
-                Eigen::VectorXd truth_pos = tgt.states[idx].head(2);
-                double err = test::closest_estimate_error(latest, truth_pos);
-                if (err >= 5.0) all_good = false;
-            }
-        }
-        if (all_good) converged_steps++;
-
-#ifdef BREW_ENABLE_PLOTTING
-        test::accumulate_plot_step(plot_data, scenario, k, meas, latest);
-        est_card_vec.push_back(cphd.estimated_cardinality());
-#endif
-    }
-
-    std::cout << "Converged steps (k>=10, err<5): "
-              << converged_steps << " / " << (scenario.num_steps - 10) << "\n";
-
-    EXPECT_GE(converged_steps, 10)
+    auto cphd_result = test::run_tracking_cphd<decltype(cphd), distributions::TrajectoryGaussian>(
+        cphd, scenario, "GM Trajectory CPHD Tracking", 5.0, 10);
+    EXPECT_GE(cphd_result.converged_steps, 10)
         << "Trajectory Gaussian CPHD should track both targets";
 
-#ifdef BREW_ENABLE_PLOTTING
-    test::plot_trajectory_intensity_estimator(cphd, plot_data,
-        "GM Trajectory CPHD - Two Point Targets", "gm_traj_cphd.png");
-    test::plot_cardinality_comparison(scenario, est_card_vec,
-        "GM Trajectory CPHD - Estimated Cardinality", "gm_traj_cphd_cardinality.png");
-#endif
-}
-
-TEST_F(GMTrajectoryTracking, MBM) {
+    // MBM
     auto mbm = test::make_mbm<distributions::TrajectoryGaussian>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.1), params);
-
-    auto result = test::run_tracking<decltype(mbm), distributions::TrajectoryGaussian>(
+    auto mbm_result = test::run_tracking<decltype(mbm), distributions::TrajectoryGaussian>(
         mbm, scenario, "GM Trajectory MBM Tracking", 5.0, 10);
-
-    EXPECT_GE(result.converged_steps, 10)
+    EXPECT_GE(mbm_result.converged_steps, 10)
         << "Trajectory Gaussian MBM should track both targets";
 
-#ifdef BREW_ENABLE_PLOTTING
-    test::plot_track_estimator(mbm, result.plot_data,
-        "GM Trajectory MBM - Two Point Targets", "gm_traj_mbm.png");
-#endif
-}
-
-TEST_F(GMTrajectoryTracking, PMBM) {
+    // PMBM
     auto pmbm = test::make_pmbm<distributions::TrajectoryGaussian>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.1), params);
-
-    auto result = test::run_tracking<decltype(pmbm), distributions::TrajectoryGaussian>(
+    auto pmbm_result = test::run_tracking<decltype(pmbm), distributions::TrajectoryGaussian>(
         pmbm, scenario, "GM Trajectory PMBM Tracking", 5.0, 10);
-
-    EXPECT_GE(result.converged_steps, 10)
+    EXPECT_GE(pmbm_result.converged_steps, 10)
         << "Trajectory Gaussian PMBM should track both targets";
 
 #ifdef BREW_ENABLE_PLOTTING
-    test::plot_track_estimator(pmbm, result.plot_data,
-        "GM Trajectory PMBM - Two Point Targets", "gm_traj_pmbm.png");
+    // 2x2 comparison figure
+    auto fig = test::create_comparison_figure();
+
+    auto ax1 = test::comparison_subplot(fig, 0);
+    test::populate_estimator_axes(ax1, phd, phd_result.plot_data, "PHD", true);
+
+    auto ax2 = test::comparison_subplot(fig, 1);
+    test::populate_estimator_axes(ax2, cphd, cphd_result.plot_data, "CPHD", true);
+
+    auto ax3 = test::comparison_subplot(fig, 2);
+    test::populate_estimator_axes(ax3, mbm, mbm_result.plot_data, "MBM", true);
+
+    auto ax4 = test::comparison_subplot(fig, 3);
+    test::populate_estimator_axes(ax4, pmbm, pmbm_result.plot_data, "PMBM", true);
+
+    brew::plot_utils::save_figure(fig, test::output_dir() + "/gm_traj_comparison.png");
+
+    // Cardinality figure
+    test::plot_cardinality_comparison(scenario, cphd_result.cardinality,
+        "GM Trajectory CPHD - Estimated Cardinality", "gm_traj_cphd_cardinality.png");
 #endif
 }
