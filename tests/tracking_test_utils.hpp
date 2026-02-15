@@ -2,6 +2,19 @@
 
 #include "brew/dynamics/integrator_2d.hpp"
 #include "brew/distributions/mixture.hpp"
+#include "brew/distributions/gaussian.hpp"
+#include "brew/distributions/ggiw.hpp"
+#include "brew/distributions/trajectory_gaussian.hpp"
+#include "brew/distributions/trajectory_ggiw.hpp"
+#include "brew/filters/ekf.hpp"
+#include "brew/filters/ggiw_ekf.hpp"
+#include "brew/filters/trajectory_gaussian_ekf.hpp"
+#include "brew/filters/trajectory_ggiw_ekf.hpp"
+#include "brew/multi_target/phd.hpp"
+#include "brew/multi_target/cphd.hpp"
+#include "brew/multi_target/mbm.hpp"
+#include "brew/multi_target/pmbm.hpp"
+#include "brew/clustering/dbscan.hpp"
 #include <Eigen/Dense>
 #include <random>
 #include <vector>
@@ -10,6 +23,7 @@
 #include <limits>
 #include <string>
 #include <type_traits>
+#include <memory>
 
 #ifdef BREW_ENABLE_PLOTTING
 #include <matplot/matplot.h>
@@ -304,6 +318,69 @@ inline ScenarioData make_variable_targets_scenario() {
     return s;
 }
 
+// ---- Unified scenario factory (two-step: base + measurements) ----
+
+inline ScenarioData make_base_scenario() {
+    ScenarioData s;
+    s.num_steps = 30;
+    s.dt = 1.0;
+    s.meas_std = 0.3;
+    s.p_detect = 0.98;
+
+    auto dyn = dynamics::Integrator2D();
+
+    Eigen::VectorXd x0_a(4), x0_b(4);
+    x0_a << 0.0, 0.0, 2.0, 0.5;
+    x0_b << 50.0, 0.0, -0.5, 1.5;
+
+    s.targets.push_back(make_linear_target(x0_a, 0, s.num_steps - 1, s.dt, dyn));
+    s.targets.push_back(make_linear_target(x0_b, 0, s.num_steps - 1, s.dt, dyn));
+
+    s.measurements.resize(s.num_steps);
+    return s;
+}
+
+inline void generate_scenario_point_measurements(ScenarioData& s, unsigned seed = 42) {
+    std::mt19937 rng(seed);
+    for (int k = 0; k < s.num_steps; ++k) {
+        s.measurements[k] = detail::generate_point_measurements(
+            s.targets, k, s.meas_std, rng, s.p_detect);
+    }
+}
+
+inline void generate_scenario_extended_measurements(ScenarioData& s, unsigned seed = 42) {
+    s.is_extended = true;
+    s.extent << 4.0, 1.0, 1.0, 2.0;
+
+    Eigen::LLT<Eigen::Matrix2d> llt(s.extent);
+    Eigen::Matrix2d L_ext = llt.matrixL();
+
+    std::mt19937 rng(seed);
+    for (int k = 0; k < s.num_steps; ++k) {
+        std::vector<Eigen::MatrixXd> per_target_meas;
+        int total_cols = 0;
+        for (const auto& tgt : s.targets) {
+            if (k >= tgt.birth_time && k <= tgt.death_time) {
+                auto m = detail::generate_extended_measurements(
+                    tgt, k, s.meas_std, rng, L_ext);
+                per_target_meas.push_back(m);
+                total_cols += static_cast<int>(m.cols());
+            }
+        }
+        if (total_cols == 0) {
+            s.measurements[k] = Eigen::MatrixXd(2, 0);
+        } else {
+            Eigen::MatrixXd Z(2, total_cols);
+            int col = 0;
+            for (const auto& m : per_target_meas) {
+                Z.block(0, col, 2, m.cols()) = m;
+                col += static_cast<int>(m.cols());
+            }
+            s.measurements[k] = Z;
+        }
+    }
+}
+
 // ---- Position extraction (dispatches by type) ----
 
 template <typename T, typename = void>
@@ -321,6 +398,9 @@ template <typename T>
 struct is_ggiw_type<T,
     std::void_t<decltype(std::declval<const T&>().V())>
 > : std::true_type {};
+
+template <typename T>
+constexpr bool is_extended_distribution_v = is_ggiw_type<T>::value;
 
 template <typename T>
 inline Eigen::VectorXd extract_position(const T& component) {
@@ -375,6 +455,301 @@ inline void print_tracking_step(int step, int n_meas, int n_comp, int n_est,
               << std::setw(12) << std::fixed << std::setprecision(2)
               << (std::isfinite(err) ? err : -1.0)
               << "\n";
+}
+
+// ---- Scenario params ----
+
+struct ScenarioParams {
+    double p_detect;
+    double p_survive = 0.99;
+    double clutter_rate = 1.0;
+    double clutter_density = 1e-4;
+    double dbscan_epsilon = 5.0;
+    int dbscan_min_pts = 2;
+};
+
+inline ScenarioParams make_default_params(const ScenarioData& s) {
+    ScenarioParams p;
+    p.p_detect = s.p_detect;
+    return p;
+}
+
+// ---- EKF factory functions ----
+
+inline std::unique_ptr<filters::EKF> make_ekf(const ScenarioData& scenario) {
+    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto ekf = std::make_unique<filters::EKF>();
+    ekf->set_dynamics(dyn);
+
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ekf->set_measurement_jacobian(H);
+    // EKF uses G * Q * G^T where G is 4x2 for Integrator2D, so Q must be 2x2
+    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
+    ekf->set_measurement_noise(
+        scenario.meas_std * scenario.meas_std * Eigen::MatrixXd::Identity(2, 2));
+
+    return ekf;
+}
+
+inline std::unique_ptr<filters::GGIWEKF> make_ggiw_ekf(const ScenarioData& scenario) {
+    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto ekf = std::make_unique<filters::GGIWEKF>();
+    ekf->set_dynamics(dyn);
+
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ekf->set_measurement_jacobian(H);
+    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(4, 4));
+    ekf->set_measurement_noise(
+        scenario.meas_std * scenario.meas_std * Eigen::MatrixXd::Identity(2, 2));
+    ekf->set_temporal_decay(1.0);
+    ekf->set_forgetting_factor(5.0);
+    ekf->set_scaling_parameter(1.0);
+
+    return ekf;
+}
+
+inline std::unique_ptr<filters::TrajectoryGaussianEKF> make_trajectory_gaussian_ekf(
+    const ScenarioData& scenario, int window = 10)
+{
+    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto ekf = std::make_unique<filters::TrajectoryGaussianEKF>();
+    ekf->set_dynamics(dyn);
+    ekf->set_window_size(window);
+
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ekf->set_measurement_jacobian(H);
+    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(4, 4));
+    ekf->set_measurement_noise(
+        scenario.meas_std * scenario.meas_std * Eigen::MatrixXd::Identity(2, 2));
+
+    return ekf;
+}
+
+inline std::unique_ptr<filters::TrajectoryGGIWEKF> make_trajectory_ggiw_ekf(
+    const ScenarioData& scenario, int window = 10)
+{
+    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto ekf = std::make_unique<filters::TrajectoryGGIWEKF>();
+    ekf->set_dynamics(dyn);
+    ekf->set_window_size(window);
+    ekf->set_temporal_decay(1.0);
+    ekf->set_forgetting_factor(5.0);
+    ekf->set_scaling_parameter(1.0);
+
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ekf->set_measurement_jacobian(H);
+    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(4, 4));
+    ekf->set_measurement_noise(
+        scenario.meas_std * scenario.meas_std * Eigen::MatrixXd::Identity(2, 2));
+
+    return ekf;
+}
+
+// ---- Birth model factory functions ----
+
+inline std::unique_ptr<distributions::Mixture<distributions::Gaussian>>
+make_gm_birth(double weight = 0.1)
+{
+    auto birth = std::make_unique<distributions::Mixture<distributions::Gaussian>>();
+    Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
+    birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
+    birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
+
+    Eigen::VectorXd b1(4), b2(4);
+    b1 << 0.0, 0.0, 0.0, 0.0;
+    b2 << 50.0, 0.0, 0.0, 0.0;
+    birth->add_component(
+        std::make_unique<distributions::Gaussian>(b1, birth_cov), weight);
+    birth->add_component(
+        std::make_unique<distributions::Gaussian>(b2, birth_cov), weight);
+
+    return birth;
+}
+
+inline std::unique_ptr<distributions::Mixture<distributions::GGIW>>
+make_ggiw_birth(double weight = 0.1)
+{
+    auto birth = std::make_unique<distributions::Mixture<distributions::GGIW>>();
+    Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
+    Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
+
+    Eigen::VectorXd b1(4), b2(4);
+    b1 << 0.0, 0.0, 0.0, 0.0;
+    b2 << 50.0, 0.0, 0.0, 0.0;
+    birth->add_component(
+        std::make_unique<distributions::GGIW>(b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+    birth->add_component(
+        std::make_unique<distributions::GGIW>(b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+
+    return birth;
+}
+
+inline std::unique_ptr<distributions::Mixture<distributions::TrajectoryGaussian>>
+make_trajectory_gaussian_birth(double weight = 0.1)
+{
+    auto birth = std::make_unique<distributions::Mixture<distributions::TrajectoryGaussian>>();
+    Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
+    birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
+    birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
+
+    Eigen::VectorXd b1(4), b2(4);
+    b1 << 0.0, 0.0, 0.0, 0.0;
+    b2 << 50.0, 0.0, 0.0, 0.0;
+    birth->add_component(
+        std::make_unique<distributions::TrajectoryGaussian>(0, 4, b1, birth_cov), weight);
+    birth->add_component(
+        std::make_unique<distributions::TrajectoryGaussian>(0, 4, b2, birth_cov), weight);
+
+    return birth;
+}
+
+inline std::unique_ptr<distributions::Mixture<distributions::TrajectoryGGIW>>
+make_trajectory_ggiw_birth(double weight = 0.1)
+{
+    auto birth = std::make_unique<distributions::Mixture<distributions::TrajectoryGGIW>>();
+    Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
+    Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
+
+    Eigen::VectorXd b1(4), b2(4);
+    b1 << 0.0, 0.0, 0.0, 0.0;
+    b2 << 50.0, 0.0, 0.0, 0.0;
+    birth->add_component(
+        std::make_unique<distributions::TrajectoryGGIW>(
+            0, 4, b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+    birth->add_component(
+        std::make_unique<distributions::TrajectoryGGIW>(
+            0, 4, b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+
+    return birth;
+}
+
+// ---- RFS estimator factory functions ----
+
+template <typename T>
+inline multi_target::PHD<T> make_phd(
+    std::unique_ptr<filters::Filter<T>> filter,
+    std::unique_ptr<distributions::Mixture<T>> birth,
+    const ScenarioParams& params)
+{
+    multi_target::PHD<T> phd;
+    phd.set_filter(std::move(filter));
+    phd.set_birth_model(std::move(birth));
+    phd.set_intensity(std::make_unique<distributions::Mixture<T>>());
+    phd.set_prob_detection(params.p_detect);
+    phd.set_prob_survive(params.p_survive);
+    phd.set_clutter_rate(params.clutter_rate);
+    phd.set_clutter_density(params.clutter_density);
+    phd.set_prune_threshold(1e-5);
+    phd.set_merge_threshold(4.0);
+    phd.set_max_components(30);
+    phd.set_extract_threshold(0.4);
+    phd.set_gate_threshold(25.0);
+
+    if constexpr (is_extended_distribution_v<T>) {
+        phd.set_extended_target(true);
+        phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+            params.dbscan_epsilon, params.dbscan_min_pts));
+    }
+
+    return phd;
+}
+
+template <typename T>
+inline multi_target::CPHD<T> make_cphd(
+    std::unique_ptr<filters::Filter<T>> filter,
+    std::unique_ptr<distributions::Mixture<T>> birth,
+    const ScenarioParams& params)
+{
+    multi_target::CPHD<T> cphd;
+    cphd.set_filter(std::move(filter));
+    cphd.set_birth_model(std::move(birth));
+    cphd.set_intensity(std::make_unique<distributions::Mixture<T>>());
+    cphd.set_prob_detection(params.p_detect);
+    cphd.set_prob_survive(params.p_survive);
+    cphd.set_clutter_rate(params.clutter_rate);
+    cphd.set_clutter_density(params.clutter_density);
+    cphd.set_prune_threshold(1e-5);
+    cphd.set_merge_threshold(4.0);
+    cphd.set_max_components(30);
+    cphd.set_extract_threshold(0.4);
+    cphd.set_gate_threshold(25.0);
+    cphd.set_poisson_cardinality(0.1);
+    cphd.set_poisson_birth_cardinality(0.1);
+
+    if constexpr (is_extended_distribution_v<T>) {
+        cphd.set_extended_target(true);
+        cphd.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+            params.dbscan_epsilon, params.dbscan_min_pts));
+    }
+
+    return cphd;
+}
+
+template <typename T>
+inline multi_target::MBM<T> make_mbm(
+    std::unique_ptr<filters::Filter<T>> filter,
+    std::unique_ptr<distributions::Mixture<T>> birth,
+    const ScenarioParams& params)
+{
+    multi_target::MBM<T> mbm;
+    mbm.set_filter(std::move(filter));
+    mbm.set_birth_model(std::move(birth));
+    mbm.set_prob_detection(params.p_detect);
+    mbm.set_prob_survive(params.p_survive);
+    mbm.set_clutter_rate(params.clutter_rate);
+    mbm.set_clutter_density(params.clutter_density);
+    mbm.set_prune_threshold_hypothesis(1e-4);
+    mbm.set_prune_threshold_bernoulli(1e-3);
+    mbm.set_max_hypotheses(50);
+    mbm.set_extract_threshold(0.4);
+    mbm.set_gate_threshold(25.0);
+    mbm.set_k_best(5);
+
+    if constexpr (is_extended_distribution_v<T>) {
+        mbm.set_extended_target(true);
+        mbm.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+            params.dbscan_epsilon, params.dbscan_min_pts));
+    }
+
+    return mbm;
+}
+
+template <typename T>
+inline multi_target::PMBM<T> make_pmbm(
+    std::unique_ptr<filters::Filter<T>> filter,
+    std::unique_ptr<distributions::Mixture<T>> birth,
+    const ScenarioParams& params)
+{
+    multi_target::PMBM<T> pmbm;
+    pmbm.set_filter(std::move(filter));
+    pmbm.set_birth_model(std::move(birth));
+    pmbm.set_poisson_intensity(std::make_unique<distributions::Mixture<T>>());
+    pmbm.set_prob_detection(params.p_detect);
+    pmbm.set_prob_survive(params.p_survive);
+    pmbm.set_clutter_rate(params.clutter_rate);
+    pmbm.set_clutter_density(params.clutter_density);
+    pmbm.set_prune_poisson_threshold(1e-4);
+    pmbm.set_merge_poisson_threshold(4.0);
+    pmbm.set_max_poisson_components(100);
+    pmbm.set_prune_threshold_hypothesis(1e-4);
+    pmbm.set_prune_threshold_bernoulli(1e-3);
+    pmbm.set_recycle_threshold(0.1);
+    pmbm.set_max_hypotheses(50);
+    pmbm.set_extract_threshold(0.4);
+    pmbm.set_gate_threshold(25.0);
+    pmbm.set_k_best(5);
+
+    if constexpr (is_extended_distribution_v<T>) {
+        pmbm.set_extended_target(true);
+        pmbm.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+            params.dbscan_epsilon, params.dbscan_min_pts));
+    }
+
+    return pmbm;
 }
 
 // ---- Plotting ----
@@ -466,8 +841,8 @@ inline void plot_track_histories(
 }
 
 /// Generic 2D distribution plot: auto-dispatches based on distribution type.
-/// Gaussian → covariance ellipse, GGIW → extent ellipse,
-/// TrajectoryGaussian → trajectory line, TrajectoryGGIW → trajectory + extent.
+/// Gaussian -> covariance ellipse, GGIW -> extent ellipse,
+/// TrajectoryGaussian -> trajectory line, TrajectoryGGIW -> trajectory + extent.
 template <typename T>
 inline void plot_distribution_2d(
     matplot::axes_handle ax,
@@ -519,6 +894,159 @@ inline void plot_final_extracted(
     }
 }
 
+// ---- Plot helper functions for test files ----
+
+inline std::string output_dir() { return "output"; }
+
+template <typename Estimator>
+inline void plot_intensity_estimator(
+    Estimator& est, const TrackingPlotData& plot_data,
+    const std::string& title, const std::string& filename)
+{
+    std::filesystem::create_directories(output_dir());
+    auto fig = matplot::figure(true);
+    fig->width(1000); fig->height(800);
+    auto ax = fig->current_axes();
+    ax->hold(true);
+
+    plot_common_elements(ax, plot_data);
+    plot_all_extracted(ax, est.extracted_mixtures());
+
+    ax->title(title);
+    ax->xlabel("x");
+    ax->ylabel("y");
+    brew::plot_utils::save_figure(fig, output_dir() + "/" + filename);
+}
+
+template <typename Estimator>
+inline void plot_trajectory_intensity_estimator(
+    Estimator& est, const TrackingPlotData& plot_data,
+    const std::string& title, const std::string& filename)
+{
+    std::filesystem::create_directories(output_dir());
+    auto fig = matplot::figure(true);
+    fig->width(1000); fig->height(800);
+    auto ax = fig->current_axes();
+    ax->hold(true);
+
+    plot_common_elements(ax, plot_data);
+    plot_final_extracted(ax, est.extracted_mixtures());
+
+    ax->title(title);
+    ax->xlabel("x");
+    ax->ylabel("y");
+    brew::plot_utils::save_figure(fig, output_dir() + "/" + filename);
+}
+
+template <typename Estimator>
+inline void plot_track_estimator(
+    Estimator& est, const TrackingPlotData& plot_data,
+    const std::string& title, const std::string& filename)
+{
+    std::filesystem::create_directories(output_dir());
+    auto fig = matplot::figure(true);
+    fig->width(1000); fig->height(800);
+    auto ax = fig->current_axes();
+    ax->hold(true);
+
+    plot_common_elements(ax, plot_data);
+    plot_track_histories(ax, est.track_histories());
+    plot_final_extracted(ax, est.extracted_mixtures());
+
+    ax->title(title);
+    ax->xlabel("x");
+    ax->ylabel("y");
+    brew::plot_utils::save_figure(fig, output_dir() + "/" + filename);
+}
+
+inline void plot_cardinality_comparison(
+    const ScenarioData& scenario,
+    const std::vector<double>& est_card_vec,
+    const std::string& title, const std::string& filename)
+{
+    std::filesystem::create_directories(output_dir());
+    auto fig = matplot::figure(true);
+    fig->width(800); fig->height(400);
+    auto ax = fig->current_axes();
+    ax->hold(true);
+
+    std::vector<double> steps_vec, true_card_vec;
+    for (int k = 0; k < scenario.num_steps; ++k) {
+        steps_vec.push_back(static_cast<double>(k));
+        true_card_vec.push_back(static_cast<double>(scenario.true_cardinality(k)));
+    }
+
+    auto tc = ax->plot(steps_vec, true_card_vec, "--");
+    tc->color({0.f, 0.f, 0.f, 0.f});
+    tc->line_width(2.0f);
+
+    auto ec = ax->plot(steps_vec, est_card_vec);
+    ec->color({0.f, 0.f, 0.4470f, 0.7410f});
+    ec->line_width(2.0f);
+
+    ax->title(title);
+    ax->xlabel("Time step");
+    ax->ylabel("Cardinality");
+    brew::plot_utils::save_figure(fig, output_dir() + "/" + filename);
+}
+
 #endif // BREW_ENABLE_PLOTTING
+
+// ---- Tracking result and generic tracking loop ----
+
+struct TrackingResult {
+    int converged_steps = 0;
+#ifdef BREW_ENABLE_PLOTTING
+    TrackingPlotData plot_data;
+    explicit TrackingResult(int num_targets) : plot_data(num_targets) {}
+#else
+    explicit TrackingResult(int /*num_targets*/) {}
+#endif
+};
+
+template <typename Estimator, typename T>
+inline TrackingResult run_tracking(
+    Estimator& est, const ScenarioData& scenario,
+    const std::string& label,
+    double error_threshold = 5.0, int warmup_steps = 10)
+{
+    TrackingResult result(static_cast<int>(scenario.targets.size()));
+
+    print_tracking_header(label);
+
+    for (int k = 0; k < scenario.num_steps; ++k) {
+        est.predict(k, scenario.dt);
+
+        const auto& meas = scenario.measurements[k];
+        est.correct(meas);
+        est.cleanup();
+
+        const auto& extracted = est.extracted_mixtures();
+        const auto& latest = *extracted.back();
+
+        bool all_good = (k >= warmup_steps);
+        for (const auto& tgt : scenario.targets) {
+            if (k >= tgt.birth_time && k <= tgt.death_time) {
+                int idx = k - tgt.birth_time;
+                Eigen::VectorXd truth_pos = tgt.states[idx].head(2);
+                double err = closest_estimate_error(latest, truth_pos);
+                if (err >= error_threshold) all_good = false;
+            }
+        }
+
+        if (all_good) result.converged_steps++;
+
+#ifdef BREW_ENABLE_PLOTTING
+        accumulate_plot_step(result.plot_data, scenario, k, meas, latest);
+#endif
+    }
+
+    std::cout << "Converged steps (k>=" << warmup_steps
+              << ", err<" << error_threshold << "): "
+              << result.converged_steps << " / "
+              << (scenario.num_steps - warmup_steps) << "\n";
+
+    return result;
+}
 
 } // namespace brew::test

@@ -25,18 +25,14 @@ add_executable(brew_tests
     test_trajectory_ekf.cpp
     test_merge.cpp
     test_phd.cpp
-    test_phd_tracking.cpp
-    test_phd_tracking_extra.cpp
-    test_phd_trajectory_tracking.cpp
     test_cphd.cpp
-    test_cphd_tracking.cpp
     test_assignment.cpp
     test_mbm.cpp
-    test_mbm_tracking.cpp
-    test_mbm_trajectory_tracking.cpp
     test_pmbm.cpp
-    test_pmbm_tracking.cpp
-    test_pmbm_trajectory_tracking.cpp
+    GM_test.cpp
+    GGIW_test.cpp
+    GMTrajectory_test.cpp
+    GGIWTrajectory_test.cpp
     test_eigenrand.cpp
 )
 
@@ -46,10 +42,11 @@ target_link_libraries(brew_tests PRIVATE
     EigenRand::EigenRand
 )
 
-gtest_discover_tests(brew_tests)
+gtest_discover_tests(brew_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 if(BREW_ENABLE_PLOTTING)
     add_executable(test_math_utils test_math_utils.cpp)
     target_link_libraries(test_math_utils PRIVATE brew GTest::gtest_main)
     add_test(NAME test_math_utils COMMAND test_math_utils)
+    set_tests_properties(test_math_utils PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
