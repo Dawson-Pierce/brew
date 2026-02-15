@@ -48,21 +48,65 @@ TEST_F(GMTracking, Comparison) {
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "PMBM should track both targets for most of the run";
 
+    // MB
+    auto mb = test::make_mb<distributions::Gaussian>(
+        test::make_ekf(scenario), test::make_gm_birth(0.1), params);
+    auto mb_result = test::run_tracking<decltype(mb), distributions::Gaussian>(
+        mb, scenario, "GM MB Tracking", 5.0, 10);
+    EXPECT_GE(mb_result.converged_steps, 10)
+        << "MB should track both targets for most of the run";
+
+    // LMB
+    auto lmb = test::make_lmb<distributions::Gaussian>(
+        test::make_ekf(scenario), test::make_gm_birth(0.1), params);
+    auto lmb_result = test::run_tracking<decltype(lmb), distributions::Gaussian>(
+        lmb, scenario, "GM LMB Tracking", 5.0, 10);
+    EXPECT_GE(lmb_result.converged_steps, 10)
+        << "LMB should track both targets for most of the run";
+
+    // GLMB
+    auto glmb = test::make_glmb<distributions::Gaussian>(
+        test::make_ekf(scenario), test::make_gm_birth(0.1), params);
+    auto glmb_result = test::run_tracking<decltype(glmb), distributions::Gaussian>(
+        glmb, scenario, "GM GLMB Tracking", 5.0, 10);
+    EXPECT_GE(glmb_result.converged_steps, 10)
+        << "GLMB should track both targets for most of the run";
+
+    // JGLMB
+    auto jglmb = test::make_jglmb<distributions::Gaussian>(
+        test::make_ekf(scenario), test::make_gm_birth(0.1), params);
+    auto jglmb_result = test::run_tracking<decltype(jglmb), distributions::Gaussian>(
+        jglmb, scenario, "GM JGLMB Tracking", 5.0, 10);
+    EXPECT_GE(jglmb_result.converged_steps, 10)
+        << "JGLMB should track both targets for most of the run";
+
 #ifdef BREW_ENABLE_PLOTTING
-    // 2x2 comparison figure
+    // 2x4 comparison figure
     auto fig = test::create_comparison_figure();
 
-    auto ax1 = test::comparison_subplot(fig, 0);
+    auto ax1 = test::comparison_subplot(fig, 2, 4, 0);
     test::populate_estimator_axes(ax1, phd, phd_result.plot_data, "PHD");
 
-    auto ax2 = test::comparison_subplot(fig, 1);
+    auto ax2 = test::comparison_subplot(fig, 2, 4, 1);
     test::populate_estimator_axes(ax2, cphd, cphd_result.plot_data, "CPHD");
 
-    auto ax3 = test::comparison_subplot(fig, 2);
+    auto ax3 = test::comparison_subplot(fig, 2, 4, 2);
     test::populate_estimator_axes(ax3, mbm, mbm_result.plot_data, "MBM");
 
-    auto ax4 = test::comparison_subplot(fig, 3);
+    auto ax4 = test::comparison_subplot(fig, 2, 4, 3);
     test::populate_estimator_axes(ax4, pmbm, pmbm_result.plot_data, "PMBM");
+
+    auto ax5 = test::comparison_subplot(fig, 2, 4, 4);
+    test::populate_estimator_axes(ax5, mb, mb_result.plot_data, "MB");
+
+    auto ax6 = test::comparison_subplot(fig, 2, 4, 5);
+    test::populate_estimator_axes(ax6, lmb, lmb_result.plot_data, "LMB");
+
+    auto ax7 = test::comparison_subplot(fig, 2, 4, 6);
+    test::populate_estimator_axes(ax7, glmb, glmb_result.plot_data, "GLMB");
+
+    auto ax8 = test::comparison_subplot(fig, 2, 4, 7);
+    test::populate_estimator_axes(ax8, jglmb, jglmb_result.plot_data, "JGLMB");
 
     brew::plot_utils::save_figure(fig, test::output_dir() + "/gm_comparison.png");
 

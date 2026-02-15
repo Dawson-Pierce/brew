@@ -14,6 +14,10 @@
 #include "brew/multi_target/cphd.hpp"
 #include "brew/multi_target/mbm.hpp"
 #include "brew/multi_target/pmbm.hpp"
+#include "brew/multi_target/mb.hpp"
+#include "brew/multi_target/lmb.hpp"
+#include "brew/multi_target/glmb.hpp"
+#include "brew/multi_target/jglmb.hpp"
 #include "brew/clustering/dbscan.hpp"
 #include <Eigen/Dense>
 #include <random>
@@ -760,6 +764,117 @@ inline multi_target::PMBM<T> make_pmbm(
     return pmbm;
 }
 
+template <typename T>
+inline multi_target::MB<T> make_mb(
+    std::unique_ptr<filters::Filter<T>> filter,
+    std::unique_ptr<distributions::Mixture<T>> birth,
+    const ScenarioParams& params)
+{
+    multi_target::MB<T> mb;
+    mb.set_filter(std::move(filter));
+    mb.set_birth_model(std::move(birth));
+    mb.set_prob_detection(params.p_detect);
+    mb.set_prob_survive(params.p_survive);
+    mb.set_clutter_rate(params.clutter_rate);
+    mb.set_clutter_density(params.clutter_density);
+    mb.set_prune_threshold_bernoulli(1e-3);
+    mb.set_extract_threshold(0.4);
+    mb.set_gate_threshold(25.0);
+
+    if constexpr (is_extended_distribution_v<T>) {
+        mb.set_extended_target(true);
+        mb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+            params.dbscan_epsilon, params.dbscan_min_pts));
+    }
+
+    return mb;
+}
+
+template <typename T>
+inline multi_target::LMB<T> make_lmb(
+    std::unique_ptr<filters::Filter<T>> filter,
+    std::unique_ptr<distributions::Mixture<T>> birth,
+    const ScenarioParams& params)
+{
+    multi_target::LMB<T> lmb;
+    lmb.set_filter(std::move(filter));
+    lmb.set_birth_model(std::move(birth));
+    lmb.set_prob_detection(params.p_detect);
+    lmb.set_prob_survive(params.p_survive);
+    lmb.set_clutter_rate(params.clutter_rate);
+    lmb.set_clutter_density(params.clutter_density);
+    lmb.set_prune_threshold_bernoulli(1e-3);
+    lmb.set_extract_threshold(0.4);
+    lmb.set_gate_threshold(25.0);
+    lmb.set_k_best(5);
+
+    if constexpr (is_extended_distribution_v<T>) {
+        lmb.set_extended_target(true);
+        lmb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+            params.dbscan_epsilon, params.dbscan_min_pts));
+    }
+
+    return lmb;
+}
+
+template <typename T>
+inline multi_target::GLMB<T> make_glmb(
+    std::unique_ptr<filters::Filter<T>> filter,
+    std::unique_ptr<distributions::Mixture<T>> birth,
+    const ScenarioParams& params)
+{
+    multi_target::GLMB<T> glmb;
+    glmb.set_filter(std::move(filter));
+    glmb.set_birth_model(std::move(birth));
+    glmb.set_prob_detection(params.p_detect);
+    glmb.set_prob_survive(params.p_survive);
+    glmb.set_clutter_rate(params.clutter_rate);
+    glmb.set_clutter_density(params.clutter_density);
+    glmb.set_prune_threshold_hypothesis(1e-4);
+    glmb.set_prune_threshold_bernoulli(1e-3);
+    glmb.set_max_hypotheses(50);
+    glmb.set_extract_threshold(0.4);
+    glmb.set_gate_threshold(25.0);
+    glmb.set_k_best(5);
+
+    if constexpr (is_extended_distribution_v<T>) {
+        glmb.set_extended_target(true);
+        glmb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+            params.dbscan_epsilon, params.dbscan_min_pts));
+    }
+
+    return glmb;
+}
+
+template <typename T>
+inline multi_target::JGLMB<T> make_jglmb(
+    std::unique_ptr<filters::Filter<T>> filter,
+    std::unique_ptr<distributions::Mixture<T>> birth,
+    const ScenarioParams& params)
+{
+    multi_target::JGLMB<T> jglmb;
+    jglmb.set_filter(std::move(filter));
+    jglmb.set_birth_model(std::move(birth));
+    jglmb.set_prob_detection(params.p_detect);
+    jglmb.set_prob_survive(params.p_survive);
+    jglmb.set_clutter_rate(params.clutter_rate);
+    jglmb.set_clutter_density(params.clutter_density);
+    jglmb.set_prune_threshold_hypothesis(1e-4);
+    jglmb.set_prune_threshold_bernoulli(1e-3);
+    jglmb.set_max_hypotheses(50);
+    jglmb.set_extract_threshold(0.4);
+    jglmb.set_gate_threshold(25.0);
+    jglmb.set_k_best(5);
+
+    if constexpr (is_extended_distribution_v<T>) {
+        jglmb.set_extended_target(true);
+        jglmb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+            params.dbscan_epsilon, params.dbscan_min_pts));
+    }
+
+    return jglmb;
+}
+
 // ---- Plotting ----
 
 #ifdef BREW_ENABLE_PLOTTING
@@ -936,8 +1051,8 @@ inline void populate_estimator_axes(
     ax->ylabel("y");
 }
 
-/// Create a figure for the 2x2 comparison layout.
-inline matplot::figure_handle create_comparison_figure(int width = 1600, int height = 1200) {
+/// Create a figure for comparison layout.
+inline matplot::figure_handle create_comparison_figure(int width = 2400, int height = 1200) {
     std::filesystem::create_directories(output_dir());
     auto fig = matplot::figure(true);
     fig->width(width);
@@ -945,9 +1060,11 @@ inline matplot::figure_handle create_comparison_figure(int width = 1600, int hei
     return fig;
 }
 
-/// Create a subplot axes at the given index (0-3) in a 2x2 grid.
-inline matplot::axes_handle comparison_subplot(matplot::figure_handle fig, int index) {
-    auto ax = matplot::subplot(fig, 2, 2, index);
+/// Create a subplot axes at the given index in a rows x cols grid.
+inline matplot::axes_handle comparison_subplot(
+    matplot::figure_handle fig, int rows, int cols, int index)
+{
+    auto ax = matplot::subplot(fig, rows, cols, index);
     ax->hold(true);
     return ax;
 }
