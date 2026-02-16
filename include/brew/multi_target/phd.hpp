@@ -50,6 +50,9 @@ public:
     void set_birth_model(std::unique_ptr<distributions::Mixture<T>> birth) {
         if (birth && !birth->empty()) {
             is_extended_ = birth->component(0).is_extended();
+            if (is_extended_ && !cluster_obj_) {
+                cluster_obj_ = std::make_shared<clustering::DBSCAN>();
+            }
         }
         birth_model_ = std::move(birth);
     }

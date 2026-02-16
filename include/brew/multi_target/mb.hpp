@@ -64,6 +64,9 @@ public:
         if (!birth_mix) return;
         if (!birth_mix->empty()) {
             is_extended_ = birth_mix->component(0).is_extended();
+            if (is_extended_ && !cluster_obj_) {
+                cluster_obj_ = std::make_shared<clustering::DBSCAN>();
+            }
         }
         for (std::size_t i = 0; i < birth_mix->size(); ++i) {
             birth_bernoullis_.push_back(std::make_unique<distributions::Bernoulli<T>>(
