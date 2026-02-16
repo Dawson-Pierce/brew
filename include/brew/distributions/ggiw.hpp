@@ -29,6 +29,8 @@ public:
         return std::make_unique<GGIW>(mean_, covariance_, alpha_, beta_, v_, V_);
     }
 
+    [[nodiscard]] bool is_extended() const override { return true; }
+
     [[nodiscard]] inline std::unique_ptr<GGIW> clone_typed() const {
         return std::make_unique<GGIW>(mean_, covariance_, alpha_, beta_, v_, V_);
     }

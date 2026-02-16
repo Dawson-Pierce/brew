@@ -57,6 +57,9 @@ public:
     }
 
     void set_birth_model(std::unique_ptr<distributions::Mixture<T>> birth) {
+        if (birth && !birth->empty()) {
+            is_extended_ = birth->component(0).is_extended();
+        }
         birth_model_ = std::move(birth);
     }
 
@@ -297,7 +300,8 @@ public:
     }
 
 private:
-    // Compute Upsilon function for CPHD weight computation.
+    // Compute Upsilon function for CPHD weight computation using log-domain
+    // arithmetic to avoid overflow of falling_factorial for large cardinalities.
     // offset=0: Upsilon^0 (for cardinality update denominator)
     //   upsilon(n) = sum_{j=0}^{min(m_esf,n)} esf(j) * P(n,j) * qd^{n-j}
     // offset=1: Upsilon^1 (for weight ratios)
@@ -306,16 +310,36 @@ private:
         const Eigen::VectorXd& esf, int m_esf, int N, double q_d, int offset)
     {
         Eigen::VectorXd result = Eigen::VectorXd::Zero(N);
+        const double log_qd = (q_d > 0.0) ? std::log(q_d) : -700.0;
+
         for (int n = 0; n < N; ++n) {
-            double val = 0.0;
             int j_max = std::min(m_esf, n - offset);
+            if (j_max < 0) continue;
+
+            // Log-sum-exp accumulation for numerical stability
+            double max_log = -std::numeric_limits<double>::infinity();
+            std::vector<double> log_terms;
+            log_terms.reserve(j_max + 1);
+
             for (int j = 0; j <= j_max; ++j) {
-                if (j < esf.size() && n >= j + offset) {
-                    val += esf(j) * falling_factorial(n, j + offset)
-                           * std::pow(q_d, n - j - offset);
+                if (j < esf.size() && n >= j + offset && esf(j) > 0.0) {
+                    double log_esf = std::log(esf(j));
+                    // log(P(n, j+offset)) = log(n!) - log((n-j-offset)!)
+                    double log_ff = lgamma(n + 1) - lgamma(n - j - offset + 1);
+                    double log_qd_term = (n - j - offset) * log_qd;
+                    double lt = log_esf + log_ff + log_qd_term;
+                    log_terms.push_back(lt);
+                    max_log = std::max(max_log, lt);
                 }
             }
-            result(n) = val;
+
+            if (!log_terms.empty() && std::isfinite(max_log)) {
+                double sum = 0.0;
+                for (double lt : log_terms) {
+                    sum += std::exp(lt - max_log);
+                }
+                result(n) = std::exp(max_log + std::log(sum));
+            }
         }
         return result;
     }

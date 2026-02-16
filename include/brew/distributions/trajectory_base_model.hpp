@@ -21,6 +21,9 @@ struct TrajectoryBaseModel {
         : state_dim(state_dim), window_size(1), init_idx(idx) {}
 
     virtual ~TrajectoryBaseModel() = default;
+
+    /// Whether this distribution models an extended target (e.g. has extent parameters).
+    [[nodiscard]] virtual bool is_extended() const { return false; }
 };
 
 } // namespace brew::distributions

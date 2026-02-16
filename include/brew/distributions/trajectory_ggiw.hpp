@@ -43,6 +43,8 @@ public:
         V_history_.assign(1, V_);
     }
 
+    [[nodiscard]] bool is_extended() const override { return true; }
+
     [[nodiscard]] inline std::unique_ptr<TrajectoryGGIW> clone() const {
         auto c = std::make_unique<TrajectoryGGIW>(
             init_idx, state_dim, mean_, covariance_, alpha_, beta_, v_, V_);

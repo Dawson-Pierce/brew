@@ -73,6 +73,9 @@ public:
     void set_birth_model(std::unique_ptr<distributions::Mixture<T>> birth_mix) {
         birth_bernoullis_.clear();
         if (!birth_mix) return;
+        if (!birth_mix->empty()) {
+            is_extended_ = birth_mix->component(0).is_extended();
+        }
         for (std::size_t i = 0; i < birth_mix->size(); ++i) {
             birth_bernoullis_.push_back(std::make_unique<distributions::Bernoulli<T>>(
                 birth_mix->weight(i),
@@ -239,9 +242,8 @@ public:
                 double miss_factor = 1.0 - prob_detection_ * r;
                 if (miss_factor > 0.0) {
                     cost(i, m + i) = -std::log(miss_factor);
-                } else {
-                    cost(i, m + i) = 0.0;
                 }
+                // else: leave at infinity — missing a certainly-detected target is forbidden
             }
 
             auto solutions = assignment::murty(cost, k_best_);
@@ -321,6 +323,9 @@ public:
             hyp.bernoulli_indices = std::move(kept);
         }
 
+        // Compact Bernoulli table to reclaim memory from unreferenced entries
+        compact_bernoulli_table();
+
         normalize_log_weights();
 
         // Compute cardinality distribution
@@ -375,6 +380,33 @@ private:
             }
             hyp.bernoulli_indices = std::move(new_indices);
         }
+    }
+
+    /// Remove unreferenced Bernoulli entries and remap hypothesis indices.
+    void compact_bernoulli_table() {
+        std::vector<bool> referenced(bernoullis_.size(), false);
+        for (const auto& hyp : global_hypotheses_) {
+            for (auto idx : hyp.bernoulli_indices) {
+                referenced[idx] = true;
+            }
+        }
+
+        std::vector<std::size_t> new_index(bernoullis_.size(), 0);
+        std::vector<std::unique_ptr<distributions::Bernoulli<T>>> compacted;
+        for (std::size_t i = 0; i < bernoullis_.size(); ++i) {
+            if (referenced[i]) {
+                new_index[i] = compacted.size();
+                compacted.push_back(std::move(bernoullis_[i]));
+            }
+        }
+
+        for (auto& hyp : global_hypotheses_) {
+            for (auto& idx : hyp.bernoulli_indices) {
+                idx = new_index[idx];
+            }
+        }
+
+        bernoullis_ = std::move(compacted);
     }
 
     void normalize_log_weights() {

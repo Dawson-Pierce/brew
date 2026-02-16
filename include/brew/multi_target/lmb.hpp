@@ -64,6 +64,9 @@ public:
     void set_birth_model(std::unique_ptr<distributions::Mixture<T>> birth_mix) {
         birth_bernoullis_.clear();
         if (!birth_mix) return;
+        if (!birth_mix->empty()) {
+            is_extended_ = birth_mix->component(0).is_extended();
+        }
         for (std::size_t i = 0; i < birth_mix->size(); ++i) {
             birth_bernoullis_.push_back(std::make_unique<distributions::Bernoulli<T>>(
                 birth_mix->weight(i),
@@ -197,9 +200,8 @@ public:
             double miss_factor = 1.0 - prob_detection_ * r;
             if (miss_factor > 0.0) {
                 cost(i, m + i) = -std::log(miss_factor);
-            } else {
-                cost(i, m + i) = 0.0;
             }
+            // else: leave at infinity — missing a certainly-detected target is forbidden
         }
 
         // Solve K-best assignments (delta-GLMB update)

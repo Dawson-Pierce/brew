@@ -76,6 +76,9 @@ public:
 
     /// Set the Poisson birth model (added to Poisson intensity each predict step).
     void set_birth_model(std::unique_ptr<distributions::Mixture<T>> birth) {
+        if (birth && !birth->empty()) {
+            is_extended_ = birth->component(0).is_extended();
+        }
         birth_model_ = std::move(birth);
     }
 
@@ -323,9 +326,8 @@ public:
                 double miss_factor = 1.0 - prob_detection_ * r;
                 if (miss_factor > 0.0) {
                     cost(i, m + i) = -std::log(miss_factor);
-                } else {
-                    cost(i, m + i) = 0.0;
                 }
+                // else: leave at infinity — missing a certainly-detected target is forbidden
             }
 
             // Solve K-best assignments
@@ -384,9 +386,10 @@ public:
                         bernoullis_.push_back(std::move(nb));
                         new_hyp.bernoulli_indices.push_back(new_idx);
                     }
-                    // Add log-likelihood from new track (or clutter)
+                    // Add log-likelihood ratio vs clutter baseline
                     if (!meas_assigned[j]) {
-                        new_hyp.log_weight += new_tracks[j].log_likelihood;
+                        new_hyp.log_weight += new_tracks[j].log_likelihood
+                                              - std::log(kappa_vec[j]);
                     }
                 }
 
@@ -410,7 +413,9 @@ public:
         prune_hypotheses();
         cap_hypotheses();
 
-        // Prune low-existence Bernoullis and recycle to Poisson
+        // Prune low-existence Bernoullis and recycle to Poisson.
+        // Track recycled indices to avoid double-counting across hypotheses.
+        std::vector<bool> recycled(bernoullis_.size(), false);
         for (auto& hyp : global_hypotheses_) {
             std::vector<std::size_t> kept;
             for (auto idx : hyp.bernoulli_indices) {
@@ -418,9 +423,12 @@ public:
                 if (r >= prune_threshold_bern_) {
                     if (r < recycle_threshold_ && poisson_intensity_ &&
                         bernoullis_[idx]->has_distribution()) {
-                        // Recycle: add back to Poisson intensity
-                        poisson_intensity_->add_component(
-                            bernoullis_[idx]->distribution().clone_typed(), r);
+                        // Recycle: add back to Poisson intensity (only once per Bernoulli)
+                        if (!recycled[idx]) {
+                            recycled[idx] = true;
+                            poisson_intensity_->add_component(
+                                bernoullis_[idx]->distribution().clone_typed(), r);
+                        }
                     } else {
                         kept.push_back(idx);
                     }
@@ -428,6 +436,9 @@ public:
             }
             hyp.bernoulli_indices = std::move(kept);
         }
+
+        // Compact Bernoulli table to reclaim memory from unreferenced entries
+        compact_bernoulli_table();
 
         normalize_log_weights();
 
@@ -464,6 +475,33 @@ public:
     }
 
 private:
+    /// Remove unreferenced Bernoulli entries and remap hypothesis indices.
+    void compact_bernoulli_table() {
+        std::vector<bool> referenced(bernoullis_.size(), false);
+        for (const auto& hyp : global_hypotheses_) {
+            for (auto idx : hyp.bernoulli_indices) {
+                referenced[idx] = true;
+            }
+        }
+
+        std::vector<std::size_t> new_index(bernoullis_.size(), 0);
+        std::vector<std::unique_ptr<distributions::Bernoulli<T>>> compacted;
+        for (std::size_t i = 0; i < bernoullis_.size(); ++i) {
+            if (referenced[i]) {
+                new_index[i] = compacted.size();
+                compacted.push_back(std::move(bernoullis_[i]));
+            }
+        }
+
+        for (auto& hyp : global_hypotheses_) {
+            for (auto& idx : hyp.bernoulli_indices) {
+                idx = new_index[idx];
+            }
+        }
+
+        bernoullis_ = std::move(compacted);
+    }
+
     void normalize_log_weights() {
         if (global_hypotheses_.empty()) return;
         double max_lw = global_hypotheses_[0].log_weight;

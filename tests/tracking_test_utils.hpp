@@ -662,7 +662,6 @@ inline multi_target::PHD<T> make_phd(
     phd.set_gate_threshold(25.0);
 
     if constexpr (is_extended_distribution_v<T>) {
-        phd.set_extended_target(true);
         phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
@@ -693,7 +692,6 @@ inline multi_target::CPHD<T> make_cphd(
     cphd.set_poisson_birth_cardinality(0.1);
 
     if constexpr (is_extended_distribution_v<T>) {
-        cphd.set_extended_target(true);
         cphd.set_cluster_object(std::make_shared<clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
@@ -722,7 +720,6 @@ inline multi_target::MBM<T> make_mbm(
     mbm.set_k_best(5);
 
     if constexpr (is_extended_distribution_v<T>) {
-        mbm.set_extended_target(true);
         mbm.set_cluster_object(std::make_shared<clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
@@ -756,7 +753,6 @@ inline multi_target::PMBM<T> make_pmbm(
     pmbm.set_k_best(5);
 
     if constexpr (is_extended_distribution_v<T>) {
-        pmbm.set_extended_target(true);
         pmbm.set_cluster_object(std::make_shared<clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
@@ -782,7 +778,6 @@ inline multi_target::MB<T> make_mb(
     mb.set_gate_threshold(25.0);
 
     if constexpr (is_extended_distribution_v<T>) {
-        mb.set_extended_target(true);
         mb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
@@ -809,7 +804,6 @@ inline multi_target::LMB<T> make_lmb(
     lmb.set_k_best(5);
 
     if constexpr (is_extended_distribution_v<T>) {
-        lmb.set_extended_target(true);
         lmb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
@@ -838,7 +832,6 @@ inline multi_target::GLMB<T> make_glmb(
     glmb.set_k_best(5);
 
     if constexpr (is_extended_distribution_v<T>) {
-        glmb.set_extended_target(true);
         glmb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
@@ -867,7 +860,6 @@ inline multi_target::JGLMB<T> make_jglmb(
     jglmb.set_k_best(5);
 
     if constexpr (is_extended_distribution_v<T>) {
-        jglmb.set_extended_target(true);
         jglmb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }

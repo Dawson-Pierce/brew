@@ -11,16 +11,16 @@
 #include <Eigen/Dense>
 #include <memory>
 #include <vector>
-#include <map>
 #include <cmath>
 #include <algorithm>
 #include <limits>
-#include <type_traits>
+
 
 namespace brew::multi_target {
 
 /// Multi-Bernoulli (MB) filter.
-/// Single-hypothesis labeled filter using Hungarian (single best) assignment.
+/// Single-hypothesis unlabeled filter using Hungarian (single best) assignment.
+/// No persistent track identity — Bernoullis are a flat set without labels.
 /// Template parameter T is the single distribution type (e.g., Gaussian, GGIW).
 template <typename T>
 class MB : public RFSBase {
@@ -46,7 +46,6 @@ public:
         c->next_track_id_ = next_track_id_;
         c->is_extended_ = is_extended_;
         if (cluster_obj_) c->cluster_obj_ = cluster_obj_;
-        c->track_histories_ = track_histories_;
         return c;
     }
 
@@ -63,6 +62,9 @@ public:
     void set_birth_model(std::unique_ptr<distributions::Mixture<T>> birth_mix) {
         birth_bernoullis_.clear();
         if (!birth_mix) return;
+        if (!birth_mix->empty()) {
+            is_extended_ = birth_mix->component(0).is_extended();
+        }
         for (std::size_t i = 0; i < birth_mix->size(); ++i) {
             birth_bernoullis_.push_back(std::make_unique<distributions::Bernoulli<T>>(
                 birth_mix->weight(i),
@@ -80,10 +82,6 @@ public:
 
     [[nodiscard]] const std::vector<std::unique_ptr<distributions::Mixture<T>>>& extracted_mixtures() const {
         return extracted_mixtures_;
-    }
-
-    [[nodiscard]] const std::map<int, std::vector<Eigen::VectorXd>>& track_histories() const {
-        return track_histories_;
     }
 
     // ---- RFS interface ----
@@ -245,9 +243,6 @@ public:
         }
         bernoullis_ = std::move(kept);
 
-        // Record track states
-        record_track_states();
-
         // Extract
         extracted_mixtures_.push_back(extract());
     }
@@ -281,31 +276,6 @@ private:
         dist.init_idx += 1;
     }
 
-    template <typename U, typename = void>
-    struct has_get_last_state_ : std::false_type {};
-
-    template <typename U>
-    struct has_get_last_state_<U,
-        std::void_t<decltype(std::declval<const U&>().get_last_state())>
-    > : std::true_type {};
-
-    template <typename U>
-    static Eigen::VectorXd get_track_state(const U& dist) {
-        if constexpr (has_get_last_state_<U>::value) {
-            return dist.get_last_state();
-        } else {
-            return dist.mean();
-        }
-    }
-
-    void record_track_states() {
-        for (const auto& bern : bernoullis_) {
-            if (bern->existence_probability() >= extract_threshold_ && bern->has_distribution()) {
-                track_histories_[bern->id()].push_back(get_track_state(bern->distribution()));
-            }
-        }
-    }
-
     std::unique_ptr<filters::Filter<T>> filter_;
     std::vector<std::unique_ptr<distributions::Bernoulli<T>>> bernoullis_;
     std::vector<std::unique_ptr<distributions::Bernoulli<T>>> birth_bernoullis_;
@@ -317,7 +287,6 @@ private:
     bool is_extended_ = false;
     std::shared_ptr<clustering::DBSCAN> cluster_obj_;
     std::vector<std::unique_ptr<distributions::Mixture<T>>> extracted_mixtures_;
-    std::map<int, std::vector<Eigen::VectorXd>> track_histories_;
 };
 
 } // namespace brew::multi_target
