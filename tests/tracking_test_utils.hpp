@@ -1,11 +1,11 @@
 #pragma once
 
 #include "brew/dynamics/integrator_2d.hpp"
-#include "brew/distributions/mixture.hpp"
-#include "brew/distributions/gaussian.hpp"
-#include "brew/distributions/ggiw.hpp"
-#include "brew/distributions/trajectory_gaussian.hpp"
-#include "brew/distributions/trajectory_ggiw.hpp"
+#include "brew/models/mixture.hpp"
+#include "brew/models/gaussian.hpp"
+#include "brew/models/ggiw.hpp"
+#include "brew/models/trajectory_gaussian.hpp"
+#include "brew/models/trajectory_ggiw.hpp"
 #include "brew/filters/ekf.hpp"
 #include "brew/filters/ggiw_ekf.hpp"
 #include "brew/filters/trajectory_gaussian_ekf.hpp"
@@ -427,7 +427,7 @@ inline Eigen::VectorXd extract_position(const T& component) {
 
 template <typename T>
 inline double closest_estimate_error(
-    const distributions::Mixture<T>& estimates,
+    const models::Mixture<T>& estimates,
     const Eigen::VectorXd& truth_pos)
 {
     double min_err = std::numeric_limits<double>::infinity();
@@ -563,10 +563,10 @@ inline std::unique_ptr<filters::TrajectoryGGIWEKF> make_trajectory_ggiw_ekf(
 
 // ---- Birth model factory functions ----
 
-inline std::unique_ptr<distributions::Mixture<distributions::Gaussian>>
+inline std::unique_ptr<models::Mixture<models::Gaussian>>
 make_gm_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<distributions::Mixture<distributions::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
@@ -575,17 +575,17 @@ make_gm_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<distributions::Gaussian>(b1, birth_cov), weight);
+        std::make_unique<models::Gaussian>(b1, birth_cov), weight);
     birth->add_component(
-        std::make_unique<distributions::Gaussian>(b2, birth_cov), weight);
+        std::make_unique<models::Gaussian>(b2, birth_cov), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<distributions::Mixture<distributions::GGIW>>
+inline std::unique_ptr<models::Mixture<models::GGIW>>
 make_ggiw_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<distributions::Mixture<distributions::GGIW>>();
+    auto birth = std::make_unique<models::Mixture<models::GGIW>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -593,17 +593,17 @@ make_ggiw_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<distributions::GGIW>(b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+        std::make_unique<models::GGIW>(b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
     birth->add_component(
-        std::make_unique<distributions::GGIW>(b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+        std::make_unique<models::GGIW>(b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<distributions::Mixture<distributions::TrajectoryGaussian>>
+inline std::unique_ptr<models::Mixture<models::TrajectoryGaussian>>
 make_trajectory_gaussian_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<distributions::Mixture<distributions::TrajectoryGaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::TrajectoryGaussian>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
@@ -612,17 +612,17 @@ make_trajectory_gaussian_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<distributions::TrajectoryGaussian>(0, 4, b1, birth_cov), weight);
+        std::make_unique<models::TrajectoryGaussian>(0, 4, b1, birth_cov), weight);
     birth->add_component(
-        std::make_unique<distributions::TrajectoryGaussian>(0, 4, b2, birth_cov), weight);
+        std::make_unique<models::TrajectoryGaussian>(0, 4, b2, birth_cov), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<distributions::Mixture<distributions::TrajectoryGGIW>>
+inline std::unique_ptr<models::Mixture<models::TrajectoryGGIW>>
 make_trajectory_ggiw_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<distributions::Mixture<distributions::TrajectoryGGIW>>();
+    auto birth = std::make_unique<models::Mixture<models::TrajectoryGGIW>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -630,10 +630,10 @@ make_trajectory_ggiw_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<distributions::TrajectoryGGIW>(
+        std::make_unique<models::TrajectoryGGIW>(
             0, 4, b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
     birth->add_component(
-        std::make_unique<distributions::TrajectoryGGIW>(
+        std::make_unique<models::TrajectoryGGIW>(
             0, 4, b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
 
     return birth;
@@ -644,13 +644,13 @@ make_trajectory_ggiw_birth(double weight = 0.1)
 template <typename T>
 inline multi_target::PHD<T> make_phd(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<distributions::Mixture<T>> birth,
+    std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     multi_target::PHD<T> phd;
     phd.set_filter(std::move(filter));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<distributions::Mixture<T>>());
+    phd.set_intensity(std::make_unique<models::Mixture<T>>());
     phd.set_prob_detection(params.p_detect);
     phd.set_prob_survive(params.p_survive);
     phd.set_clutter_rate(params.clutter_rate);
@@ -672,13 +672,13 @@ inline multi_target::PHD<T> make_phd(
 template <typename T>
 inline multi_target::CPHD<T> make_cphd(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<distributions::Mixture<T>> birth,
+    std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     multi_target::CPHD<T> cphd;
     cphd.set_filter(std::move(filter));
     cphd.set_birth_model(std::move(birth));
-    cphd.set_intensity(std::make_unique<distributions::Mixture<T>>());
+    cphd.set_intensity(std::make_unique<models::Mixture<T>>());
     cphd.set_prob_detection(params.p_detect);
     cphd.set_prob_survive(params.p_survive);
     cphd.set_clutter_rate(params.clutter_rate);
@@ -702,7 +702,7 @@ inline multi_target::CPHD<T> make_cphd(
 template <typename T>
 inline multi_target::MBM<T> make_mbm(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<distributions::Mixture<T>> birth,
+    std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     multi_target::MBM<T> mbm;
@@ -730,13 +730,13 @@ inline multi_target::MBM<T> make_mbm(
 template <typename T>
 inline multi_target::PMBM<T> make_pmbm(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<distributions::Mixture<T>> birth,
+    std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     multi_target::PMBM<T> pmbm;
     pmbm.set_filter(std::move(filter));
     pmbm.set_birth_model(std::move(birth));
-    pmbm.set_poisson_intensity(std::make_unique<distributions::Mixture<T>>());
+    pmbm.set_poisson_intensity(std::make_unique<models::Mixture<T>>());
     pmbm.set_prob_detection(params.p_detect);
     pmbm.set_prob_survive(params.p_survive);
     pmbm.set_clutter_rate(params.clutter_rate);
@@ -763,7 +763,7 @@ inline multi_target::PMBM<T> make_pmbm(
 template <typename T>
 inline multi_target::MB<T> make_mb(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<distributions::Mixture<T>> birth,
+    std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     multi_target::MB<T> mb;
@@ -788,7 +788,7 @@ inline multi_target::MB<T> make_mb(
 template <typename T>
 inline multi_target::LMB<T> make_lmb(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<distributions::Mixture<T>> birth,
+    std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     multi_target::LMB<T> lmb;
@@ -814,7 +814,7 @@ inline multi_target::LMB<T> make_lmb(
 template <typename T>
 inline multi_target::GLMB<T> make_glmb(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<distributions::Mixture<T>> birth,
+    std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     multi_target::GLMB<T> glmb;
@@ -842,7 +842,7 @@ inline multi_target::GLMB<T> make_glmb(
 template <typename T>
 inline multi_target::JGLMB<T> make_jglmb(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<distributions::Mixture<T>> birth,
+    std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     multi_target::JGLMB<T> jglmb;
@@ -886,7 +886,7 @@ inline void accumulate_plot_step(
     const ScenarioData& scenario,
     int k,
     const Eigen::MatrixXd& meas,
-    const distributions::Mixture<T>& estimates)
+    const models::Mixture<T>& estimates)
 {
     for (std::size_t t = 0; t < scenario.targets.size(); ++t) {
         const auto& tgt = scenario.targets[t];

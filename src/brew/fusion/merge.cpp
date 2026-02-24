@@ -10,7 +10,7 @@ namespace brew::fusion {
 
 // ---- Gaussian merge: iterative closest-pair, moment-match ----
 
-void merge(distributions::Mixture<distributions::Gaussian>& mix, double threshold) {
+void merge(models::Mixture<models::Gaussian>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -59,11 +59,11 @@ void merge(distributions::Mixture<distributions::Gaussian>& mix, double threshol
 
 // ---- GGIW merge: heaviest-first grouping, Cholesky-gated, weighted avg ----
 
-void merge(distributions::Mixture<distributions::GGIW>& mix, double threshold) {
+void merge(models::Mixture<models::GGIW>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     std::vector<bool> remaining(mix.size(), true);
-    distributions::Mixture<distributions::GGIW> result;
+    models::Mixture<models::GGIW> result;
 
     while (true) {
         // Find heaviest remaining
@@ -136,7 +136,7 @@ void merge(distributions::Mixture<distributions::GGIW>& mix, double threshold) {
         V_new = 0.5 * (V_new + V_new.transpose());
 
         result.add_component(
-            std::make_unique<distributions::GGIW>(m_new, P_new, a_new, b_new, v_new, V_new),
+            std::make_unique<models::GGIW>(m_new, P_new, a_new, b_new, v_new, V_new),
             w_sum);
 
         for (auto idx : grp) remaining[idx] = false;
@@ -171,7 +171,7 @@ static double trajectory_mahal_dist(const Eigen::VectorXd& mi, const Eigen::Matr
 
 // ---- TrajectoryGaussian merge: full-state Mahalanobis, keep longer/heavier ----
 
-void merge(distributions::Mixture<distributions::TrajectoryGaussian>& mix, double threshold) {
+void merge(models::Mixture<models::TrajectoryGaussian>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -232,7 +232,7 @@ void merge(distributions::Mixture<distributions::TrajectoryGaussian>& mix, doubl
 
 // ---- TrajectoryGGIW merge: same trajectory merge logic ----
 
-void merge(distributions::Mixture<distributions::TrajectoryGGIW>& mix, double threshold) {
+void merge(models::Mixture<models::TrajectoryGGIW>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;

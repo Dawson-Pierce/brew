@@ -14,7 +14,7 @@ static Eigen::MatrixXd sqrtm_spd(const Eigen::MatrixXd& M) {
     return es.eigenvectors() * d.asDiagonal() * es.eigenvectors().transpose();
 }
 
-std::unique_ptr<Filter<distributions::TrajectoryGGIW>> TrajectoryGGIWEKF::clone() const {
+std::unique_ptr<Filter<models::TrajectoryGGIW>> TrajectoryGGIWEKF::clone() const {
     auto c = std::make_unique<TrajectoryGGIWEKF>();
     c->dyn_obj_ = dyn_obj_;
     c->h_ = h_;
@@ -28,9 +28,9 @@ std::unique_ptr<Filter<distributions::TrajectoryGGIW>> TrajectoryGGIWEKF::clone(
     return c;
 }
 
-distributions::TrajectoryGGIW TrajectoryGGIWEKF::predict(
+models::TrajectoryGGIW TrajectoryGGIWEKF::predict(
     double dt,
-    const distributions::TrajectoryGGIW& prev) const {
+    const models::TrajectoryGGIW& prev) const {
 
     const int sd = prev.state_dim;
     const int ws = prev.window_size;
@@ -82,7 +82,7 @@ distributions::TrajectoryGGIW TrajectoryGGIWEKF::predict(
     Eigen::MatrixXd next_V = scale * dyn_obj_->propagate_extent(dt, prev_state, prev_V);
 
     // Build result
-    distributions::TrajectoryGGIW result;
+    models::TrajectoryGGIW result;
     result.state_dim = sd;
     result.init_idx = prev.init_idx;
     result.window_size = ws + 1;
@@ -124,7 +124,7 @@ distributions::TrajectoryGGIW TrajectoryGGIWEKF::predict(
 
 TrajectoryGGIWEKF::CorrectionResult TrajectoryGGIWEKF::correct(
     const Eigen::VectorXd& measurement,
-    const distributions::TrajectoryGGIW& predicted) const {
+    const models::TrajectoryGGIW& predicted) const {
 
     const int sd = predicted.state_dim;
     const int ws = predicted.window_size;
@@ -233,7 +233,7 @@ TrajectoryGGIWEKF::CorrectionResult TrajectoryGGIWEKF::correct(
     double likelihood = std::exp(log_likelihood);
 
     // Build result
-    distributions::TrajectoryGGIW result;
+    models::TrajectoryGGIW result;
     result.state_dim = sd;
     result.init_idx = predicted.init_idx;
     result.window_size = ws;
@@ -278,7 +278,7 @@ TrajectoryGGIWEKF::CorrectionResult TrajectoryGGIWEKF::correct(
 
 double TrajectoryGGIWEKF::gate(
     const Eigen::VectorXd& measurement,
-    const distributions::TrajectoryGGIW& predicted) const {
+    const models::TrajectoryGGIW& predicted) const {
 
     const Eigen::VectorXd state = predicted.get_last_state();
     const Eigen::MatrixXd P = predicted.get_last_cov();

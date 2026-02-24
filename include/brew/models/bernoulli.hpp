@@ -2,7 +2,7 @@
 
 #include <memory>
 
-namespace brew::distributions {
+namespace brew::models {
 
 /// Bernoulli component for multi-Bernoulli filters (MBM, PMBM).
 /// Wraps a spatial distribution T with an existence probability.
@@ -45,4 +45,4 @@ private:
     int id_ = -1;
 };
 
-} // namespace brew::distributions
+} // namespace brew::models

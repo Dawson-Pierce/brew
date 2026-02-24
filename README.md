@@ -7,13 +7,15 @@ A header-heavy C++ library for single-target and multi-target tracking, supporti
 
 | Module | Description |
 |---|---|
-| `distributions` | State distribution representations (point, extended, trajectory-aware) |
+| `models` | State distribution representations (point, extended, trajectory-aware) |
 | `dynamics` | Motion models for prediction |
 | `filters` | Single-target recursive filters (prediction + update) |
 | `multi_target` | Random Finite Set (RFS) multi-target tracking filters |
 | `fusion` | Mixture management operations (prune, merge, cap) |
 | `assignment` | Optimal and K-best assignment solvers |
 | `clustering` | Measurement clustering for extended targets |
+| `metrics` | Performance metrics (OSPA, GOSPA) |
+| `serialization` | Filter state serialization (nlohmann/json) |
 | `plot_utils` | Optional visualization utilities (requires matplot++) |
 
 ## Building
@@ -33,7 +35,7 @@ All multi-target filters share a common template interface parameterized on dist
 ```cpp
 #include <brew/multi_target/pmbm.hpp>
 #include <brew/filters/ekf.hpp>
-#include <brew/distributions/gaussian.hpp>
+#include <brew/models/gaussian.hpp>
 #include <brew/dynamics/integrator_2d.hpp>
 
 // 1. Set up dynamics and single-target filter
@@ -41,11 +43,11 @@ auto dynamics = std::make_shared<brew::dynamics::Integrator2D>(dt);
 auto ekf = std::make_shared<brew::filters::EKF>(dynamics, R);
 
 // 2. Create birth model
-auto birth = std::make_shared<brew::distributions::Mixture<brew::distributions::Gaussian>>();
+auto birth = std::make_shared<brew::models::Mixture<brew::models::Gaussian>>();
 birth->add_component(birth_gaussian, birth_weight);
 
 // 3. Create multi-target filter
-brew::multi_target::PMBM<brew::distributions::Gaussian> tracker(ekf, birth);
+brew::multi_target::PMBM<brew::models::Gaussian> tracker(ekf, birth);
 tracker.set_prob_detection(0.9);
 tracker.set_prob_survive(0.99);
 tracker.set_clutter_rate(10.0);

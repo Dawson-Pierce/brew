@@ -1,13 +1,13 @@
 #pragma once
 
-#include "brew/distributions/mixture.hpp"
+#include "brew/models/mixture.hpp"
 
 namespace brew::fusion {
 
 /// Remove components whose weight is below the threshold.
 /// Generic: works on any Mixture<T>.
 template <typename T>
-void prune(distributions::Mixture<T>& mixture, double threshold) {
+void prune(models::Mixture<T>& mixture, double threshold) {
     for (std::size_t i = mixture.size(); i > 0; --i) {
         if (mixture.weight(i - 1) < threshold) {
             mixture.remove_component(i - 1);

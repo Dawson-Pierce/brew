@@ -3,7 +3,7 @@
 
 namespace brew::filters {
 
-std::unique_ptr<Filter<distributions::Gaussian>> EKF::clone() const {
+std::unique_ptr<Filter<models::Gaussian>> EKF::clone() const {
     auto c = std::make_unique<EKF>();
     c->dyn_obj_ = dyn_obj_;
     c->h_ = h_;
@@ -13,9 +13,9 @@ std::unique_ptr<Filter<distributions::Gaussian>> EKF::clone() const {
     return c;
 }
 
-distributions::Gaussian EKF::predict(
+models::Gaussian EKF::predict(
     double dt,
-    const distributions::Gaussian& prev) const {
+    const models::Gaussian& prev) const {
 
     const auto F = dyn_obj_->get_state_mat(dt, prev.mean());
     const auto G = dyn_obj_->get_input_mat(dt, prev.mean());
@@ -24,12 +24,12 @@ distributions::Gaussian EKF::predict(
     Eigen::MatrixXd predicted_cov = F * prev.covariance() * F.transpose()
                                     + G * process_noise_ * G.transpose();
 
-    return distributions::Gaussian(std::move(predicted_mean), std::move(predicted_cov));
+    return models::Gaussian(std::move(predicted_mean), std::move(predicted_cov));
 }
 
 EKF::CorrectionResult EKF::correct(
     const Eigen::VectorXd& measurement,
-    const distributions::Gaussian& predicted) const {
+    const models::Gaussian& predicted) const {
 
     const auto H = get_measurement_matrix(predicted.mean());
     const auto z_hat = estimate_measurement(predicted.mean());
@@ -49,14 +49,14 @@ EKF::CorrectionResult EKF::correct(
     double log_likelihood = -0.5 * (m * std::log(2.0 * M_PI) + log_det + mahal);
 
     return {
-        distributions::Gaussian(std::move(updated_mean), std::move(updated_cov)),
+        models::Gaussian(std::move(updated_mean), std::move(updated_cov)),
         std::exp(log_likelihood)
     };
 }
 
 double EKF::gate(
     const Eigen::VectorXd& measurement,
-    const distributions::Gaussian& predicted) const {
+    const models::Gaussian& predicted) const {
 
     const auto H = get_measurement_matrix(predicted.mean());
     const auto z_hat = estimate_measurement(predicted.mean());

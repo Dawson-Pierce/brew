@@ -4,14 +4,14 @@
 using namespace brew;
 
 TEST(MergeGaussian, TwoClose) {
-    distributions::Mixture<distributions::Gaussian> mix;
+    models::Mixture<models::Gaussian> mix;
     Eigen::VectorXd m1(2), m2(2);
     m1 << 0.0, 0.0;
     m2 << 0.1, 0.1;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<distributions::Gaussian>(m1, cov), 0.5);
-    mix.add_component(std::make_unique<distributions::Gaussian>(m2, cov), 0.3);
+    mix.add_component(std::make_unique<models::Gaussian>(m1, cov), 0.5);
+    mix.add_component(std::make_unique<models::Gaussian>(m2, cov), 0.3);
 
     fusion::merge(mix, 4.0);
 
@@ -23,14 +23,14 @@ TEST(MergeGaussian, TwoClose) {
 }
 
 TEST(MergeGaussian, TwoFar) {
-    distributions::Mixture<distributions::Gaussian> mix;
+    models::Mixture<models::Gaussian> mix;
     Eigen::VectorXd m1(2), m2(2);
     m1 << 0.0, 0.0;
     m2 << 100.0, 100.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<distributions::Gaussian>(m1, cov), 0.5);
-    mix.add_component(std::make_unique<distributions::Gaussian>(m2, cov), 0.3);
+    mix.add_component(std::make_unique<models::Gaussian>(m1, cov), 0.5);
+    mix.add_component(std::make_unique<models::Gaussian>(m2, cov), 0.3);
 
     fusion::merge(mix, 4.0);
 
@@ -38,15 +38,15 @@ TEST(MergeGaussian, TwoFar) {
 }
 
 TEST(MergeGGIW, TwoClose) {
-    distributions::Mixture<distributions::GGIW> mix;
+    models::Mixture<models::GGIW> mix;
     Eigen::VectorXd m1(4), m2(4);
     m1 << 0.0, 0.0, 1.0, 0.0;
     m2 << 0.1, 0.1, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<distributions::GGIW>(m1, cov, 10.0, 5.0, 10.0, V), 0.6);
-    mix.add_component(std::make_unique<distributions::GGIW>(m2, cov, 12.0, 6.0, 11.0, V), 0.4);
+    mix.add_component(std::make_unique<models::GGIW>(m1, cov, 10.0, 5.0, 10.0, V), 0.6);
+    mix.add_component(std::make_unique<models::GGIW>(m2, cov, 12.0, 6.0, 11.0, V), 0.4);
 
     fusion::merge(mix, 4.0);
 
@@ -55,14 +55,14 @@ TEST(MergeGGIW, TwoClose) {
 }
 
 TEST(MergeTrajectoryGaussian, SameSize) {
-    distributions::Mixture<distributions::TrajectoryGaussian> mix;
+    models::Mixture<models::TrajectoryGaussian> mix;
     Eigen::VectorXd m1(4), m2(4);
     m1 << 0.0, 0.0, 1.0, 0.0;
     m2 << 0.1, 0.1, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
 
-    mix.add_component(std::make_unique<distributions::TrajectoryGaussian>(0, 4, m1, cov), 0.5);
-    mix.add_component(std::make_unique<distributions::TrajectoryGaussian>(0, 4, m2, cov), 0.3);
+    mix.add_component(std::make_unique<models::TrajectoryGaussian>(0, 4, m1, cov), 0.5);
+    mix.add_component(std::make_unique<models::TrajectoryGaussian>(0, 4, m2, cov), 0.3);
 
     fusion::merge(mix, 4.0);
 
@@ -71,15 +71,15 @@ TEST(MergeTrajectoryGaussian, SameSize) {
 }
 
 TEST(MergeTrajectoryGGIW, SameSize) {
-    distributions::Mixture<distributions::TrajectoryGGIW> mix;
+    models::Mixture<models::TrajectoryGGIW> mix;
     Eigen::VectorXd m1(4), m2(4);
     m1 << 0.0, 0.0, 1.0, 0.0;
     m2 << 0.1, 0.1, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<distributions::TrajectoryGGIW>(0, 4, m1, cov, 10.0, 5.0, 10.0, V), 0.5);
-    mix.add_component(std::make_unique<distributions::TrajectoryGGIW>(0, 4, m2, cov, 12.0, 6.0, 11.0, V), 0.3);
+    mix.add_component(std::make_unique<models::TrajectoryGGIW>(0, 4, m1, cov, 10.0, 5.0, 10.0, V), 0.5);
+    mix.add_component(std::make_unique<models::TrajectoryGGIW>(0, 4, m2, cov, 12.0, 6.0, 11.0, V), 0.3);
 
     fusion::merge(mix, 4.0);
 

@@ -5,4 +5,4 @@ add_library(brew_filters
     trajectory_ggiw_ekf.cpp
 )
 target_include_directories(brew_filters PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../../include)
-target_link_libraries(brew_filters PUBLIC brew_distributions brew_dynamics Eigen3::Eigen)
+target_link_libraries(brew_filters PUBLIC brew_models brew_dynamics Eigen3::Eigen)

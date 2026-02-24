@@ -15,6 +15,6 @@ target_include_directories(brew_plot_utils PUBLIC
 )
 
 target_link_libraries(brew_plot_utils PUBLIC
-    brew_distributions
+    brew_models
     matplot
 )

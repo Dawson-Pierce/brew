@@ -2,9 +2,9 @@
 
 #include "brew/multi_target/rfs_base.hpp"
 #include "brew/multi_target/mbm.hpp"
-#include "brew/distributions/mixture.hpp"
-#include "brew/distributions/bernoulli.hpp"
-#include "brew/distributions/trajectory_base_model.hpp"
+#include "brew/models/mixture.hpp"
+#include "brew/models/bernoulli.hpp"
+#include "brew/models/trajectory_base_model.hpp"
 #include "brew/filters/filter.hpp"
 #include "brew/clustering/dbscan.hpp"
 #include "brew/assignment/murty.hpp"
@@ -66,11 +66,11 @@ public:
         filter_ = std::move(filter);
     }
 
-    void set_birth_bernoullis(std::vector<std::unique_ptr<distributions::Bernoulli<T>>> birth) {
+    void set_birth_bernoullis(std::vector<std::unique_ptr<models::Bernoulli<T>>> birth) {
         birth_bernoullis_ = std::move(birth);
     }
 
-    void set_birth_model(std::unique_ptr<distributions::Mixture<T>> birth_mix) {
+    void set_birth_model(std::unique_ptr<models::Mixture<T>> birth_mix) {
         birth_bernoullis_.clear();
         if (!birth_mix) return;
         if (!birth_mix->empty()) {
@@ -80,7 +80,7 @@ public:
             }
         }
         for (std::size_t i = 0; i < birth_mix->size(); ++i) {
-            birth_bernoullis_.push_back(std::make_unique<distributions::Bernoulli<T>>(
+            birth_bernoullis_.push_back(std::make_unique<models::Bernoulli<T>>(
                 birth_mix->weight(i),
                 birth_mix->component(i).clone_typed()));
         }
@@ -101,7 +101,7 @@ public:
         return global_hypotheses_;
     }
 
-    [[nodiscard]] const std::vector<std::unique_ptr<distributions::Mixture<T>>>& extracted_mixtures() const {
+    [[nodiscard]] const std::vector<std::unique_ptr<models::Mixture<T>>>& extracted_mixtures() const {
         return extracted_mixtures_;
     }
 
@@ -164,7 +164,7 @@ public:
         const int m = static_cast<int>(meas_groups.size());
 
         // Prepare birth Bernoullis for this step
-        std::vector<std::unique_ptr<distributions::Bernoulli<T>>> step_births;
+        std::vector<std::unique_ptr<models::Bernoulli<T>>> step_births;
         for (const auto& bb : birth_bernoullis_) {
             auto new_bern = bb->clone();
             new_bern->set_id(next_track_id_++);
@@ -326,7 +326,7 @@ public:
 
                     if (row_to_meas[i] >= 0) {
                         int j = row_to_meas[i];
-                        auto new_bern = std::make_unique<distributions::Bernoulli<T>>(
+                        auto new_bern = std::make_unique<models::Bernoulli<T>>(
                             1.0, cache[i][j].dist->clone_typed(), orig_bern.id());
                         std::size_t new_idx = bernoullis_.size();
                         bernoullis_.push_back(std::move(new_bern));
@@ -334,7 +334,7 @@ public:
                     } else {
                         double r_new = r * (1.0 - prob_detection_)
                                        / (1.0 - r * prob_detection_);
-                        auto new_bern = std::make_unique<distributions::Bernoulli<T>>(
+                        auto new_bern = std::make_unique<models::Bernoulli<T>>(
                             r_new, orig_bern.distribution().clone_typed(), orig_bern.id());
                         std::size_t new_idx = bernoullis_.size();
                         bernoullis_.push_back(std::move(new_bern));
@@ -347,7 +347,7 @@ public:
                     int row = n_exist + b;
                     if (row_to_meas[row] >= 0) {
                         int j = row_to_meas[row];
-                        auto new_bern = std::make_unique<distributions::Bernoulli<T>>(
+                        auto new_bern = std::make_unique<models::Bernoulli<T>>(
                             1.0, cache[row][j].dist->clone_typed(), step_births[b]->id());
                         std::size_t new_idx = bernoullis_.size();
                         bernoullis_.push_back(std::move(new_bern));
@@ -369,7 +369,7 @@ public:
                     double r = orig_bern.existence_probability();
                     double r_new = r * (1.0 - prob_detection_)
                                    / (1.0 - r * prob_detection_);
-                    auto new_bern = std::make_unique<distributions::Bernoulli<T>>(
+                    auto new_bern = std::make_unique<models::Bernoulli<T>>(
                         r_new, orig_bern.distribution().clone_typed(), orig_bern.id());
                     std::size_t new_idx = bernoullis_.size();
                     bernoullis_.push_back(std::move(new_bern));
@@ -407,8 +407,8 @@ public:
         extracted_mixtures_.push_back(extract());
     }
 
-    [[nodiscard]] std::unique_ptr<distributions::Mixture<T>> extract() const {
-        auto result = std::make_unique<distributions::Mixture<T>>();
+    [[nodiscard]] std::unique_ptr<models::Mixture<T>> extract() const {
+        auto result = std::make_unique<models::Mixture<T>>();
 
         if (global_hypotheses_.empty()) return result;
 
@@ -434,7 +434,7 @@ public:
 
 private:
     void correct_no_measurements(
-        const std::vector<std::unique_ptr<distributions::Bernoulli<T>>>& /*step_births*/)
+        const std::vector<std::unique_ptr<models::Bernoulli<T>>>& /*step_births*/)
     {
         // Missed detection for all existing, reject all births
         if (global_hypotheses_.empty()) {
@@ -451,7 +451,7 @@ private:
                 double r = orig.existence_probability();
                 double r_new = r * (1.0 - prob_detection_)
                                / (1.0 - r * prob_detection_);
-                auto new_bern = std::make_unique<distributions::Bernoulli<T>>(
+                auto new_bern = std::make_unique<models::Bernoulli<T>>(
                     r_new, orig.distribution().clone_typed(), orig.id());
                 std::size_t new_idx = bernoullis_.size();
                 bernoullis_.push_back(std::move(new_bern));
@@ -471,7 +471,7 @@ private:
         }
 
         std::vector<std::size_t> new_index(bernoullis_.size(), 0);
-        std::vector<std::unique_ptr<distributions::Bernoulli<T>>> compacted;
+        std::vector<std::unique_ptr<models::Bernoulli<T>>> compacted;
         for (std::size_t i = 0; i < bernoullis_.size(); ++i) {
             if (referenced[i]) {
                 new_index[i] = compacted.size();
@@ -570,7 +570,7 @@ private:
     template <typename U>
     static void increment_init_idx(U& /*dist*/) {}
 
-    static void increment_init_idx(distributions::TrajectoryBaseModel& dist) {
+    static void increment_init_idx(models::TrajectoryBaseModel& dist) {
         dist.init_idx += 1;
     }
 
@@ -610,9 +610,9 @@ private:
     }
 
     std::unique_ptr<filters::Filter<T>> filter_;
-    std::vector<std::unique_ptr<distributions::Bernoulli<T>>> bernoullis_;
+    std::vector<std::unique_ptr<models::Bernoulli<T>>> bernoullis_;
     std::vector<GlobalHypothesis> global_hypotheses_;
-    std::vector<std::unique_ptr<distributions::Bernoulli<T>>> birth_bernoullis_;
+    std::vector<std::unique_ptr<models::Bernoulli<T>>> birth_bernoullis_;
 
     double prune_threshold_hyp_ = 1e-3;
     double prune_threshold_bern_ = 1e-3;
@@ -623,7 +623,7 @@ private:
     int next_track_id_ = 0;
     bool is_extended_ = false;
     std::shared_ptr<clustering::DBSCAN> cluster_obj_;
-    std::vector<std::unique_ptr<distributions::Mixture<T>>> extracted_mixtures_;
+    std::vector<std::unique_ptr<models::Mixture<T>>> extracted_mixtures_;
     std::map<int, std::vector<Eigen::VectorXd>> track_histories_;
     Eigen::VectorXd cardinality_pmf_;
     double estimated_cardinality_ = 0.0;

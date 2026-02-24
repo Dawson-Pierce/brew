@@ -76,15 +76,15 @@ TEST(CPHD, GaussianPredictCorrectCleanup) {
     ekf->set_process_noise(0.1 * Eigen::MatrixXd::Identity(2, 2));
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<distributions::Mixture<distributions::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
     Eigen::VectorXd birth_mean(4);
     birth_mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd birth_cov = 10.0 * Eigen::MatrixXd::Identity(4, 4);
-    birth->add_component(std::make_unique<distributions::Gaussian>(birth_mean, birth_cov), 0.1);
+    birth->add_component(std::make_unique<models::Gaussian>(birth_mean, birth_cov), 0.1);
 
     auto intensity = birth->clone();
 
-    multi_target::CPHD<distributions::Gaussian> cphd;
+    multi_target::CPHD<models::Gaussian> cphd;
     cphd.set_filter(std::move(ekf));
     cphd.set_birth_model(std::move(birth));
     cphd.set_intensity(std::move(intensity));
@@ -133,15 +133,15 @@ TEST(CPHD, Clone) {
     H(0, 0) = 1.0; H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
 
-    auto birth = std::make_unique<distributions::Mixture<distributions::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
     Eigen::VectorXd m(4);
     m.setZero();
-    birth->add_component(std::make_unique<distributions::Gaussian>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
+    birth->add_component(std::make_unique<models::Gaussian>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
 
-    multi_target::CPHD<distributions::Gaussian> cphd;
+    multi_target::CPHD<models::Gaussian> cphd;
     cphd.set_filter(std::move(ekf));
     cphd.set_birth_model(std::move(birth));
-    cphd.set_intensity(std::make_unique<distributions::Mixture<distributions::Gaussian>>());
+    cphd.set_intensity(std::make_unique<models::Mixture<models::Gaussian>>());
     cphd.set_poisson_cardinality(0.5);
     cphd.set_poisson_birth_cardinality(0.1);
 
@@ -162,20 +162,20 @@ TEST(CPHD, CardinalityConvergence) {
     ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<distributions::Mixture<distributions::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
     Eigen::VectorXd b1(4), b2(4);
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
-    birth->add_component(std::make_unique<distributions::Gaussian>(b1, birth_cov), 0.05);
-    birth->add_component(std::make_unique<distributions::Gaussian>(b2, birth_cov), 0.05);
+    birth->add_component(std::make_unique<models::Gaussian>(b1, birth_cov), 0.05);
+    birth->add_component(std::make_unique<models::Gaussian>(b2, birth_cov), 0.05);
 
-    multi_target::CPHD<distributions::Gaussian> cphd;
+    multi_target::CPHD<models::Gaussian> cphd;
     cphd.set_filter(std::move(ekf));
     cphd.set_birth_model(std::move(birth));
-    cphd.set_intensity(std::make_unique<distributions::Mixture<distributions::Gaussian>>());
+    cphd.set_intensity(std::make_unique<models::Mixture<models::Gaussian>>());
     cphd.set_prob_detection(0.95);
     cphd.set_prob_survive(0.99);
     cphd.set_clutter_rate(1.0);

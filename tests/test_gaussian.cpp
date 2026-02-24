@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
-#include "brew/distributions/gaussian.hpp"
-#include "brew/distributions/mixture.hpp"
+#include "brew/models/gaussian.hpp"
+#include "brew/models/mixture.hpp"
 
-using namespace brew::distributions;
+using namespace brew::models;
 
 TEST(Gaussian, ConstructAndClone) {
     Eigen::VectorXd mean(2);

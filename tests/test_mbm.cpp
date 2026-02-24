@@ -17,13 +17,13 @@ TEST(MBM, GaussianPredictCorrectCleanup) {
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
     // Birth model
-    auto birth = std::make_unique<distributions::Mixture<distributions::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
     Eigen::VectorXd birth_mean(4);
     birth_mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd birth_cov = 10.0 * Eigen::MatrixXd::Identity(4, 4);
-    birth->add_component(std::make_unique<distributions::Gaussian>(birth_mean, birth_cov), 0.1);
+    birth->add_component(std::make_unique<models::Gaussian>(birth_mean, birth_cov), 0.1);
 
-    multi_target::MBM<distributions::Gaussian> mbm;
+    multi_target::MBM<models::Gaussian> mbm;
     mbm.set_filter(std::move(ekf));
     mbm.set_birth_model(std::move(birth));
     mbm.set_prob_detection(0.9);
@@ -62,12 +62,12 @@ TEST(MBM, Clone) {
     H(0, 0) = 1.0; H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
 
-    auto birth = std::make_unique<distributions::Mixture<distributions::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
     Eigen::VectorXd m(4);
     m.setZero();
-    birth->add_component(std::make_unique<distributions::Gaussian>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
+    birth->add_component(std::make_unique<models::Gaussian>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
 
-    multi_target::MBM<distributions::Gaussian> mbm;
+    multi_target::MBM<models::Gaussian> mbm;
     mbm.set_filter(std::move(ekf));
     mbm.set_birth_model(std::move(birth));
 
@@ -85,15 +85,15 @@ TEST(MBM, MultipleHypothesesGenerated) {
     ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<distributions::Mixture<distributions::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
     Eigen::MatrixXd birth_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::VectorXd b1(4), b2(4);
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
-    birth->add_component(std::make_unique<distributions::Gaussian>(b1, birth_cov), 0.1);
-    birth->add_component(std::make_unique<distributions::Gaussian>(b2, birth_cov), 0.1);
+    birth->add_component(std::make_unique<models::Gaussian>(b1, birth_cov), 0.1);
+    birth->add_component(std::make_unique<models::Gaussian>(b2, birth_cov), 0.1);
 
-    multi_target::MBM<distributions::Gaussian> mbm;
+    multi_target::MBM<models::Gaussian> mbm;
     mbm.set_filter(std::move(ekf));
     mbm.set_birth_model(std::move(birth));
     mbm.set_prob_detection(0.9);

@@ -14,7 +14,7 @@ static Eigen::MatrixXd sqrtm_spd(const Eigen::MatrixXd& M) {
     return es.eigenvectors() * d.asDiagonal() * es.eigenvectors().transpose();
 }
 
-std::unique_ptr<Filter<distributions::GGIW>> GGIWEKF::clone() const {
+std::unique_ptr<Filter<models::GGIW>> GGIWEKF::clone() const {
     auto c = std::make_unique<GGIWEKF>();
     c->dyn_obj_ = dyn_obj_;
     c->h_ = h_;
@@ -27,9 +27,9 @@ std::unique_ptr<Filter<distributions::GGIW>> GGIWEKF::clone() const {
     return c;
 }
 
-distributions::GGIW GGIWEKF::predict(
+models::GGIW GGIWEKF::predict(
     double dt,
-    const distributions::GGIW& prev) const {
+    const models::GGIW& prev) const {
 
     // Kinematic prediction
     const auto F = dyn_obj_->get_state_mat(dt, prev.mean());
@@ -48,14 +48,14 @@ distributions::GGIW GGIWEKF::predict(
     double scale = (next_v - dof_floor) / std::max(prev.v() - dof_floor, 1e-12);
     Eigen::MatrixXd next_V = scale * dyn_obj_->propagate_extent(dt, prev.mean(), prev.V());
 
-    return distributions::GGIW(
+    return models::GGIW(
         std::move(next_mean), std::move(next_cov),
         next_alpha, next_beta, next_v, std::move(next_V));
 }
 
 GGIWEKF::CorrectionResult GGIWEKF::correct(
     const Eigen::VectorXd& measurement,
-    const distributions::GGIW& predicted) const {
+    const models::GGIW& predicted) const {
 
     // measurement is d x W matrix stored column-major in a vector,
     // or for single measurement it's just d x 1.
@@ -149,7 +149,7 @@ GGIWEKF::CorrectionResult GGIWEKF::correct(
       - (W * std::log(M_PI) + std::log(static_cast<double>(W))) * d / 2.0;
 
     return {
-        distributions::GGIW(std::move(next_mean), std::move(next_cov),
+        models::GGIW(std::move(next_mean), std::move(next_cov),
                              next_alpha, next_beta, next_v, std::move(next_V)),
         std::exp(log_likelihood)
     };
@@ -157,7 +157,7 @@ GGIWEKF::CorrectionResult GGIWEKF::correct(
 
 double GGIWEKF::gate(
     const Eigen::VectorXd& measurement,
-    const distributions::GGIW& predicted) const {
+    const models::GGIW& predicted) const {
 
     const int d = predicted.extent_dim();
     const double dof_floor = 2.0 * d + 2.0;

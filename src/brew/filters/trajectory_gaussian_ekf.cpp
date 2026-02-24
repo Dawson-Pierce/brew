@@ -3,7 +3,7 @@
 
 namespace brew::filters {
 
-std::unique_ptr<Filter<distributions::TrajectoryGaussian>> TrajectoryGaussianEKF::clone() const {
+std::unique_ptr<Filter<models::TrajectoryGaussian>> TrajectoryGaussianEKF::clone() const {
     auto c = std::make_unique<TrajectoryGaussianEKF>();
     c->dyn_obj_ = dyn_obj_;
     c->h_ = h_;
@@ -14,9 +14,9 @@ std::unique_ptr<Filter<distributions::TrajectoryGaussian>> TrajectoryGaussianEKF
     return c;
 }
 
-distributions::TrajectoryGaussian TrajectoryGaussianEKF::predict(
+models::TrajectoryGaussian TrajectoryGaussianEKF::predict(
     double dt,
-    const distributions::TrajectoryGaussian& prev) const {
+    const models::TrajectoryGaussian& prev) const {
 
     const int sd = prev.state_dim;
     const int ws = prev.window_size;
@@ -58,7 +58,7 @@ distributions::TrajectoryGaussian TrajectoryGaussianEKF::predict(
     new_mean.tail(sd) = next_state;
 
     // Create result distribution
-    distributions::TrajectoryGaussian result;
+    models::TrajectoryGaussian result;
     result.state_dim = sd;
     result.init_idx = prev.init_idx;
     result.window_size = ws + 1;
@@ -88,7 +88,7 @@ distributions::TrajectoryGaussian TrajectoryGaussianEKF::predict(
 
 TrajectoryGaussianEKF::CorrectionResult TrajectoryGaussianEKF::correct(
     const Eigen::VectorXd& measurement,
-    const distributions::TrajectoryGaussian& predicted) const {
+    const models::TrajectoryGaussian& predicted) const {
 
     const int sd = predicted.state_dim;
     const int ws = predicted.window_size;
@@ -125,7 +125,7 @@ TrajectoryGaussianEKF::CorrectionResult TrajectoryGaussianEKF::correct(
     double log_likelihood = -0.5 * (meas_dim * std::log(2.0 * M_PI) + log_det_S + mahal);
     double likelihood = std::exp(log_likelihood);
 
-    distributions::TrajectoryGaussian result;
+    models::TrajectoryGaussian result;
     result.state_dim = sd;
     result.init_idx = predicted.init_idx;
     result.window_size = ws;
@@ -156,7 +156,7 @@ TrajectoryGaussianEKF::CorrectionResult TrajectoryGaussianEKF::correct(
 
 double TrajectoryGaussianEKF::gate(
     const Eigen::VectorXd& measurement,
-    const distributions::TrajectoryGaussian& predicted) const {
+    const models::TrajectoryGaussian& predicted) const {
 
     const Eigen::VectorXd state = predicted.get_last_state();
     const Eigen::MatrixXd P = predicted.get_last_cov();

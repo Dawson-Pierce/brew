@@ -3,7 +3,7 @@
 #include "brew/dynamics/integrator_2d.hpp"
 
 using namespace brew::filters;
-using namespace brew::distributions;
+using namespace brew::models;
 using namespace brew::dynamics;
 
 TEST(EKF, PredictStep) {

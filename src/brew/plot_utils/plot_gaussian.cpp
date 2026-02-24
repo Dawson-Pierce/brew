@@ -7,7 +7,7 @@
 namespace brew::plot_utils {
 
 void plot_gaussian(matplot::axes_handle ax,
-                   const brew::distributions::Gaussian& g,
+                   const brew::models::Gaussian& g,
                    const std::vector<int>& plt_inds,
                    const Color& color,
                    double num_std) {
@@ -40,7 +40,7 @@ void plot_gaussian(matplot::axes_handle ax,
 }
 
 void plot_gaussian_2d(matplot::axes_handle ax,
-                      const brew::distributions::Gaussian& g,
+                      const brew::models::Gaussian& g,
                       const std::vector<int>& plt_inds,
                       const Color& color,
                       double num_std,
@@ -77,7 +77,7 @@ void plot_gaussian_2d(matplot::axes_handle ax,
 }
 
 void plot_gaussian_3d(matplot::axes_handle ax,
-                      const brew::distributions::Gaussian& g,
+                      const brew::models::Gaussian& g,
                       const std::vector<int>& plt_inds,
                       const Color& color,
                       double num_std,
@@ -115,7 +115,7 @@ void plot_gaussian_3d(matplot::axes_handle ax,
 }
 
 void plot_gaussian(matplot::axes_handle ax,
-                   const brew::distributions::Gaussian& g,
+                   const brew::models::Gaussian& g,
                    const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 1:
@@ -132,7 +132,7 @@ void plot_gaussian(matplot::axes_handle ax,
     }
 }
 
-void plot_gaussian(const brew::distributions::Gaussian& g,
+void plot_gaussian(const brew::models::Gaussian& g,
                    const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

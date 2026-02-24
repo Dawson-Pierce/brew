@@ -1,29 +1,29 @@
 #pragma once
 
 #include "brew/filters/filter.hpp"
-#include "brew/distributions/trajectory_ggiw.hpp"
+#include "brew/models/trajectory_ggiw.hpp"
 
 namespace brew::filters {
 
 /// EKF for GGIW trajectory distributions.
 /// Mirrors MATLAB: BREW.filters.TrajectoryGGIWEKF
-class TrajectoryGGIWEKF : public Filter<distributions::TrajectoryGGIW> {
+class TrajectoryGGIWEKF : public Filter<models::TrajectoryGGIW> {
 public:
     TrajectoryGGIWEKF() = default;
 
-    [[nodiscard]] std::unique_ptr<Filter<distributions::TrajectoryGGIW>> clone() const override;
+    [[nodiscard]] std::unique_ptr<Filter<models::TrajectoryGGIW>> clone() const override;
 
-    [[nodiscard]] distributions::TrajectoryGGIW predict(
+    [[nodiscard]] models::TrajectoryGGIW predict(
         double dt,
-        const distributions::TrajectoryGGIW& prev) const override;
+        const models::TrajectoryGGIW& prev) const override;
 
     [[nodiscard]] CorrectionResult correct(
         const Eigen::VectorXd& measurement,
-        const distributions::TrajectoryGGIW& predicted) const override;
+        const models::TrajectoryGGIW& predicted) const override;
 
     [[nodiscard]] double gate(
         const Eigen::VectorXd& measurement,
-        const distributions::TrajectoryGGIW& predicted) const override;
+        const models::TrajectoryGGIW& predicted) const override;
 
     void set_temporal_decay(double eta) { eta_ = eta; }
     void set_forgetting_factor(double tau) { tau_ = tau; }

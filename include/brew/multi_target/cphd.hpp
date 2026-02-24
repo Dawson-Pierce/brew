@@ -2,8 +2,8 @@
 
 #include "brew/multi_target/rfs_base.hpp"
 #include "brew/multi_target/elementary_symmetric.hpp"
-#include "brew/distributions/mixture.hpp"
-#include "brew/distributions/trajectory_base_model.hpp"
+#include "brew/models/mixture.hpp"
+#include "brew/models/trajectory_base_model.hpp"
 #include "brew/filters/filter.hpp"
 #include "brew/fusion/prune.hpp"
 #include "brew/fusion/merge.hpp"
@@ -56,7 +56,7 @@ public:
         filter_ = std::move(filter);
     }
 
-    void set_birth_model(std::unique_ptr<distributions::Mixture<T>> birth) {
+    void set_birth_model(std::unique_ptr<models::Mixture<T>> birth) {
         if (birth && !birth->empty()) {
             is_extended_ = birth->component(0).is_extended();
             if (is_extended_ && !cluster_obj_) {
@@ -66,7 +66,7 @@ public:
         birth_model_ = std::move(birth);
     }
 
-    void set_intensity(std::unique_ptr<distributions::Mixture<T>> intensity) {
+    void set_intensity(std::unique_ptr<models::Mixture<T>> intensity) {
         intensity_ = std::move(intensity);
     }
 
@@ -100,10 +100,10 @@ public:
 
     // ---- Accessors ----
 
-    [[nodiscard]] const distributions::Mixture<T>& intensity() const { return *intensity_; }
-    [[nodiscard]] distributions::Mixture<T>& intensity() { return *intensity_; }
+    [[nodiscard]] const models::Mixture<T>& intensity() const { return *intensity_; }
+    [[nodiscard]] models::Mixture<T>& intensity() { return *intensity_; }
 
-    [[nodiscard]] const std::vector<std::unique_ptr<distributions::Mixture<T>>>& extracted_mixtures() const {
+    [[nodiscard]] const std::vector<std::unique_ptr<models::Mixture<T>>>& extracted_mixtures() const {
         return extracted_mixtures_;
     }
 
@@ -247,7 +247,7 @@ public:
         double weight_ratio_undetected = numer_undetected / denom;
 
         // --- Build updated intensity ---
-        auto updated_intensity = std::make_unique<distributions::Mixture<T>>();
+        auto updated_intensity = std::make_unique<models::Mixture<T>>();
 
         // Undetected components
         for (int k = 0; k < J; ++k) {
@@ -289,9 +289,9 @@ public:
     }
 
     /// Extract state estimates (components with weight >= threshold).
-    [[nodiscard]] std::unique_ptr<distributions::Mixture<T>> extract() const {
+    [[nodiscard]] std::unique_ptr<models::Mixture<T>> extract() const {
         if (!intensity_) return nullptr;
-        auto result = std::make_unique<distributions::Mixture<T>>();
+        auto result = std::make_unique<models::Mixture<T>>();
         for (std::size_t i = 0; i < intensity_->size(); ++i) {
             if (intensity_->weight(i) >= extract_threshold_) {
                 result->add_component(
@@ -404,13 +404,13 @@ private:
     template <typename U>
     static void increment_init_idx(U& /*dist*/) {}
 
-    static void increment_init_idx(distributions::TrajectoryBaseModel& dist) {
+    static void increment_init_idx(models::TrajectoryBaseModel& dist) {
         dist.init_idx += 1;
     }
 
     std::unique_ptr<filters::Filter<T>> filter_;
-    std::unique_ptr<distributions::Mixture<T>> intensity_;
-    std::unique_ptr<distributions::Mixture<T>> birth_model_;
+    std::unique_ptr<models::Mixture<T>> intensity_;
+    std::unique_ptr<models::Mixture<T>> birth_model_;
     std::shared_ptr<clustering::DBSCAN> cluster_obj_;
     double prune_threshold_ = 1e-4;
     double merge_threshold_ = 4.0;
@@ -418,7 +418,7 @@ private:
     double extract_threshold_ = 0.5;
     double gate_threshold_ = 9.0;
     bool is_extended_ = false;
-    std::vector<std::unique_ptr<distributions::Mixture<T>>> extracted_mixtures_;
+    std::vector<std::unique_ptr<models::Mixture<T>>> extracted_mixtures_;
 
     // CPHD-specific state
     Eigen::VectorXd cardinality_;           // PMF over target count

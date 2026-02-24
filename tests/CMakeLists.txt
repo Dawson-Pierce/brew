@@ -29,6 +29,8 @@ add_executable(brew_tests
     test_assignment.cpp
     test_mbm.cpp
     test_pmbm.cpp
+    test_ospa.cpp
+    test_serialization.cpp
     GM_test.cpp
     GGIW_test.cpp
     GMTrajectory_test.cpp

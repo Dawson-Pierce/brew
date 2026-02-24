@@ -20,6 +20,11 @@ public:
     void set_clutter_rate(double rate) { clutter_rate_ = rate; }
     void set_clutter_density(double density) { clutter_density_ = density; }
 
+    [[nodiscard]] double prob_detection() const { return prob_detection_; }
+    [[nodiscard]] double prob_survive() const { return prob_survive_; }
+    [[nodiscard]] double clutter_rate() const { return clutter_rate_; }
+    [[nodiscard]] double clutter_density() const { return clutter_density_; }
+
     // ---- Abstract interface ----
 
     virtual void predict(int timestep, double dt) = 0;

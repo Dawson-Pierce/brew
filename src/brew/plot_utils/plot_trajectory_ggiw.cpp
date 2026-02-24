@@ -6,7 +6,7 @@
 namespace brew::plot_utils {
 
 void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
-                              const brew::distributions::TrajectoryGGIW& tg,
+                              const brew::models::TrajectoryGGIW& tg,
                               const std::vector<int>& plt_inds,
                               const Color& color,
                               double confidence) {
@@ -41,7 +41,7 @@ void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
     // Draw GGIW extent ellipses at the last state
     auto last_mean = tg.get_last_state();
     auto last_cov = tg.get_last_cov();
-    brew::distributions::GGIW last_ggiw(
+    brew::models::GGIW last_ggiw(
         last_mean, last_cov,
         tg.alpha(), tg.beta(),
         tg.v(), tg.V());
@@ -50,7 +50,7 @@ void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
 }
 
 void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
-                              const brew::distributions::TrajectoryGGIW& tg,
+                              const brew::models::TrajectoryGGIW& tg,
                               const std::vector<int>& plt_inds,
                               const Color& color,
                               double confidence,
@@ -88,7 +88,7 @@ void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
     // Draw GGIW extent ellipsoids at the last state
     auto last_mean = tg.get_last_state();
     auto last_cov = tg.get_last_cov();
-    brew::distributions::GGIW last_ggiw(
+    brew::models::GGIW last_ggiw(
         last_mean, last_cov,
         tg.alpha(), tg.beta(),
         tg.v(), tg.V());
@@ -97,7 +97,7 @@ void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
 }
 
 void plot_trajectory_ggiw(matplot::axes_handle ax,
-                           const brew::distributions::TrajectoryGGIW& tg,
+                           const brew::models::TrajectoryGGIW& tg,
                            const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 2:
@@ -111,7 +111,7 @@ void plot_trajectory_ggiw(matplot::axes_handle ax,
     }
 }
 
-void plot_trajectory_ggiw(const brew::distributions::TrajectoryGGIW& tg,
+void plot_trajectory_ggiw(const brew::models::TrajectoryGGIW& tg,
                            const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

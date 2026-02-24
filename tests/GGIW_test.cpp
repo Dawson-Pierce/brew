@@ -17,17 +17,17 @@ protected:
 
 TEST_F(GGIWTracking, Comparison) {
     // PHD
-    auto phd = test::make_phd<distributions::GGIW>(
+    auto phd = test::make_phd<models::GGIW>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto phd_result = test::run_tracking<decltype(phd), distributions::GGIW>(
+    auto phd_result = test::run_tracking<decltype(phd), models::GGIW>(
         phd, scenario, "GGIW PHD Tracking", 10.0, 5);
     EXPECT_GE(phd_result.converged_steps, 10)
         << "GGIW PHD should track both extended targets";
 
     // CPHD
-    auto cphd = test::make_cphd<distributions::GGIW>(
+    auto cphd = test::make_cphd<models::GGIW>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto cphd_result = test::run_tracking_cphd<decltype(cphd), distributions::GGIW>(
+    auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::GGIW>(
         cphd, scenario, "GGIW CPHD Tracking", 10.0, 5);
     // CPHD+GGIW is a new combination; cardinality estimation with extended
     // targets may need further parameter tuning.
@@ -35,49 +35,49 @@ TEST_F(GGIWTracking, Comparison) {
         << "GGIW CPHD should not crash";
 
     // MBM
-    auto mbm = test::make_mbm<distributions::GGIW>(
+    auto mbm = test::make_mbm<models::GGIW>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto mbm_result = test::run_tracking<decltype(mbm), distributions::GGIW>(
+    auto mbm_result = test::run_tracking<decltype(mbm), models::GGIW>(
         mbm, scenario, "GGIW MBM Tracking", 10.0, 5);
     EXPECT_GE(mbm_result.converged_steps, 10)
         << "GGIW MBM should track both extended targets";
 
     // PMBM
-    auto pmbm = test::make_pmbm<distributions::GGIW>(
+    auto pmbm = test::make_pmbm<models::GGIW>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto pmbm_result = test::run_tracking<decltype(pmbm), distributions::GGIW>(
+    auto pmbm_result = test::run_tracking<decltype(pmbm), models::GGIW>(
         pmbm, scenario, "GGIW PMBM Tracking", 10.0, 5);
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "GGIW PMBM should track both extended targets";
 
     // MB
-    auto mb = test::make_mb<distributions::GGIW>(
+    auto mb = test::make_mb<models::GGIW>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto mb_result = test::run_tracking<decltype(mb), distributions::GGIW>(
+    auto mb_result = test::run_tracking<decltype(mb), models::GGIW>(
         mb, scenario, "GGIW MB Tracking", 10.0, 5);
     EXPECT_GE(mb_result.converged_steps, 10)
         << "GGIW MB should track both extended targets";
 
     // LMB
-    auto lmb = test::make_lmb<distributions::GGIW>(
+    auto lmb = test::make_lmb<models::GGIW>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto lmb_result = test::run_tracking<decltype(lmb), distributions::GGIW>(
+    auto lmb_result = test::run_tracking<decltype(lmb), models::GGIW>(
         lmb, scenario, "GGIW LMB Tracking", 10.0, 5);
     EXPECT_GE(lmb_result.converged_steps, 10)
         << "GGIW LMB should track both extended targets";
 
     // GLMB
-    auto glmb = test::make_glmb<distributions::GGIW>(
+    auto glmb = test::make_glmb<models::GGIW>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto glmb_result = test::run_tracking<decltype(glmb), distributions::GGIW>(
+    auto glmb_result = test::run_tracking<decltype(glmb), models::GGIW>(
         glmb, scenario, "GGIW GLMB Tracking", 10.0, 5);
     EXPECT_GE(glmb_result.converged_steps, 10)
         << "GGIW GLMB should track both extended targets";
 
     // JGLMB
-    auto jglmb = test::make_jglmb<distributions::GGIW>(
+    auto jglmb = test::make_jglmb<models::GGIW>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto jglmb_result = test::run_tracking<decltype(jglmb), distributions::GGIW>(
+    auto jglmb_result = test::run_tracking<decltype(jglmb), models::GGIW>(
         jglmb, scenario, "GGIW JGLMB Tracking", 10.0, 5);
     EXPECT_GE(jglmb_result.converged_steps, 10)
         << "GGIW JGLMB should track both extended targets";

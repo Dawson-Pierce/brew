@@ -1,6 +1,6 @@
 #pragma once
 
-#include "brew/distributions/mixture.hpp"
+#include "brew/models/mixture.hpp"
 #include <algorithm>
 #include <numeric>
 #include <vector>
@@ -10,7 +10,7 @@ namespace brew::fusion {
 /// Cap the number of components by keeping the highest-weighted ones.
 /// Generic: works on any Mixture<T>.
 template <typename T>
-void cap(distributions::Mixture<T>& mixture, std::size_t max_components) {
+void cap(models::Mixture<T>& mixture, std::size_t max_components) {
     if (mixture.size() <= max_components) return;
 
     // Sort indices by weight (descending)

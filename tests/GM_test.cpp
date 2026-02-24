@@ -17,65 +17,65 @@ protected:
 
 TEST_F(GMTracking, Comparison) {
     // PHD
-    auto phd = test::make_phd<distributions::Gaussian>(
+    auto phd = test::make_phd<models::Gaussian>(
         test::make_ekf(scenario), test::make_gm_birth(0.05), params);
-    auto phd_result = test::run_tracking<decltype(phd), distributions::Gaussian>(
+    auto phd_result = test::run_tracking<decltype(phd), models::Gaussian>(
         phd, scenario, "GM PHD Tracking", 5.0, 10);
     EXPECT_GE(phd_result.converged_steps, 10)
         << "PHD should track both targets for most of the run";
 
     // CPHD
-    auto cphd = test::make_cphd<distributions::Gaussian>(
+    auto cphd = test::make_cphd<models::Gaussian>(
         test::make_ekf(scenario), test::make_gm_birth(0.05), params);
-    auto cphd_result = test::run_tracking_cphd<decltype(cphd), distributions::Gaussian>(
+    auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::Gaussian>(
         cphd, scenario, "GM CPHD Tracking", 5.0, 10);
     EXPECT_GE(cphd_result.converged_steps, 10)
         << "CPHD should track both targets for most of the run";
 
     // MBM
-    auto mbm = test::make_mbm<distributions::Gaussian>(
+    auto mbm = test::make_mbm<models::Gaussian>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
-    auto mbm_result = test::run_tracking<decltype(mbm), distributions::Gaussian>(
+    auto mbm_result = test::run_tracking<decltype(mbm), models::Gaussian>(
         mbm, scenario, "GM MBM Tracking", 5.0, 10);
     EXPECT_GE(mbm_result.converged_steps, 10)
         << "MBM should track both targets for most of the run";
 
     // PMBM
-    auto pmbm = test::make_pmbm<distributions::Gaussian>(
+    auto pmbm = test::make_pmbm<models::Gaussian>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
-    auto pmbm_result = test::run_tracking<decltype(pmbm), distributions::Gaussian>(
+    auto pmbm_result = test::run_tracking<decltype(pmbm), models::Gaussian>(
         pmbm, scenario, "GM PMBM Tracking", 5.0, 10);
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "PMBM should track both targets for most of the run";
 
     // MB
-    auto mb = test::make_mb<distributions::Gaussian>(
+    auto mb = test::make_mb<models::Gaussian>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
-    auto mb_result = test::run_tracking<decltype(mb), distributions::Gaussian>(
+    auto mb_result = test::run_tracking<decltype(mb), models::Gaussian>(
         mb, scenario, "GM MB Tracking", 5.0, 10);
     EXPECT_GE(mb_result.converged_steps, 10)
         << "MB should track both targets for most of the run";
 
     // LMB
-    auto lmb = test::make_lmb<distributions::Gaussian>(
+    auto lmb = test::make_lmb<models::Gaussian>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
-    auto lmb_result = test::run_tracking<decltype(lmb), distributions::Gaussian>(
+    auto lmb_result = test::run_tracking<decltype(lmb), models::Gaussian>(
         lmb, scenario, "GM LMB Tracking", 5.0, 10);
     EXPECT_GE(lmb_result.converged_steps, 10)
         << "LMB should track both targets for most of the run";
 
     // GLMB
-    auto glmb = test::make_glmb<distributions::Gaussian>(
+    auto glmb = test::make_glmb<models::Gaussian>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
-    auto glmb_result = test::run_tracking<decltype(glmb), distributions::Gaussian>(
+    auto glmb_result = test::run_tracking<decltype(glmb), models::Gaussian>(
         glmb, scenario, "GM GLMB Tracking", 5.0, 10);
     EXPECT_GE(glmb_result.converged_steps, 10)
         << "GLMB should track both targets for most of the run";
 
     // JGLMB
-    auto jglmb = test::make_jglmb<distributions::Gaussian>(
+    auto jglmb = test::make_jglmb<models::Gaussian>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
-    auto jglmb_result = test::run_tracking<decltype(jglmb), distributions::Gaussian>(
+    auto jglmb_result = test::run_tracking<decltype(jglmb), models::Gaussian>(
         jglmb, scenario, "GM JGLMB Tracking", 5.0, 10);
     EXPECT_GE(jglmb_result.converged_steps, 10)
         << "JGLMB should track both targets for most of the run";

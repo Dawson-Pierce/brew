@@ -31,7 +31,7 @@ TEST_F(GGIWEKFTest, PredictDecay) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    distributions::GGIW ggiw(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIW ggiw(mean, cov, 10.0, 5.0, 10.0, V);
     filter.set_temporal_decay(1.0);
     filter.set_forgetting_factor(1.0);
 
@@ -55,7 +55,7 @@ TEST_F(GGIWEKFTest, CorrectAndLikelihood) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 50.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    distributions::GGIW ggiw(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIW ggiw(mean, cov, 10.0, 5.0, 10.0, V);
 
     // Single measurement at (0.1, 0.1)
     Eigen::VectorXd meas(2);
@@ -87,7 +87,7 @@ TEST_F(GGIWEKFTest, Gate) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    distributions::GGIW ggiw(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIW ggiw(mean, cov, 10.0, 5.0, 10.0, V);
 
     // Close measurement should have small gate value
     Eigen::VectorXd meas_close(2);

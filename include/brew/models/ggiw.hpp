@@ -5,11 +5,11 @@
 // Ported on: 2026-02-07
 // Notes: Pure data — no sampling, no plotting.
 
-#include "brew/distributions/base_single_model.hpp"
+#include "brew/models/base_single_model.hpp"
 #include <Eigen/Dense>
 #include <memory>
 
-namespace brew::distributions {
+namespace brew::models {
 
 /// Gamma-Gaussian-Inverse-Wishart distribution.
 /// Pure parameter holder for kinematic state + measurement rate + extent.
@@ -63,4 +63,4 @@ private:
     Eigen::MatrixXd V_;
 };
 
-} // namespace brew::distributions
+} // namespace brew::models

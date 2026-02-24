@@ -5,12 +5,12 @@
 // Ported on: 2026-02-07
 // Notes: Header-only; plotting methods omitted.
 
-#include "brew/distributions/trajectory_base_model.hpp"
+#include "brew/models/trajectory_base_model.hpp"
 #include <Eigen/Dense>
 #include <memory>
 #include <vector>
 
-namespace brew::distributions {
+namespace brew::models {
 
 /// GGIW trajectory distribution.
 /// Mirrors MATLAB: BREW.distributions.TrajectoryGGIW
@@ -116,4 +116,4 @@ private:
     std::vector<Eigen::MatrixXd> V_history_;
 };
 
-} // namespace brew::distributions
+} // namespace brew::models

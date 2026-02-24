@@ -5,12 +5,12 @@
 // Ported on: 2026-02-07
 // Notes: Pure data — no sampling, no plotting.
 
-#include "brew/distributions/trajectory_base_model.hpp"
+#include "brew/models/trajectory_base_model.hpp"
 #include <Eigen/Dense>
 #include <memory>
 #include <vector>
 
-namespace brew::distributions {
+namespace brew::models {
 
 /// Gaussian trajectory distribution.
 /// Stores a windowed trajectory of states as a stacked mean/covariance.
@@ -86,4 +86,4 @@ private:
     std::vector<Eigen::MatrixXd> cov_history_;
 };
 
-} // namespace brew::distributions
+} // namespace brew::models

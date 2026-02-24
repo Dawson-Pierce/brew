@@ -1,29 +1,29 @@
 #pragma once
 
 #include "brew/filters/filter.hpp"
-#include "brew/distributions/ggiw.hpp"
+#include "brew/models/ggiw.hpp"
 
 namespace brew::filters {
 
 /// Extended Kalman Filter for GGIW distributions.
 /// Mirrors MATLAB: BREW.filters.GGIWEKF
-class GGIWEKF : public Filter<distributions::GGIW> {
+class GGIWEKF : public Filter<models::GGIW> {
 public:
     GGIWEKF() = default;
 
-    [[nodiscard]] std::unique_ptr<Filter<distributions::GGIW>> clone() const override;
+    [[nodiscard]] std::unique_ptr<Filter<models::GGIW>> clone() const override;
 
-    [[nodiscard]] distributions::GGIW predict(
+    [[nodiscard]] models::GGIW predict(
         double dt,
-        const distributions::GGIW& prev) const override;
+        const models::GGIW& prev) const override;
 
     [[nodiscard]] CorrectionResult correct(
         const Eigen::VectorXd& measurement,
-        const distributions::GGIW& predicted) const override;
+        const models::GGIW& predicted) const override;
 
     [[nodiscard]] double gate(
         const Eigen::VectorXd& measurement,
-        const distributions::GGIW& predicted) const override;
+        const models::GGIW& predicted) const override;
 
     // ---- GGIW-specific parameters ----
     void set_temporal_decay(double eta) { eta_ = eta; }

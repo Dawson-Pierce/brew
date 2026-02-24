@@ -7,7 +7,7 @@
 namespace brew::plot_utils {
 
 void plot_ggiw_2d(matplot::axes_handle ax,
-                  const brew::distributions::GGIW& g,
+                  const brew::models::GGIW& g,
                   const std::vector<int>& plt_inds,
                   const Color& color,
                   double confidence) {
@@ -66,7 +66,7 @@ void plot_ggiw_2d(matplot::axes_handle ax,
 }
 
 void plot_ggiw_3d(matplot::axes_handle ax,
-                  const brew::distributions::GGIW& g,
+                  const brew::models::GGIW& g,
                   const std::vector<int>& plt_inds,
                   const Color& color,
                   double confidence,
@@ -130,7 +130,7 @@ void plot_ggiw_3d(matplot::axes_handle ax,
 }
 
 void plot_ggiw(matplot::axes_handle ax,
-               const brew::distributions::GGIW& g,
+               const brew::models::GGIW& g,
                const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 2:
@@ -144,7 +144,7 @@ void plot_ggiw(matplot::axes_handle ax,
     }
 }
 
-void plot_ggiw(const brew::distributions::GGIW& g,
+void plot_ggiw(const brew::models::GGIW& g,
                const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

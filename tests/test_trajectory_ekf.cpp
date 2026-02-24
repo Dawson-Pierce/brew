@@ -29,7 +29,7 @@ TEST_F(TrajectoryGaussianEKFTest, PredictWindowGrowth) {
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
 
-    distributions::TrajectoryGaussian tg(0, 4, mean, cov);
+    models::TrajectoryGaussian tg(0, 4, mean, cov);
     EXPECT_EQ(tg.window_size, 1);
 
     // Predict should grow the trajectory
@@ -52,7 +52,7 @@ TEST_F(TrajectoryGaussianEKFTest, LScanTrim) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    distributions::TrajectoryGaussian tg(0, 4, mean, cov);
+    models::TrajectoryGaussian tg(0, 4, mean, cov);
 
     // Predict 6 times (window size = 5)
     auto current = tg;
@@ -72,7 +72,7 @@ TEST_F(TrajectoryGaussianEKFTest, CorrectStep) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    distributions::TrajectoryGaussian tg(0, 4, mean, cov);
+    models::TrajectoryGaussian tg(0, 4, mean, cov);
 
     auto pred = filter.predict(1.0, tg);
 
@@ -95,7 +95,7 @@ TEST_F(TrajectoryGaussianEKFTest, Gate) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    distributions::TrajectoryGaussian tg(0, 4, mean, cov);
+    models::TrajectoryGaussian tg(0, 4, mean, cov);
 
     Eigen::VectorXd meas_close(2);
     meas_close << 0.1, 0.1;
