@@ -22,6 +22,8 @@ add_executable(brew_tests
     test_ekf.cpp
     test_dbscan.cpp
     test_ggiw_ekf.cpp
+    test_ggiw_orientation.cpp
+    test_trajectory_ggiw_orientation.cpp
     test_trajectory_ekf.cpp
     test_merge.cpp
     test_phd.cpp
@@ -33,8 +35,10 @@ add_executable(brew_tests
     test_serialization.cpp
     GM_test.cpp
     GGIW_test.cpp
+    GGIWOrientation_test.cpp
     GMTrajectory_test.cpp
     GGIWTrajectory_test.cpp
+    GGIWTrajectoryOrientation_test.cpp
     test_eigenrand.cpp
 )
 

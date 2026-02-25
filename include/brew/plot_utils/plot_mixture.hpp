@@ -4,8 +4,10 @@
 #include <brew/models/mixture.hpp>
 #include <brew/models/gaussian.hpp>
 #include <brew/models/ggiw.hpp>
+#include <brew/models/ggiw_orientation.hpp>
 #include <brew/models/trajectory_gaussian.hpp>
 #include <brew/models/trajectory_ggiw.hpp>
+#include <brew/models/trajectory_ggiw_orientation.hpp>
 #include <matplot/matplot.h>
 
 namespace brew::plot_utils {
@@ -20,6 +22,11 @@ void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::GGIW>& mix,
                   const PlotOptions& opts);
 
+/// Plot a GGIWOrientation mixture (with principal axes).
+void plot_mixture(matplot::axes_handle ax,
+                  const brew::models::Mixture<brew::models::GGIWOrientation>& mix,
+                  const PlotOptions& opts);
+
 /// Plot a TrajectoryGaussian mixture (color order reversed to match MATLAB).
 void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::TrajectoryGaussian>& mix,
@@ -30,14 +37,23 @@ void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::TrajectoryGGIW>& mix,
                   const PlotOptions& opts);
 
+/// Plot a TrajectoryGGIWOrientation mixture (color order reversed, with principal axes).
+void plot_mixture(matplot::axes_handle ax,
+                  const brew::models::Mixture<brew::models::TrajectoryGGIWOrientation>& mix,
+                  const PlotOptions& opts);
+
 /// Convenience overloads: create figure, plot, save.
 void plot_mixture(const brew::models::Mixture<brew::models::Gaussian>& mix,
                   const PlotOptions& opts);
 void plot_mixture(const brew::models::Mixture<brew::models::GGIW>& mix,
                   const PlotOptions& opts);
+void plot_mixture(const brew::models::Mixture<brew::models::GGIWOrientation>& mix,
+                  const PlotOptions& opts);
 void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGaussian>& mix,
                   const PlotOptions& opts);
 void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGGIW>& mix,
+                  const PlotOptions& opts);
+void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGGIWOrientation>& mix,
                   const PlotOptions& opts);
 
 } // namespace brew::plot_utils

@@ -5,8 +5,10 @@
 
 #include "brew/models/gaussian.hpp"
 #include "brew/models/ggiw.hpp"
+#include "brew/models/ggiw_orientation.hpp"
 #include "brew/models/trajectory_gaussian.hpp"
 #include "brew/models/trajectory_ggiw.hpp"
+#include "brew/models/trajectory_ggiw_orientation.hpp"
 #include "brew/models/mixture.hpp"
 #include "brew/models/bernoulli.hpp"
 #include "brew/multi_target/rfs_base.hpp"
@@ -122,6 +124,43 @@ inline models::GGIW ggiw_from_json(const json& j) {
 }
 
 // ============================================================
+// GGIWOrientation
+// ============================================================
+
+inline json to_json(const models::GGIWOrientation& g) {
+    json j;
+    j["type"] = "GGIWOrientation";
+    j["mean"] = vector_to_json(g.mean());
+    j["covariance"] = matrix_to_json(g.covariance());
+    j["alpha"] = g.alpha();
+    j["beta"] = g.beta();
+    j["v"] = g.v();
+    j["V"] = matrix_to_json(g.V());
+    if (g.basis().size() > 0) {
+        j["basis"] = matrix_to_json(g.basis());
+    }
+    if (g.has_eigenvalues()) {
+        j["eigenvalues"] = matrix_to_json(g.eigenvalues());
+    }
+    return j;
+}
+
+inline models::GGIWOrientation ggiw_orientation_from_json(const json& j) {
+    models::GGIWOrientation g(
+        vector_from_json(j["mean"]),
+        matrix_from_json(j["covariance"]),
+        j["alpha"].get<double>(),
+        j["beta"].get<double>(),
+        j["v"].get<double>(),
+        matrix_from_json(j["V"])
+    );
+    if (j.contains("basis")) {
+        g.set_basis(matrix_from_json(j["basis"]));
+    }
+    return g;
+}
+
+// ============================================================
 // TrajectoryGaussian
 // ============================================================
 
@@ -176,6 +215,47 @@ inline models::TrajectoryGGIW trajectory_ggiw_from_json(const json& j) {
 }
 
 // ============================================================
+// TrajectoryGGIWOrientation
+// ============================================================
+
+inline json to_json(const models::TrajectoryGGIWOrientation& g) {
+    json j;
+    j["type"] = "TrajectoryGGIWOrientation";
+    j["init_idx"] = g.init_idx;
+    j["state_dim"] = g.state_dim;
+    j["mean"] = vector_to_json(g.mean());
+    j["covariance"] = matrix_to_json(g.covariance());
+    j["alpha"] = g.alpha();
+    j["beta"] = g.beta();
+    j["v"] = g.v();
+    j["V"] = matrix_to_json(g.V());
+    if (g.basis().size() > 0) {
+        j["basis"] = matrix_to_json(g.basis());
+    }
+    if (g.has_eigenvalues()) {
+        j["eigenvalues"] = matrix_to_json(g.eigenvalues());
+    }
+    return j;
+}
+
+inline models::TrajectoryGGIWOrientation trajectory_ggiw_orientation_from_json(const json& j) {
+    models::TrajectoryGGIWOrientation g(
+        j["init_idx"].get<int>(),
+        j["state_dim"].get<int>(),
+        vector_from_json(j["mean"]),
+        matrix_from_json(j["covariance"]),
+        j["alpha"].get<double>(),
+        j["beta"].get<double>(),
+        j["v"].get<double>(),
+        matrix_from_json(j["V"])
+    );
+    if (j.contains("basis")) {
+        g.set_basis(matrix_from_json(j["basis"]));
+    }
+    return g;
+}
+
+// ============================================================
 // Generic distribution from_json dispatcher
 // ============================================================
 
@@ -195,6 +275,12 @@ struct DistributionSerializer<models::GGIW> {
 };
 
 template <>
+struct DistributionSerializer<models::GGIWOrientation> {
+    static json serialize(const models::GGIWOrientation& d) { return to_json(d); }
+    static models::GGIWOrientation deserialize(const json& j) { return ggiw_orientation_from_json(j); }
+};
+
+template <>
 struct DistributionSerializer<models::TrajectoryGaussian> {
     static json serialize(const models::TrajectoryGaussian& d) { return to_json(d); }
     static models::TrajectoryGaussian deserialize(const json& j) { return trajectory_gaussian_from_json(j); }
@@ -204,6 +290,12 @@ template <>
 struct DistributionSerializer<models::TrajectoryGGIW> {
     static json serialize(const models::TrajectoryGGIW& d) { return to_json(d); }
     static models::TrajectoryGGIW deserialize(const json& j) { return trajectory_ggiw_from_json(j); }
+};
+
+template <>
+struct DistributionSerializer<models::TrajectoryGGIWOrientation> {
+    static json serialize(const models::TrajectoryGGIWOrientation& d) { return to_json(d); }
+    static models::TrajectoryGGIWOrientation deserialize(const json& j) { return trajectory_ggiw_orientation_from_json(j); }
 };
 
 // ============================================================

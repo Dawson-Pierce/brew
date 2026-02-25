@@ -6,10 +6,14 @@
 #include "brew/models/ggiw.hpp"
 #include "brew/models/trajectory_gaussian.hpp"
 #include "brew/models/trajectory_ggiw.hpp"
+#include "brew/models/ggiw_orientation.hpp"
+#include "brew/models/trajectory_ggiw_orientation.hpp"
 #include "brew/filters/ekf.hpp"
 #include "brew/filters/ggiw_ekf.hpp"
+#include "brew/filters/ggiw_orientation_ekf.hpp"
 #include "brew/filters/trajectory_gaussian_ekf.hpp"
 #include "brew/filters/trajectory_ggiw_ekf.hpp"
+#include "brew/filters/trajectory_ggiw_orientation_ekf.hpp"
 #include "brew/multi_target/phd.hpp"
 #include "brew/multi_target/cphd.hpp"
 #include "brew/multi_target/mbm.hpp"
@@ -37,6 +41,8 @@
 #include <brew/plot_utils/plot_ggiw.hpp>
 #include <brew/plot_utils/plot_trajectory_gaussian.hpp>
 #include <brew/plot_utils/plot_trajectory_ggiw.hpp>
+#include <brew/plot_utils/plot_ggiw_orientation.hpp>
+#include <brew/plot_utils/plot_trajectory_ggiw_orientation.hpp>
 #include <filesystem>
 #include <map>
 #endif
@@ -407,6 +413,14 @@ template <typename T>
 constexpr bool is_extended_distribution_v = is_ggiw_type<T>::value;
 
 template <typename T, typename = void>
+struct is_orientation_type : std::false_type {};
+
+template <typename T>
+struct is_orientation_type<T,
+    std::void_t<decltype(std::declval<const T&>().basis())>
+> : std::true_type {};
+
+template <typename T, typename = void>
 struct has_track_histories : std::false_type {};
 
 template <typename T>
@@ -522,6 +536,24 @@ inline std::unique_ptr<filters::GGIWEKF> make_ggiw_ekf(const ScenarioData& scena
     return ekf;
 }
 
+inline std::unique_ptr<filters::GGIWOrientationEKF> make_ggiw_orientation_ekf(const ScenarioData& scenario) {
+    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto ekf = std::make_unique<filters::GGIWOrientationEKF>();
+    ekf->set_dynamics(dyn);
+
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ekf->set_measurement_jacobian(H);
+    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(4, 4));
+    ekf->set_measurement_noise(
+        scenario.meas_std * scenario.meas_std * Eigen::MatrixXd::Identity(2, 2));
+    ekf->set_temporal_decay(1.0);
+    ekf->set_forgetting_factor(5.0);
+    ekf->set_scaling_parameter(1.0);
+
+    return ekf;
+}
+
 inline std::unique_ptr<filters::TrajectoryGaussianEKF> make_trajectory_gaussian_ekf(
     const ScenarioData& scenario, int window = 10)
 {
@@ -600,6 +632,24 @@ make_ggiw_birth(double weight = 0.1)
     return birth;
 }
 
+inline std::unique_ptr<models::Mixture<models::GGIWOrientation>>
+make_ggiw_orientation_birth(double weight = 0.1)
+{
+    auto birth = std::make_unique<models::Mixture<models::GGIWOrientation>>();
+    Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
+    Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
+
+    Eigen::VectorXd b1(4), b2(4);
+    b1 << 0.0, 0.0, 0.0, 0.0;
+    b2 << 50.0, 0.0, 0.0, 0.0;
+    birth->add_component(
+        std::make_unique<models::GGIWOrientation>(b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+    birth->add_component(
+        std::make_unique<models::GGIWOrientation>(b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+
+    return birth;
+}
+
 inline std::unique_ptr<models::Mixture<models::TrajectoryGaussian>>
 make_trajectory_gaussian_birth(double weight = 0.1)
 {
@@ -634,6 +684,47 @@ make_trajectory_ggiw_birth(double weight = 0.1)
             0, 4, b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
     birth->add_component(
         std::make_unique<models::TrajectoryGGIW>(
+            0, 4, b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+
+    return birth;
+}
+
+inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF> make_trajectory_ggiw_orientation_ekf(
+    const ScenarioData& scenario, int window = 10)
+{
+    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto ekf = std::make_unique<filters::TrajectoryGGIWOrientationEKF>();
+    ekf->set_dynamics(dyn);
+    ekf->set_window_size(window);
+    ekf->set_temporal_decay(1.0);
+    ekf->set_forgetting_factor(5.0);
+    ekf->set_scaling_parameter(1.0);
+
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ekf->set_measurement_jacobian(H);
+    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(4, 4));
+    ekf->set_measurement_noise(
+        scenario.meas_std * scenario.meas_std * Eigen::MatrixXd::Identity(2, 2));
+
+    return ekf;
+}
+
+inline std::unique_ptr<models::Mixture<models::TrajectoryGGIWOrientation>>
+make_trajectory_ggiw_orientation_birth(double weight = 0.1)
+{
+    auto birth = std::make_unique<models::Mixture<models::TrajectoryGGIWOrientation>>();
+    Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
+    Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
+
+    Eigen::VectorXd b1(4), b2(4);
+    b1 << 0.0, 0.0, 0.0, 0.0;
+    b2 << 50.0, 0.0, 0.0, 0.0;
+    birth->add_component(
+        std::make_unique<models::TrajectoryGGIWOrientation>(
+            0, 4, b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+    birth->add_component(
+        std::make_unique<models::TrajectoryGGIWOrientation>(
             0, 4, b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
 
     return birth;
@@ -957,7 +1048,9 @@ inline void plot_track_histories(
 
 /// Generic 2D distribution plot: auto-dispatches based on distribution type.
 /// Gaussian -> covariance ellipse, GGIW -> extent ellipse,
-/// TrajectoryGaussian -> trajectory line, TrajectoryGGIW -> trajectory + extent.
+/// GGIWOrientation -> extent ellipse + principal axes,
+/// TrajectoryGaussian -> trajectory line, TrajectoryGGIW -> trajectory + extent,
+/// TrajectoryGGIWOrientation -> trajectory + extent + principal axes.
 template <typename T>
 inline void plot_distribution_2d(
     matplot::axes_handle ax,
@@ -965,10 +1058,14 @@ inline void plot_distribution_2d(
     const std::vector<int>& plt_inds,
     const brew::plot_utils::Color& color)
 {
-    if constexpr (has_get_last_state<T>::value && is_ggiw_type<T>::value) {
+    if constexpr (has_get_last_state<T>::value && is_orientation_type<T>::value) {
+        brew::plot_utils::plot_trajectory_ggiw_orientation_2d(ax, dist, plt_inds, color);
+    } else if constexpr (has_get_last_state<T>::value && is_ggiw_type<T>::value) {
         brew::plot_utils::plot_trajectory_ggiw_2d(ax, dist, plt_inds, color);
     } else if constexpr (has_get_last_state<T>::value) {
         brew::plot_utils::plot_trajectory_gaussian_2d(ax, dist, plt_inds, color);
+    } else if constexpr (is_orientation_type<T>::value) {
+        brew::plot_utils::plot_ggiw_orientation_2d(ax, dist, plt_inds, color);
     } else if constexpr (is_ggiw_type<T>::value) {
         brew::plot_utils::plot_ggiw_2d(ax, dist, plt_inds, color);
     } else {
