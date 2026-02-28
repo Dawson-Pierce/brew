@@ -64,6 +64,15 @@ public:
     void set_prune_threshold(double t) { prune_threshold_ = t; }
     void set_merge_threshold(double t) { merge_threshold_ = t; }
     void set_max_components(int n) { max_components_ = n; }
+    void set_birth_weights(const Eigen::VectorXd& weights) {
+        if (!birth_model_) return;
+        if (weights.size() == 1) {
+            birth_model_->weights().setConstant(weights(0));
+        } else {
+            birth_model_->weights() = weights;
+        }
+    }
+
     void set_extract_threshold(double t) { extract_threshold_ = t; }
     void set_gate_threshold(double t) { gate_threshold_ = t; }
     void set_extended_target(bool ext) { is_extended_ = ext; }
