@@ -5,11 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-<<<<<<< Updated upstream
 # MSVC: expose M_PI and other POSIX math constants
-=======
-# MSVC: M_PI and other POSIX math constants
->>>>>>> Stashed changes
 if(MSVC)
     add_compile_definitions(_USE_MATH_DEFINES)
 endif()
