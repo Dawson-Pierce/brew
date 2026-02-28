@@ -10,6 +10,7 @@
 
 #include <Eigen/Dense>
 #include <memory>
+#include <type_traits>
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -273,10 +274,17 @@ private:
     }
 
     template <typename U>
+<<<<<<< Updated upstream
     static void increment_init_idx(U& /*dist*/) {}
 
     static void increment_init_idx(models::TrajectoryBaseModel& dist) {
         dist.init_idx += 1;
+=======
+    static void increment_init_idx(U& dist) {
+        if constexpr (std::is_base_of_v<distributions::TrajectoryBaseModel, U>) {
+            dist.init_idx += 1;
+        }
+>>>>>>> Stashed changes
     }
 
     std::unique_ptr<filters::Filter<T>> filter_;

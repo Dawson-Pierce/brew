@@ -600,9 +600,16 @@ private:
     }
 
     template <typename U>
+<<<<<<< Updated upstream
     static void increment_init_idx(U& /*dist*/) {}
     static void increment_init_idx(models::TrajectoryBaseModel& dist) {
         dist.init_idx += 1;
+=======
+    static void increment_init_idx(U& dist) {
+        if constexpr (std::is_base_of_v<distributions::TrajectoryBaseModel, U>) {
+            dist.init_idx += 1;
+        }
+>>>>>>> Stashed changes
     }
 
     // SFINAE trait for trajectory-type distributions
@@ -623,22 +630,30 @@ private:
         }
     }
 
-    /// Record state of each extracted track into ancestry history.
+    /// Record MMSE state of each track into history.
     void record_track_states() {
         if (global_hypotheses_.empty()) return;
 
-        int best_idx = 0;
-        for (int i = 1; i < static_cast<int>(global_hypotheses_.size()); ++i) {
-            if (global_hypotheses_[i].log_weight > global_hypotheses_[best_idx].log_weight)
-                best_idx = i;
+        std::map<int, std::pair<Eigen::VectorXd, double>> accum;
+        for (const auto& hyp : global_hypotheses_) {
+            double w = std::exp(hyp.log_weight);
+            for (auto idx : hyp.bernoulli_indices) {
+                const auto& bern = *bernoullis_[idx];
+                if (bern.existence_probability() >= extract_threshold_ && bern.has_distribution()) {
+                    Eigen::VectorXd state = get_track_state(bern.distribution());
+                    auto it = accum.find(bern.id());
+                    if (it == accum.end()) {
+                        accum[bern.id()] = {w * state, w};
+                    } else {
+                        it->second.first += w * state;
+                        it->second.second += w;
+                    }
+                }
+            }
         }
 
-        const auto& best = global_hypotheses_[best_idx];
-        for (auto idx : best.bernoulli_indices) {
-            const auto& bern = *bernoullis_[idx];
-            if (bern.existence_probability() >= extract_threshold_ && bern.has_distribution()) {
-                track_histories_[bern.id()].push_back(get_track_state(bern.distribution()));
-            }
+        for (const auto& [tid, ws] : accum) {
+            track_histories_[tid].push_back(ws.first / ws.second);
         }
     }
 

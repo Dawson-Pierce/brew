@@ -5,7 +5,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+<<<<<<< Updated upstream
 # MSVC: expose M_PI and other POSIX math constants
+=======
+# MSVC: M_PI and other POSIX math constants
+>>>>>>> Stashed changes
 if(MSVC)
     add_compile_definitions(_USE_MATH_DEFINES)
 endif()
@@ -64,7 +68,9 @@ if(BREW_ENABLE_PLOTTING)
     set(MATPLOTPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     # Suppress GCC 13+ warnings in matplot++ third-party code before building it
     set(_prev_cxx_flags "${CMAKE_CXX_FLAGS}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-truncation -Wno-ignored-attributes")
+    if(NOT MSVC)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-truncation -Wno-ignored-attributes")
+    endif()
     FetchContent_MakeAvailable(matplotplusplus)
     set(CMAKE_CXX_FLAGS "${_prev_cxx_flags}")
 
