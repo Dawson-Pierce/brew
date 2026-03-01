@@ -49,6 +49,12 @@ public:
         auto c = std::make_unique<TrajectoryGGIW>(
             init_idx, state_dim, mean_, covariance_, alpha_, beta_, v_, V_);
         c->window_size = window_size;
+        c->mean_history_ = mean_history_;
+        c->cov_history_ = cov_history_;
+        c->alpha_history_ = alpha_history_;
+        c->beta_history_ = beta_history_;
+        c->v_history_ = v_history_;
+        c->V_history_ = V_history_;
         return c;
     }
 
