@@ -6,7 +6,7 @@
 namespace brew::filters {
 
 /// Extended Kalman Filter for GGIW distributions.
-/// Mirrors MATLAB: BREW.filters.GGIWEKF
+
 class GGIWEKF : public Filter<models::GGIW> {
 public:
     GGIWEKF() = default;

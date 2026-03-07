@@ -1,10 +1,5 @@
 #pragma once
 
-// Ported from: +BREW/+dynamics/DynamicsBase.m
-// Original name: NonlinearDynamics (C++ helper)
-// Ported on: 2026-02-07
-// Notes: Marker base for nonlinear dynamics.
-
 #include "brew/dynamics/dynamics_base.hpp"
 
 namespace brew::dynamics {

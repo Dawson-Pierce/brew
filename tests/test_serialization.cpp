@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include "brew/serialization/rfs_json.hpp"
 #include "brew/filters/ekf.hpp"
-#include "brew/dynamics/integrator_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
 using json = nlohmann::json;
@@ -77,7 +77,7 @@ TEST(Serialization, BernoulliGaussianRoundTrip) {
 TEST(Serialization, GLMBGaussianSerialize) {
     // Set up a minimal GLMB and run one predict/correct/cleanup cycle
     auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     ekf->set_dynamics(dyn);
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;
@@ -117,7 +117,7 @@ TEST(Serialization, GLMBGaussianSerialize) {
 
 TEST(Serialization, PMBMGaussianSerialize) {
     auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     ekf->set_dynamics(dyn);
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;

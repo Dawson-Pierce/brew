@@ -6,7 +6,7 @@
 namespace brew::clustering {
 
 /// DBSCAN clustering using Mahalanobis distance.
-/// Mirrors MATLAB: BREW.clustering.Mahalanobis_DBSCAN
+
 class MahalanobisDBSCAN {
 public:
     MahalanobisDBSCAN(double epsilon = 1.0, int min_pts = 3);

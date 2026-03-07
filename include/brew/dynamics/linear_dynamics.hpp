@@ -1,10 +1,5 @@
 #pragma once
 
-// Ported from: +BREW/+dynamics/DynamicsBase.m
-// Original name: LinearDynamics (C++ helper)
-// Ported on: 2026-02-07
-// Notes: Provides shared propagate_state implementation for linear models.
-
 #include "brew/dynamics/dynamics_base.hpp"
 
 namespace brew::dynamics {

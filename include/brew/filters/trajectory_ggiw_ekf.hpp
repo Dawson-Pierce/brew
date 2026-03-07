@@ -6,7 +6,7 @@
 namespace brew::filters {
 
 /// EKF for GGIW trajectory distributions.
-/// Mirrors MATLAB: BREW.filters.TrajectoryGGIWEKF
+
 class TrajectoryGGIWEKF : public Filter<models::TrajectoryGGIW> {
 public:
     TrajectoryGGIWEKF() = default;

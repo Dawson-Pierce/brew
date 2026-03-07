@@ -1,8 +1,5 @@
 #pragma once
 
-// Ported from: +BREW/+distributions/TrajectoryGGIW.m
-// Original name: TrajectoryGGIW
-// Ported on: 2026-02-07
 // Notes: Header-only; plotting methods omitted.
 
 #include "brew/models/trajectory_base_model.hpp"
@@ -13,7 +10,7 @@
 namespace brew::models {
 
 /// GGIW trajectory distribution.
-/// Mirrors MATLAB: BREW.distributions.TrajectoryGGIW
+
 class TrajectoryGGIW : public TrajectoryBaseModel {
 public:
     TrajectoryGGIW() = default;

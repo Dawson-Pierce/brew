@@ -1,8 +1,5 @@
 #pragma once
 
-// Ported from: +BREW/+distributions/GGIW.m
-// Original name: GGIW
-// Ported on: 2026-02-07
 // Notes: Pure data — no sampling, no plotting.
 
 #include "brew/models/base_single_model.hpp"

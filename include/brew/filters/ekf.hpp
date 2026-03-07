@@ -6,7 +6,7 @@
 namespace brew::filters {
 
 /// Extended Kalman Filter for Gaussian distributions.
-/// Mirrors MATLAB: BREW.filters.EKF
+
 class EKF : public Filter<models::Gaussian> {
 public:
     EKF() = default;

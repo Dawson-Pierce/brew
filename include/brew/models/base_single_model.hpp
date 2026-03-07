@@ -1,8 +1,5 @@
 #pragma once
 
-// Ported from: +BREW/+distributions/BaseSingleModel.m
-// Original name: BaseSingleModel
-// Ported on: 2026-02-07
 // Notes: Pure data base class — clone() and virtual destructor only.
 
 #include <Eigen/Dense>

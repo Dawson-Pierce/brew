@@ -1,8 +1,5 @@
 #pragma once
 
-// Ported from: +BREW/+distributions/TrajectoryGaussian.m
-// Original name: TrajectoryGaussian
-// Ported on: 2026-02-07
 // Notes: Pure data — no sampling, no plotting.
 
 #include "brew/models/trajectory_base_model.hpp"

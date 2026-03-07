@@ -1,14 +1,14 @@
 #include <gtest/gtest.h>
 #include "brew/multi_target/phd.hpp"
 #include "brew/filters/ekf.hpp"
-#include "brew/dynamics/integrator_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
 
 TEST(PHD, GaussianPredictCorrectCleanup) {
     // Setup filter
     auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     ekf->set_dynamics(dyn);
 
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
@@ -61,7 +61,7 @@ TEST(PHD, GaussianPredictCorrectCleanup) {
 
 TEST(PHD, Clone) {
     auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(Eigen::MatrixXd::Identity(2, 2));
     ekf->set_measurement_noise(Eigen::MatrixXd::Identity(2, 2));

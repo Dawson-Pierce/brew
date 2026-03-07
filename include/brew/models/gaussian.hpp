@@ -1,8 +1,5 @@
 #pragma once
 
-// Ported from: +BREW/+distributions/Gaussian.m
-// Original name: Gaussian
-// Ported on: 2026-02-07
 // Notes: Pure data — no sampling, no pdf, no plotting.
 
 #include "brew/models/base_single_model.hpp"

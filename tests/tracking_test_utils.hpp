@@ -1,6 +1,6 @@
 #pragma once
 
-#include "brew/dynamics/integrator_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 #include "brew/models/mixture.hpp"
 #include "brew/models/gaussian.hpp"
 #include "brew/models/ggiw.hpp"
@@ -215,7 +215,7 @@ inline ScenarioData make_two_point_targets_scenario() {
     s.meas_std = 0.3;
     s.p_detect = 0.98;
 
-    auto dyn = dynamics::Integrator2D();
+    auto dyn = dynamics::SingleIntegrator(2);
 
     Eigen::VectorXd x0_a(4), x0_b(4);
     x0_a << 0.0, 0.0, 2.0, 1.0;
@@ -243,7 +243,7 @@ inline ScenarioData make_extended_target_scenario() {
     s.is_extended = true;
     s.extent << 4.0, 1.0, 1.0, 2.0;
 
-    auto dyn = dynamics::Integrator2D();
+    auto dyn = dynamics::SingleIntegrator(2);
 
     Eigen::VectorXd x0(4);
     x0 << 0.0, 0.0, 2.0, 0.5;
@@ -274,7 +274,7 @@ inline ScenarioData make_clutter_scenario() {
     s.surveillance_area = (s.clutter_max.x() - s.clutter_min.x()) *
                           (s.clutter_max.y() - s.clutter_min.y());
 
-    auto dyn = dynamics::Integrator2D();
+    auto dyn = dynamics::SingleIntegrator(2);
 
     Eigen::VectorXd x0_a(4), x0_b(4);
     x0_a << -15.0, -10.0, 2.0, 1.2;
@@ -301,7 +301,7 @@ inline ScenarioData make_variable_targets_scenario() {
     s.meas_std = 0.3;
     s.p_detect = 0.98;
 
-    auto dyn = dynamics::Integrator2D();
+    auto dyn = dynamics::SingleIntegrator(2);
 
     // Target A: born at k=0, dies at k=24
     Eigen::VectorXd x0_a(4);
@@ -337,7 +337,7 @@ inline ScenarioData make_base_scenario() {
     s.meas_std = 0.3;
     s.p_detect = 0.98;
 
-    auto dyn = dynamics::Integrator2D();
+    auto dyn = dynamics::SingleIntegrator(2);
 
     Eigen::VectorXd x0_a(4), x0_b(4);
     x0_a << 0.0, 0.0, 2.0, 0.5;
@@ -503,14 +503,14 @@ inline ScenarioParams make_default_params(const ScenarioData& s) {
 // ---- EKF factory functions ----
 
 inline std::unique_ptr<filters::EKF> make_ekf(const ScenarioData& scenario) {
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     auto ekf = std::make_unique<filters::EKF>();
     ekf->set_dynamics(dyn);
 
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
-    // EKF uses G * Q * G^T where G is 4x2 for Integrator2D, so Q must be 2x2
+    // EKF uses G * Q * G^T where G is 4x2 for SingleIntegrator(2), so Q must be 2x2
     ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
     ekf->set_measurement_noise(
         scenario.meas_std * scenario.meas_std * Eigen::MatrixXd::Identity(2, 2));
@@ -519,7 +519,7 @@ inline std::unique_ptr<filters::EKF> make_ekf(const ScenarioData& scenario) {
 }
 
 inline std::unique_ptr<filters::GGIWEKF> make_ggiw_ekf(const ScenarioData& scenario) {
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     auto ekf = std::make_unique<filters::GGIWEKF>();
     ekf->set_dynamics(dyn);
 
@@ -537,7 +537,7 @@ inline std::unique_ptr<filters::GGIWEKF> make_ggiw_ekf(const ScenarioData& scena
 }
 
 inline std::unique_ptr<filters::GGIWOrientationEKF> make_ggiw_orientation_ekf(const ScenarioData& scenario) {
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     auto ekf = std::make_unique<filters::GGIWOrientationEKF>();
     ekf->set_dynamics(dyn);
 
@@ -557,7 +557,7 @@ inline std::unique_ptr<filters::GGIWOrientationEKF> make_ggiw_orientation_ekf(co
 inline std::unique_ptr<filters::TrajectoryGaussianEKF> make_trajectory_gaussian_ekf(
     const ScenarioData& scenario, int window = 10)
 {
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     auto ekf = std::make_unique<filters::TrajectoryGaussianEKF>();
     ekf->set_dynamics(dyn);
     ekf->set_window_size(window);
@@ -575,7 +575,7 @@ inline std::unique_ptr<filters::TrajectoryGaussianEKF> make_trajectory_gaussian_
 inline std::unique_ptr<filters::TrajectoryGGIWEKF> make_trajectory_ggiw_ekf(
     const ScenarioData& scenario, int window = 10)
 {
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     auto ekf = std::make_unique<filters::TrajectoryGGIWEKF>();
     ekf->set_dynamics(dyn);
     ekf->set_window_size(window);
@@ -692,7 +692,7 @@ make_trajectory_ggiw_birth(double weight = 0.1)
 inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF> make_trajectory_ggiw_orientation_ekf(
     const ScenarioData& scenario, int window = 10)
 {
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     auto ekf = std::make_unique<filters::TrajectoryGGIWOrientationEKF>();
     ekf->set_dynamics(dyn);
     ekf->set_window_size(window);

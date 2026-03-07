@@ -2,7 +2,7 @@
 #include "brew/multi_target/elementary_symmetric.hpp"
 #include "brew/multi_target/cphd.hpp"
 #include "brew/filters/ekf.hpp"
-#include "brew/dynamics/integrator_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 #include <random>
 
 using namespace brew;
@@ -67,7 +67,7 @@ TEST(ElementarySymmetric, FallingFactorial) {
 
 TEST(CPHD, GaussianPredictCorrectCleanup) {
     auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     ekf->set_dynamics(dyn);
 
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
@@ -125,7 +125,7 @@ TEST(CPHD, GaussianPredictCorrectCleanup) {
 
 TEST(CPHD, Clone) {
     auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(Eigen::MatrixXd::Identity(2, 2));
     ekf->set_measurement_noise(Eigen::MatrixXd::Identity(2, 2));
@@ -153,7 +153,7 @@ TEST(CPHD, CardinalityConvergence) {
     // Run a few steps with consistent 2-target measurements.
     // Cardinality should converge toward 2.
     auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     ekf->set_dynamics(dyn);
 
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);

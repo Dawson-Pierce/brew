@@ -6,7 +6,7 @@
 namespace brew::filters {
 
 /// EKF for Gaussian trajectory distributions.
-/// Mirrors MATLAB: BREW.filters.TrajectoryGaussianEKF
+
 class TrajectoryGaussianEKF : public Filter<models::TrajectoryGaussian> {
 public:
     TrajectoryGaussianEKF() = default;

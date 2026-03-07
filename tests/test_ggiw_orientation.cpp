@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include "brew/filters/ggiw_orientation_ekf.hpp"
-#include "brew/dynamics/integrator_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 #include "brew/serialization/rfs_json.hpp"
 
 using namespace brew;
@@ -87,7 +87,7 @@ TEST(GGIWOrientationModel, SetBasis) {
 class GGIWOrientationEKFTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        auto dyn = std::make_shared<dynamics::Integrator2D>();
+        auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
         filter.set_dynamics(dyn);
 
         Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);

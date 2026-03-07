@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include "brew/filters/trajectory_ggiw_orientation_ekf.hpp"
-#include "brew/dynamics/integrator_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 #include "brew/serialization/rfs_json.hpp"
 
 using namespace brew;
@@ -62,7 +62,7 @@ TEST(TrajectoryGGIWOrientationModel, Clone) {
 class TrajectoryGGIWOrientationEKFTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        auto dyn = std::make_shared<dynamics::Integrator2D>();
+        auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
         filter.set_dynamics(dyn);
         filter.set_window_size(10);
 

@@ -1,27 +1,15 @@
 #pragma once
 
-// Ported from: +BREW/+dynamics/DynamicsBase.m
-// Original name: DynamicsBase
-// Ported on: 2026-02-07
-// Notes: Provides rotation model hook for extent propagation.
-
 #include <Eigen/Dense>
-#include <functional>
 #include <memory>
 #include <string>
-#include <variant>
 #include <vector>
 
 namespace brew::dynamics {
 
 /// Abstract base class for dynamics models.
-/// Mirrors MATLAB: BREW.dynamics.DynamicsBase
 class DynamicsBase {
 public:
-    /// Rotation model: either a constant matrix or a state-dependent function.
-    using RotationFunc = std::function<Eigen::MatrixXd(const Eigen::VectorXd& state, double dt)>;
-    using RotationModel = std::variant<std::monostate, Eigen::MatrixXd, RotationFunc>;
-
     virtual ~DynamicsBase() = default;
 
     [[nodiscard]] virtual std::unique_ptr<DynamicsBase> clone() const = 0;
@@ -45,29 +33,14 @@ public:
         double dt,
         const Eigen::VectorXd& state = {}) const = 0;
 
-    /// Set a rotation model for extent propagation.
-    void set_rotation_model(RotationModel M) { M_ = std::move(M); }
-
-    /// Propagate the extent matrix through the rotation model.
+    /// Propagate an extent matrix forward by dt. Default is identity (no rotation).
+    /// Override in models where rotation is part of the state (e.g. ConstantTurn2D).
     [[nodiscard]] virtual Eigen::MatrixXd propagate_extent(
-        double dt,
-        const Eigen::VectorXd& state,
+        double /*dt*/,
+        const Eigen::VectorXd& /*state*/,
         const Eigen::MatrixXd& extent) const {
-
-        if (std::holds_alternative<std::monostate>(M_)) {
-            return extent;
-        }
-        Eigen::MatrixXd R;
-        if (auto* mat = std::get_if<Eigen::MatrixXd>(&M_)) {
-            R = *mat;
-        } else {
-            R = std::get<RotationFunc>(M_)(state, dt);
-        }
-        return R * extent * R.transpose();
+        return extent;
     }
-
-protected:
-    RotationModel M_;
 };
 
 } // namespace brew::dynamics

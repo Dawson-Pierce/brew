@@ -1,8 +1,3 @@
-// Ported from: +BREW/+dynamics/DoubleIntegrator_3D_euler.m
-// Original name: DoubleIntegrator_3D_euler
-// Ported on: 2026-02-07
-// Notes: Euler-angle dynamics; matches MATLAB Jacobian structure.
-
 #include "brew/dynamics/double_integrator_3d_euler.hpp"
 #include <cmath>
 

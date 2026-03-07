@@ -1,14 +1,12 @@
 #include <gtest/gtest.h>
-#include "brew/dynamics/integrator_1d.hpp"
-#include "brew/dynamics/integrator_2d.hpp"
-#include "brew/dynamics/integrator_3d.hpp"
-#include "brew/dynamics/double_integrator_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
+#include "brew/dynamics/double_integrator.hpp"
 #include "brew/dynamics/constant_turn_2d.hpp"
 
 using namespace brew::dynamics;
 
-TEST(Integrator2D, StateMatrix) {
-    Integrator2D dyn;
+TEST(SingleIntegrator2D, StateMatrix) {
+    SingleIntegrator dyn(2);
     double dt = 0.1;
     auto F = dyn.get_state_mat(dt);
 
@@ -18,8 +16,8 @@ TEST(Integrator2D, StateMatrix) {
     EXPECT_DOUBLE_EQ(F(1, 3), dt);
 }
 
-TEST(Integrator2D, Propagation) {
-    Integrator2D dyn;
+TEST(SingleIntegrator2D, Propagation) {
+    SingleIntegrator dyn(2);
     Eigen::VectorXd state(4);
     state << 0, 0, 1, 1; // at origin, moving diagonally
 
@@ -30,18 +28,18 @@ TEST(Integrator2D, Propagation) {
     EXPECT_DOUBLE_EQ(next(3), 1.0); // vy unchanged
 }
 
-TEST(Integrator1D, Propagation) {
-    Integrator1D dyn;
+TEST(SingleIntegrator1D, Propagation) {
+    SingleIntegrator dyn(1);
     Eigen::VectorXd state(2);
     state << 5.0, 2.0;
 
     auto next = dyn.propagate_state(0.5, state);
     EXPECT_DOUBLE_EQ(next(0), 6.0); // 5 + 2*0.5
-    EXPECT_DOUBLE_EQ(next(1), 0.0);
+    EXPECT_DOUBLE_EQ(next(1), 2.0); // vx constant (no input)
 }
 
 TEST(DoubleIntegrator2D, StateNames) {
-    DoubleIntegrator2D dyn;
+    DoubleIntegrator dyn(2);
     auto names = dyn.state_names();
     EXPECT_EQ(names.size(), 6u);
     EXPECT_EQ(names[0], "x");

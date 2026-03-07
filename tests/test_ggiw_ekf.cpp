@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include "brew/filters/ggiw_ekf.hpp"
-#include "brew/dynamics/integrator_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
 
@@ -8,7 +8,7 @@ class GGIWEKFTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // 4-state 2D integrator: [x, y, vx, vy]
-        auto dyn = std::make_shared<dynamics::Integrator2D>();
+        auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
         filter.set_dynamics(dyn);
 
         // Position-only measurement H = [I2 0]

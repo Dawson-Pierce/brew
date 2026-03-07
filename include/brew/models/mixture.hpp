@@ -1,8 +1,5 @@
 #pragma once
 
-// Ported from: +BREW/+distributions/BaseMixtureModel.m
-// Original name: BaseMixtureModel
-// Ported on: 2026-02-07
 // Notes: Implemented as a generic template container.
 
 #include <Eigen/Dense>

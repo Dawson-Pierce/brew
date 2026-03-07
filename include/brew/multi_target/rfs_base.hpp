@@ -6,7 +6,7 @@
 namespace brew::multi_target {
 
 /// Abstract base class for Random Finite Set filters.
-/// Mirrors MATLAB: BREW.multi_target.RFSBase
+
 class RFSBase {
 public:
     virtual ~RFSBase() = default;

@@ -1,17 +1,11 @@
 #pragma once
 
-// Ported from: +BREW/+dynamics/ConstantTurn_2D.m
-// Original name: ConstantTurn_2D
-// Ported on: 2026-02-07
-// Notes: Matches MATLAB linearized position update (no turn-rate position integration).
-
 #include "dynamics_base.hpp"
 #include <cmath>
 
 namespace brew::dynamics {
 
 /// 2D constant turn-rate model: state = [x, y, v, theta, omega].
-/// Mirrors MATLAB: BREW.dynamics.ConstantTurn_2D
 class ConstantTurn2D : public DynamicsBase {
 public:
     [[nodiscard]] std::unique_ptr<DynamicsBase> clone() const override {

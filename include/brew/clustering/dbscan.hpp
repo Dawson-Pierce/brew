@@ -6,7 +6,7 @@
 namespace brew::clustering {
 
 /// DBSCAN clustering algorithm.
-/// Mirrors MATLAB: BREW.clustering.DBSCAN_obj
+
 class DBSCAN {
 public:
     DBSCAN(double epsilon = 1.0, int min_pts = 3);

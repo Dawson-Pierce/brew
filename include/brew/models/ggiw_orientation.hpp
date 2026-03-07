@@ -1,7 +1,5 @@
 #pragma once
 
-// Ported from: +BREW/+distributions/GGIW.m (basis_tracking logic)
-// Ported on: 2026-02-25
 // Notes: Extends GGIW with eigenvector basis for orientation tracking.
 
 #include "brew/models/ggiw.hpp"

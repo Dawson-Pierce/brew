@@ -1,13 +1,13 @@
 #include <gtest/gtest.h>
 #include "brew/multi_target/pmbm.hpp"
 #include "brew/filters/ekf.hpp"
-#include "brew/dynamics/integrator_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
 
 TEST(PMBM, GaussianPredictCorrectCleanup) {
     auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     ekf->set_dynamics(dyn);
 
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
@@ -64,7 +64,7 @@ TEST(PMBM, GaussianPredictCorrectCleanup) {
 
 TEST(PMBM, Clone) {
     auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(Eigen::MatrixXd::Identity(2, 2));
     ekf->set_measurement_noise(Eigen::MatrixXd::Identity(2, 2));
@@ -90,7 +90,7 @@ TEST(PMBM, Clone) {
 
 TEST(PMBM, PoissonSpawnsNewTracks) {
     auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::Integrator2D>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
     ekf->set_dynamics(dyn);
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;

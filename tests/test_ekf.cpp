@@ -1,13 +1,13 @@
 #include <gtest/gtest.h>
 #include "brew/filters/ekf.hpp"
-#include "brew/dynamics/integrator_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew::filters;
 using namespace brew::models;
 using namespace brew::dynamics;
 
 TEST(EKF, PredictStep) {
-    auto dyn = std::make_shared<Integrator2D>();
+    auto dyn = std::make_shared<SingleIntegrator>(2);
     EKF ekf;
     ekf.set_dynamics(dyn);
 
@@ -30,7 +30,7 @@ TEST(EKF, PredictStep) {
 }
 
 TEST(EKF, CorrectStep) {
-    auto dyn = std::make_shared<Integrator2D>();
+    auto dyn = std::make_shared<SingleIntegrator>(2);
     EKF ekf;
     ekf.set_dynamics(dyn);
 
