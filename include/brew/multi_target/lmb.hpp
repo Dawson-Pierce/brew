@@ -3,7 +3,7 @@
 #include "brew/multi_target/rfs_base.hpp"
 #include "brew/models/mixture.hpp"
 #include "brew/models/bernoulli.hpp"
-#include "brew/models/trajectory_base_model.hpp"
+#include "brew/models/trajectory.hpp"
 #include "brew/filters/filter.hpp"
 #include "brew/clustering/dbscan.hpp"
 #include "brew/assignment/murty.hpp"
@@ -111,18 +111,9 @@ public:
         for (const auto& bb : birth_bernoullis_) {
             auto new_bern = bb->clone();
             new_bern->set_id(next_track_id_++);
-            if (new_bern->has_distribution()) {
-                increment_init_idx(new_bern->distribution());
-            }
             bernoullis_.push_back(std::move(new_bern));
         }
 
-        // Increment init_idx on birth model for trajectory types
-        for (const auto& bb : birth_bernoullis_) {
-            if (bb->has_distribution()) {
-                increment_init_idx(const_cast<T&>(bb->distribution()));
-            }
-        }
     }
 
     void correct(const Eigen::MatrixXd& measurements) override {
@@ -344,13 +335,6 @@ private:
                            / (1.0 - r * prob_detection_);
             bern->set_existence_probability(r_new);
         }
-    }
-
-    template <typename U>
-    static void increment_init_idx(U& /*dist*/) {}
-
-    static void increment_init_idx(models::TrajectoryBaseModel& dist) {
-        dist.init_idx += 1;
     }
 
     template <typename U, typename = void>

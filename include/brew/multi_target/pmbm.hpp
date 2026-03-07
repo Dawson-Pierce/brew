@@ -3,7 +3,7 @@
 #include "brew/multi_target/rfs_base.hpp"
 #include "brew/models/mixture.hpp"
 #include "brew/models/bernoulli.hpp"
-#include "brew/models/trajectory_base_model.hpp"
+#include "brew/models/trajectory.hpp"
 #include "brew/filters/filter.hpp"
 #include "brew/fusion/prune.hpp"
 #include "brew/fusion/merge.hpp"
@@ -158,9 +158,6 @@ public:
                 auto birth_copy = birth_model_->clone();
                 poisson_intensity_->add_components(*birth_copy);
 
-                for (std::size_t k = 0; k < birth_model_->size(); ++k) {
-                    increment_init_idx(birth_model_->component(k));
-                }
             }
         }
 
@@ -597,12 +594,6 @@ private:
         std::sort(global_hypotheses_.begin(), global_hypotheses_.end(),
             [](const auto& a, const auto& b) { return a.log_weight > b.log_weight; });
         global_hypotheses_.resize(max_hypotheses_);
-    }
-
-    template <typename U>
-    static void increment_init_idx(U& /*dist*/) {}
-    static void increment_init_idx(models::TrajectoryBaseModel& dist) {
-        dist.init_idx += 1;
     }
 
     // SFINAE trait for trajectory-type distributions

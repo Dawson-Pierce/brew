@@ -1,31 +1,34 @@
 #pragma once
 
 #include "brew/filters/filter.hpp"
-#include "brew/models/trajectory_ggiw_orientation.hpp"
+#include "brew/models/trajectory.hpp"
+#include "brew/models/ggiw_orientation.hpp"
 
 namespace brew::filters {
 
-/// EKF for TrajectoryGGIWOrientation distributions.
+/// EKF for Trajectory<GGIWOrientation> distributions.
 /// Same trajectory predict/gate math as TrajectoryGGIWEKF; correct adds
 /// eigenvector basis tracking that aligns new eigenvectors to the previous
 /// basis after each update.
-class TrajectoryGGIWOrientationEKF : public Filter<models::TrajectoryGGIWOrientation> {
+class TrajectoryGGIWOrientationEKF : public Filter<models::Trajectory<models::GGIWOrientation>> {
 public:
+    using TrajectoryType = models::Trajectory<models::GGIWOrientation>;
+
     TrajectoryGGIWOrientationEKF() = default;
 
-    [[nodiscard]] std::unique_ptr<Filter<models::TrajectoryGGIWOrientation>> clone() const override;
+    [[nodiscard]] std::unique_ptr<Filter<TrajectoryType>> clone() const override;
 
-    [[nodiscard]] models::TrajectoryGGIWOrientation predict(
+    [[nodiscard]] TrajectoryType predict(
         double dt,
-        const models::TrajectoryGGIWOrientation& prev) const override;
+        const TrajectoryType& prev) const override;
 
     [[nodiscard]] CorrectionResult correct(
         const Eigen::VectorXd& measurement,
-        const models::TrajectoryGGIWOrientation& predicted) const override;
+        const TrajectoryType& predicted) const override;
 
     [[nodiscard]] double gate(
         const Eigen::VectorXd& measurement,
-        const models::TrajectoryGGIWOrientation& predicted) const override;
+        const TrajectoryType& predicted) const override;
 
     void set_temporal_decay(double eta) { eta_ = eta; }
     void set_forgetting_factor(double tau) { tau_ = tau; }

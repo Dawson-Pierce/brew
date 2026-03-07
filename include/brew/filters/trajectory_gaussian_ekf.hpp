@@ -1,29 +1,32 @@
 #pragma once
 
 #include "brew/filters/filter.hpp"
-#include "brew/models/trajectory_gaussian.hpp"
+#include "brew/models/trajectory.hpp"
+#include "brew/models/gaussian.hpp"
 
 namespace brew::filters {
 
 /// EKF for Gaussian trajectory distributions.
 
-class TrajectoryGaussianEKF : public Filter<models::TrajectoryGaussian> {
+class TrajectoryGaussianEKF : public Filter<models::Trajectory<models::Gaussian>> {
 public:
+    using TrajectoryType = models::Trajectory<models::Gaussian>;
+
     TrajectoryGaussianEKF() = default;
 
-    [[nodiscard]] std::unique_ptr<Filter<models::TrajectoryGaussian>> clone() const override;
+    [[nodiscard]] std::unique_ptr<Filter<TrajectoryType>> clone() const override;
 
-    [[nodiscard]] models::TrajectoryGaussian predict(
+    [[nodiscard]] TrajectoryType predict(
         double dt,
-        const models::TrajectoryGaussian& prev) const override;
+        const TrajectoryType& prev) const override;
 
     [[nodiscard]] CorrectionResult correct(
         const Eigen::VectorXd& measurement,
-        const models::TrajectoryGaussian& predicted) const override;
+        const TrajectoryType& predicted) const override;
 
     [[nodiscard]] double gate(
         const Eigen::VectorXd& measurement,
-        const models::TrajectoryGaussian& predicted) const override;
+        const TrajectoryType& predicted) const override;
 
     void set_window_size(int L) { l_window_ = L; }
 

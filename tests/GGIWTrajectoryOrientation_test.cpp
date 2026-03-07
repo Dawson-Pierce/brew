@@ -17,73 +17,73 @@ protected:
 
 TEST_F(GGIWTrajectoryOrientationTracking, Comparison) {
     // PHD
-    auto phd = test::make_phd<models::TrajectoryGGIWOrientation>(
+    auto phd = test::make_phd<models::Trajectory<models::GGIWOrientation>>(
         test::make_trajectory_ggiw_orientation_ekf(scenario),
         test::make_trajectory_ggiw_orientation_birth(0.1), params);
-    auto phd_result = test::run_tracking<decltype(phd), models::TrajectoryGGIWOrientation>(
+    auto phd_result = test::run_tracking<decltype(phd), models::Trajectory<models::GGIWOrientation>>(
         phd, scenario, "GGIWOrientation Trajectory PHD Tracking", 10.0, 5);
     EXPECT_GE(phd_result.converged_steps, 10)
         << "Trajectory GGIWOrientation PHD should track both extended targets";
 
     // CPHD
-    auto cphd = test::make_cphd<models::TrajectoryGGIWOrientation>(
+    auto cphd = test::make_cphd<models::Trajectory<models::GGIWOrientation>>(
         test::make_trajectory_ggiw_orientation_ekf(scenario),
         test::make_trajectory_ggiw_orientation_birth(0.1), params);
-    auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::TrajectoryGGIWOrientation>(
+    auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::Trajectory<models::GGIWOrientation>>(
         cphd, scenario, "GGIWOrientation Trajectory CPHD Tracking", 10.0, 5);
     EXPECT_GE(cphd_result.converged_steps, 0)
         << "Trajectory GGIWOrientation CPHD should not crash";
 
     // MBM
-    auto mbm = test::make_mbm<models::TrajectoryGGIWOrientation>(
+    auto mbm = test::make_mbm<models::Trajectory<models::GGIWOrientation>>(
         test::make_trajectory_ggiw_orientation_ekf(scenario),
         test::make_trajectory_ggiw_orientation_birth(0.1), params);
-    auto mbm_result = test::run_tracking<decltype(mbm), models::TrajectoryGGIWOrientation>(
+    auto mbm_result = test::run_tracking<decltype(mbm), models::Trajectory<models::GGIWOrientation>>(
         mbm, scenario, "GGIWOrientation Trajectory MBM Tracking", 10.0, 5);
     EXPECT_GE(mbm_result.converged_steps, 10)
         << "Trajectory GGIWOrientation MBM should track both extended targets";
 
     // PMBM
-    auto pmbm = test::make_pmbm<models::TrajectoryGGIWOrientation>(
+    auto pmbm = test::make_pmbm<models::Trajectory<models::GGIWOrientation>>(
         test::make_trajectory_ggiw_orientation_ekf(scenario),
         test::make_trajectory_ggiw_orientation_birth(0.1), params);
-    auto pmbm_result = test::run_tracking<decltype(pmbm), models::TrajectoryGGIWOrientation>(
+    auto pmbm_result = test::run_tracking<decltype(pmbm), models::Trajectory<models::GGIWOrientation>>(
         pmbm, scenario, "GGIWOrientation Trajectory PMBM Tracking", 10.0, 5);
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "Trajectory GGIWOrientation PMBM should track both extended targets";
 
     // MB
-    auto mb = test::make_mb<models::TrajectoryGGIWOrientation>(
+    auto mb = test::make_mb<models::Trajectory<models::GGIWOrientation>>(
         test::make_trajectory_ggiw_orientation_ekf(scenario),
         test::make_trajectory_ggiw_orientation_birth(0.1), params);
-    auto mb_result = test::run_tracking<decltype(mb), models::TrajectoryGGIWOrientation>(
+    auto mb_result = test::run_tracking<decltype(mb), models::Trajectory<models::GGIWOrientation>>(
         mb, scenario, "GGIWOrientation Trajectory MB Tracking", 10.0, 5);
     EXPECT_GE(mb_result.converged_steps, 10)
         << "Trajectory GGIWOrientation MB should track both extended targets";
 
     // LMB
-    auto lmb = test::make_lmb<models::TrajectoryGGIWOrientation>(
+    auto lmb = test::make_lmb<models::Trajectory<models::GGIWOrientation>>(
         test::make_trajectory_ggiw_orientation_ekf(scenario),
         test::make_trajectory_ggiw_orientation_birth(0.1), params);
-    auto lmb_result = test::run_tracking<decltype(lmb), models::TrajectoryGGIWOrientation>(
+    auto lmb_result = test::run_tracking<decltype(lmb), models::Trajectory<models::GGIWOrientation>>(
         lmb, scenario, "GGIWOrientation Trajectory LMB Tracking", 10.0, 5);
     EXPECT_GE(lmb_result.converged_steps, 10)
         << "Trajectory GGIWOrientation LMB should track both extended targets";
 
     // GLMB
-    auto glmb = test::make_glmb<models::TrajectoryGGIWOrientation>(
+    auto glmb = test::make_glmb<models::Trajectory<models::GGIWOrientation>>(
         test::make_trajectory_ggiw_orientation_ekf(scenario),
         test::make_trajectory_ggiw_orientation_birth(0.1), params);
-    auto glmb_result = test::run_tracking<decltype(glmb), models::TrajectoryGGIWOrientation>(
+    auto glmb_result = test::run_tracking<decltype(glmb), models::Trajectory<models::GGIWOrientation>>(
         glmb, scenario, "GGIWOrientation Trajectory GLMB Tracking", 10.0, 5);
     EXPECT_GE(glmb_result.converged_steps, 10)
         << "Trajectory GGIWOrientation GLMB should track both extended targets";
 
     // JGLMB
-    auto jglmb = test::make_jglmb<models::TrajectoryGGIWOrientation>(
+    auto jglmb = test::make_jglmb<models::Trajectory<models::GGIWOrientation>>(
         test::make_trajectory_ggiw_orientation_ekf(scenario),
         test::make_trajectory_ggiw_orientation_birth(0.1), params);
-    auto jglmb_result = test::run_tracking<decltype(jglmb), models::TrajectoryGGIWOrientation>(
+    auto jglmb_result = test::run_tracking<decltype(jglmb), models::Trajectory<models::GGIWOrientation>>(
         jglmb, scenario, "GGIWOrientation Trajectory JGLMB Tracking", 10.0, 5);
     EXPECT_GE(jglmb_result.converged_steps, 10)
         << "Trajectory GGIWOrientation JGLMB should track both extended targets";

@@ -55,14 +55,14 @@ TEST(MergeGGIW, TwoClose) {
 }
 
 TEST(MergeTrajectoryGaussian, SameSize) {
-    models::Mixture<models::TrajectoryGaussian> mix;
+    models::Mixture<models::Trajectory<models::Gaussian>> mix;
     Eigen::VectorXd m1(4), m2(4);
     m1 << 0.0, 0.0, 1.0, 0.0;
     m2 << 0.1, 0.1, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
 
-    mix.add_component(std::make_unique<models::TrajectoryGaussian>(0, 4, m1, cov), 0.5);
-    mix.add_component(std::make_unique<models::TrajectoryGaussian>(0, 4, m2, cov), 0.3);
+    mix.add_component(std::make_unique<models::Trajectory<models::Gaussian>>(4, models::Gaussian(m1, cov)), 0.5);
+    mix.add_component(std::make_unique<models::Trajectory<models::Gaussian>>(4, models::Gaussian(m2, cov)), 0.3);
 
     fusion::merge(mix, 4.0);
 
@@ -71,15 +71,15 @@ TEST(MergeTrajectoryGaussian, SameSize) {
 }
 
 TEST(MergeTrajectoryGGIW, SameSize) {
-    models::Mixture<models::TrajectoryGGIW> mix;
+    models::Mixture<models::Trajectory<models::GGIW>> mix;
     Eigen::VectorXd m1(4), m2(4);
     m1 << 0.0, 0.0, 1.0, 0.0;
     m2 << 0.1, 0.1, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<models::TrajectoryGGIW>(0, 4, m1, cov, 10.0, 5.0, 10.0, V), 0.5);
-    mix.add_component(std::make_unique<models::TrajectoryGGIW>(0, 4, m2, cov, 12.0, 6.0, 11.0, V), 0.3);
+    mix.add_component(std::make_unique<models::Trajectory<models::GGIW>>(4, models::GGIW(m1, cov, 10.0, 5.0, 10.0, V)), 0.5);
+    mix.add_component(std::make_unique<models::Trajectory<models::GGIW>>(4, models::GGIW(m2, cov, 12.0, 6.0, 11.0, V)), 0.3);
 
     fusion::merge(mix, 4.0);
 

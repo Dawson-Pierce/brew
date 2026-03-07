@@ -17,12 +17,12 @@ void plot(const models::GGIW& g,
     plot_utils::plot_ggiw(g, opts);
 }
 
-void plot(const models::TrajectoryGaussian& g,
+void plot(const models::Trajectory<models::Gaussian>& g,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_trajectory_gaussian(g, opts);
 }
 
-void plot(const models::TrajectoryGGIW& g,
+void plot(const models::Trajectory<models::GGIW>& g,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_trajectory_ggiw(g, opts);
 }
@@ -37,12 +37,12 @@ void plot(const models::Mixture<models::GGIW>& mix,
     plot_utils::plot_mixture(mix, opts);
 }
 
-void plot(const models::Mixture<models::TrajectoryGaussian>& mix,
+void plot(const models::Mixture<models::Trajectory<models::Gaussian>>& mix,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_mixture(mix, opts);
 }
 
-void plot(const models::Mixture<models::TrajectoryGGIW>& mix,
+void plot(const models::Mixture<models::Trajectory<models::GGIW>>& mix,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_mixture(mix, opts);
 }

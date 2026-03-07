@@ -8,7 +8,7 @@
 namespace brew::plot_utils {
 
 void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
-                                         const brew::models::TrajectoryGGIWOrientation& tg,
+                                         const brew::models::Trajectory<brew::models::GGIWOrientation>& tg,
                                          const std::vector<int>& plt_inds,
                                          const Color& color,
                                          double confidence) {
@@ -45,20 +45,20 @@ void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
     auto last_cov = tg.get_last_cov();
     brew::models::GGIWOrientation last_ggiw(
         last_mean, last_cov,
-        tg.alpha(), tg.beta(),
-        tg.v(), tg.V());
+        tg.current().alpha(), tg.current().beta(),
+        tg.current().v(), tg.current().V());
 
     // Copy basis from trajectory if available
-    if (tg.basis().size() > 0) {
-        last_ggiw.basis() = tg.basis();
-        last_ggiw.eigenvalues() = tg.eigenvalues();
+    if (tg.current().basis().size() > 0) {
+        last_ggiw.basis() = tg.current().basis();
+        last_ggiw.eigenvalues() = tg.current().eigenvalues();
     }
 
     plot_ggiw_orientation_2d(ax, last_ggiw, plt_inds, color, confidence);
 }
 
 void plot_trajectory_ggiw_orientation(matplot::axes_handle ax,
-                                      const brew::models::TrajectoryGGIWOrientation& tg,
+                                      const brew::models::Trajectory<brew::models::GGIWOrientation>& tg,
                                       const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 2:
@@ -69,7 +69,7 @@ void plot_trajectory_ggiw_orientation(matplot::axes_handle ax,
     }
 }
 
-void plot_trajectory_ggiw_orientation(const brew::models::TrajectoryGGIWOrientation& tg,
+void plot_trajectory_ggiw_orientation(const brew::models::Trajectory<brew::models::GGIWOrientation>& tg,
                                       const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

@@ -1,4 +1,7 @@
 #include "brew/fusion/merge.hpp"
+#include "brew/models/trajectory.hpp"
+#include "brew/models/gaussian.hpp"
+#include "brew/models/ggiw.hpp"
 #include "brew/models/ggiw_orientation.hpp"
 #include <Eigen/Dense>
 #include <algorithm>
@@ -259,9 +262,9 @@ static double trajectory_mahal_dist(const Eigen::VectorXd& mi, const Eigen::Matr
     return y.squaredNorm();
 }
 
-// ---- TrajectoryGaussian merge: full-state Mahalanobis, keep longer/heavier ----
+// ---- Trajectory<Gaussian> merge: full-state Mahalanobis, keep longer/heavier ----
 
-void merge(models::Mixture<models::TrajectoryGaussian>& mix, double threshold) {
+void merge(models::Mixture<models::Trajectory<models::Gaussian>>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -320,9 +323,9 @@ void merge(models::Mixture<models::TrajectoryGaussian>& mix, double threshold) {
     }
 }
 
-// ---- TrajectoryGGIW merge: same trajectory merge logic ----
+// ---- Trajectory<GGIW> merge: same trajectory merge logic ----
 
-void merge(models::Mixture<models::TrajectoryGGIW>& mix, double threshold) {
+void merge(models::Mixture<models::Trajectory<models::GGIW>>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -380,9 +383,9 @@ void merge(models::Mixture<models::TrajectoryGGIW>& mix, double threshold) {
     }
 }
 
-// ---- TrajectoryGGIWOrientation merge: same trajectory merge logic, basis left empty ----
+// ---- Trajectory<GGIWOrientation> merge: same trajectory merge logic, basis left empty ----
 
-void merge(models::Mixture<models::TrajectoryGGIWOrientation>& mix, double threshold) {
+void merge(models::Mixture<models::Trajectory<models::GGIWOrientation>>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;

@@ -3,7 +3,9 @@
 
 namespace brew::filters {
 
-std::unique_ptr<Filter<models::TrajectoryGaussian>> TrajectoryGaussianEKF::clone() const {
+using TrajectoryType = TrajectoryGaussianEKF::TrajectoryType;
+
+std::unique_ptr<Filter<TrajectoryType>> TrajectoryGaussianEKF::clone() const {
     auto c = std::make_unique<TrajectoryGaussianEKF>();
     c->dyn_obj_ = dyn_obj_;
     c->h_ = h_;
@@ -14,12 +16,12 @@ std::unique_ptr<Filter<models::TrajectoryGaussian>> TrajectoryGaussianEKF::clone
     return c;
 }
 
-models::TrajectoryGaussian TrajectoryGaussianEKF::predict(
+TrajectoryType TrajectoryGaussianEKF::predict(
     double dt,
-    const models::TrajectoryGaussian& prev) const {
+    const TrajectoryType& prev) const {
 
     const int sd = prev.state_dim;
-    const int ws = prev.window_size;
+    const int ws = prev.window_size();
 
     // Determine windowing start index
     int start_idx = 0;
@@ -41,7 +43,6 @@ models::TrajectoryGaussian TrajectoryGaussianEKF::predict(
     const int cov_dim = static_cast<int>(prev_cov.rows());
     const int num_prev_blocks = cov_dim / sd;
     Eigen::MatrixXd F_dot = Eigen::MatrixXd::Zero(sd, cov_dim);
-    // Place F in the last block position
     F_dot.block(0, (num_prev_blocks - 1) * sd, sd, sd) = F;
 
     // Build new stacked covariance
@@ -57,41 +58,26 @@ models::TrajectoryGaussian TrajectoryGaussianEKF::predict(
     new_mean.head(cov_dim) = prev.mean().tail(total - start_idx);
     new_mean.tail(sd) = next_state;
 
-    // Create result distribution
-    models::TrajectoryGaussian result;
+    // Build result
+    TrajectoryType result;
     result.state_dim = sd;
-    result.init_idx = prev.init_idx;
-    result.window_size = ws + 1;
     result.mean() = new_mean;
     result.covariance() = new_cov;
 
-    // Update cov_history: append last-state block covariance
-    result.cov_history() = prev.cov_history();
-    result.cov_history().push_back(new_cov.bottomRightCorner(sd, sd));
-
-    // Update mean_history
-    if (ws < l_window_) {
-        result.mean_history() = result.rearrange_states();
-    } else {
-        const int hist_cols = static_cast<int>(prev.mean_history().cols());
-        const int new_steps = static_cast<int>(new_mean.size()) / sd;
-        Eigen::MatrixXd new_hist(sd, hist_cols + 1);
-        new_hist.leftCols(hist_cols - l_window_ + 1 + 1) = prev.mean_history().leftCols(hist_cols - l_window_ + 2);
-        // Fill in the rearranged current states
-        Eigen::MatrixXd rearranged = Eigen::Map<const Eigen::MatrixXd>(new_mean.data(), sd, new_steps);
-        new_hist.rightCols(new_steps) = rearranged;
-        result.mean_history() = new_hist;
-    }
+    // Copy history from prev, append new marginal state
+    result.history() = prev.history();
+    result.history().push_back(models::Gaussian(
+        next_state, new_cov.bottomRightCorner(sd, sd)));
 
     return result;
 }
 
 TrajectoryGaussianEKF::CorrectionResult TrajectoryGaussianEKF::correct(
     const Eigen::VectorXd& measurement,
-    const models::TrajectoryGaussian& predicted) const {
+    const TrajectoryType& predicted) const {
 
     const int sd = predicted.state_dim;
-    const int ws = predicted.window_size;
+    const int ws = predicted.window_size();
     const Eigen::VectorXd prev_state = predicted.get_last_state();
     const Eigen::MatrixXd& prev_cov = predicted.covariance();
 
@@ -101,12 +87,6 @@ TrajectoryGaussianEKF::CorrectionResult TrajectoryGaussianEKF::correct(
 
     // H_dot: measurement matrix that selects the last state block
     const int total_dim = static_cast<int>(prev_cov.rows());
-    int num_blocks;
-    if ((ws - l_window_) < 0) {
-        num_blocks = ws;
-    } else {
-        num_blocks = l_window_;
-    }
     const int m = static_cast<int>(H.rows());
     Eigen::MatrixXd H_dot = Eigen::MatrixXd::Zero(m, total_dim);
     H_dot.block(0, total_dim - sd, m, sd) = H;
@@ -125,38 +105,33 @@ TrajectoryGaussianEKF::CorrectionResult TrajectoryGaussianEKF::correct(
     double log_likelihood = -0.5 * (meas_dim * std::log(2.0 * M_PI) + log_det_S + mahal);
     double likelihood = std::exp(log_likelihood);
 
-    models::TrajectoryGaussian result;
+    TrajectoryType result;
     result.state_dim = sd;
-    result.init_idx = predicted.init_idx;
-    result.window_size = ws;
     result.mean() = new_mean;
     result.covariance() = new_cov;
 
-    // Update cov_history: replace last entry with updated last-state block
-    result.cov_history() = predicted.cov_history();
-    if (!result.cov_history().empty()) {
-        result.cov_history().back() = new_cov.block(total_dim - sd, total_dim - sd, sd, sd);
-    }
-
-    // Update mean_history
+    // Copy history and update windowed entries with corrected means/covs
+    result.history() = predicted.history();
     const int new_steps = static_cast<int>(new_mean.size()) / sd;
-    Eigen::MatrixXd rearranged = Eigen::Map<const Eigen::MatrixXd>(new_mean.data(), sd, new_steps);
-    if (predicted.mean_history().cols() > 0) {
-        Eigen::MatrixXd new_hist = predicted.mean_history();
-        const int hist_cols = static_cast<int>(new_hist.cols());
-        new_hist.rightCols(std::min(new_steps, hist_cols)) =
-            rearranged.rightCols(std::min(new_steps, hist_cols));
-        result.mean_history() = new_hist;
-    } else {
-        result.mean_history() = rearranged;
+    Eigen::MatrixXd rearranged = Eigen::Map<const Eigen::MatrixXd>(
+        new_mean.data(), sd, new_steps);
+    const int h = static_cast<int>(result.history().size());
+    for (int i = 0; i < new_steps && i < h; ++i) {
+        int hist_idx = h - new_steps + i;
+        if (hist_idx >= 0) {
+            result.history()[hist_idx].mean() = rearranged.col(i);
+        }
     }
+    // Update last entry's covariance with corrected marginal
+    result.history().back().covariance() =
+        new_cov.block(total_dim - sd, total_dim - sd, sd, sd);
 
     return { std::move(result), likelihood };
 }
 
 double TrajectoryGaussianEKF::gate(
     const Eigen::VectorXd& measurement,
-    const models::TrajectoryGaussian& predicted) const {
+    const TrajectoryType& predicted) const {
 
     const Eigen::VectorXd state = predicted.get_last_state();
     const Eigen::MatrixXd P = predicted.get_last_cov();

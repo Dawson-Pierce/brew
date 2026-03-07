@@ -6,7 +6,7 @@
 namespace brew::plot_utils {
 
 void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
-                                  const brew::models::TrajectoryGaussian& tg,
+                                  const brew::models::Trajectory<brew::models::Gaussian>& tg,
                                   const std::vector<int>& plt_inds,
                                   const Color& color) {
     if (plt_inds.size() != 1) {
@@ -18,7 +18,7 @@ void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
     Eigen::MatrixXd states = (tg.mean_history().cols() > 0)
         ? tg.mean_history() : tg.rearrange_states();
     const int T = static_cast<int>(states.cols());
-    const int t0 = tg.init_idx;
+    const int t0 = 0;
 
     // Time indices
     std::vector<double> time_inds(T);
@@ -51,7 +51,7 @@ void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
 }
 
 void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
-                                  const brew::models::TrajectoryGaussian& tg,
+                                  const brew::models::Trajectory<brew::models::Gaussian>& tg,
                                   const std::vector<int>& plt_inds,
                                   const Color& color) {
     if (plt_inds.size() != 2) {
@@ -92,7 +92,7 @@ void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
 }
 
 void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
-                                  const brew::models::TrajectoryGaussian& tg,
+                                  const brew::models::Trajectory<brew::models::Gaussian>& tg,
                                   const std::vector<int>& plt_inds,
                                   const Color& color) {
     if (plt_inds.size() != 3) {
@@ -136,7 +136,7 @@ void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
 }
 
 void plot_trajectory_gaussian(matplot::axes_handle ax,
-                               const brew::models::TrajectoryGaussian& tg,
+                               const brew::models::Trajectory<brew::models::Gaussian>& tg,
                                const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 1:
@@ -153,7 +153,7 @@ void plot_trajectory_gaussian(matplot::axes_handle ax,
     }
 }
 
-void plot_trajectory_gaussian(const brew::models::TrajectoryGaussian& tg,
+void plot_trajectory_gaussian(const brew::models::Trajectory<brew::models::Gaussian>& tg,
                                const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

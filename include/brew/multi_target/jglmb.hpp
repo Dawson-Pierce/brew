@@ -4,7 +4,7 @@
 #include "brew/multi_target/mbm.hpp"
 #include "brew/models/mixture.hpp"
 #include "brew/models/bernoulli.hpp"
-#include "brew/models/trajectory_base_model.hpp"
+#include "brew/models/trajectory.hpp"
 #include "brew/filters/filter.hpp"
 #include "brew/clustering/dbscan.hpp"
 #include "brew/assignment/murty.hpp"
@@ -140,12 +140,6 @@ public:
             global_hypotheses_.push_back(std::move(h));
         }
 
-        // Increment init_idx on birth model for trajectory types
-        for (const auto& bb : birth_bernoullis_) {
-            if (bb->has_distribution()) {
-                increment_init_idx(const_cast<T&>(bb->distribution()));
-            }
-        }
     }
 
     void correct(const Eigen::MatrixXd& measurements) override {
@@ -168,9 +162,6 @@ public:
         for (const auto& bb : birth_bernoullis_) {
             auto new_bern = bb->clone();
             new_bern->set_id(next_track_id_++);
-            if (new_bern->has_distribution()) {
-                increment_init_idx(new_bern->distribution());
-            }
             step_births.push_back(std::move(new_bern));
         }
         const int n_birth = static_cast<int>(step_births.size());
@@ -565,13 +556,6 @@ private:
         for (int n = 0; n < cardinality_pmf_.size(); ++n) {
             estimated_cardinality_ += n * cardinality_pmf_(n);
         }
-    }
-
-    template <typename U>
-    static void increment_init_idx(U& /*dist*/) {}
-
-    static void increment_init_idx(models::TrajectoryBaseModel& dist) {
-        dist.init_idx += 1;
     }
 
     template <typename U, typename = void>

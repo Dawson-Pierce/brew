@@ -4,6 +4,8 @@
 
 namespace brew::filters {
 
+using TrajectoryType = TrajectoryGGIWOrientationEKF::TrajectoryType;
+
 // Symmetric positive-definite matrix square root via eigendecomposition
 static Eigen::MatrixXd sqrtm_spd(const Eigen::MatrixXd& M) {
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(0.5 * (M + M.transpose()));
@@ -14,7 +16,7 @@ static Eigen::MatrixXd sqrtm_spd(const Eigen::MatrixXd& M) {
     return es.eigenvectors() * d.asDiagonal() * es.eigenvectors().transpose();
 }
 
-std::unique_ptr<Filter<models::TrajectoryGGIWOrientation>> TrajectoryGGIWOrientationEKF::clone() const {
+std::unique_ptr<Filter<TrajectoryType>> TrajectoryGGIWOrientationEKF::clone() const {
     auto c = std::make_unique<TrajectoryGGIWOrientationEKF>();
     c->dyn_obj_ = dyn_obj_;
     c->h_ = h_;
@@ -28,12 +30,12 @@ std::unique_ptr<Filter<models::TrajectoryGGIWOrientation>> TrajectoryGGIWOrienta
     return c;
 }
 
-models::TrajectoryGGIWOrientation TrajectoryGGIWOrientationEKF::predict(
+TrajectoryType TrajectoryGGIWOrientationEKF::predict(
     double dt,
-    const models::TrajectoryGGIWOrientation& prev) const {
+    const TrajectoryType& prev) const {
 
     const int sd = prev.state_dim;
-    const int ws = prev.window_size;
+    const int ws = prev.window_size();
 
     // Windowing
     int start_idx = 0;
@@ -67,10 +69,11 @@ models::TrajectoryGGIWOrientation TrajectoryGGIWOrientationEKF::predict(
     new_mean.tail(sd) = next_state;
 
     // GGIW gamma/IW prediction
-    const double prev_alpha = prev.alpha();
-    const double prev_beta = prev.beta();
-    const double prev_v = prev.v();
-    const Eigen::MatrixXd& prev_V = prev.V();
+    const auto& prev_ggiw = prev.current();
+    const double prev_alpha = prev_ggiw.alpha();
+    const double prev_beta = prev_ggiw.beta();
+    const double prev_v = prev_ggiw.v();
+    const Eigen::MatrixXd& prev_V = prev_ggiw.V();
     const int d = static_cast<int>(prev_V.rows());
 
     double next_alpha = prev_alpha / eta_;
@@ -82,64 +85,39 @@ models::TrajectoryGGIWOrientation TrajectoryGGIWOrientationEKF::predict(
     Eigen::MatrixXd next_V = scale * dyn_obj_->propagate_extent(dt, prev_state, prev_V);
 
     // Build result
-    models::TrajectoryGGIWOrientation result;
+    TrajectoryType result;
     result.state_dim = sd;
-    result.init_idx = prev.init_idx;
-    result.window_size = ws + 1;
     result.mean() = new_mean;
     result.covariance() = new_cov;
-    result.alpha() = next_alpha;
-    result.beta() = next_beta;
-    result.v() = next_v;
-    result.V() = next_V;
 
+    // Copy history, append new GGIWOrientation with preserved basis
+    result.history() = prev.history();
+    models::GGIWOrientation new_ggiw(
+        next_state, new_cov.bottomRightCorner(sd, sd),
+        next_alpha, next_beta, next_v, next_V);
     // Preserve basis through prediction
-    result.basis() = prev.basis();
-    result.eigenvalues() = prev.eigenvalues();
-
-    // Update histories
-    result.cov_history() = prev.cov_history();
-    result.cov_history().push_back(new_cov.bottomRightCorner(sd, sd));
-
-    result.alpha_history() = prev.alpha_history();
-    result.alpha_history().push_back(next_alpha);
-    result.beta_history() = prev.beta_history();
-    result.beta_history().push_back(next_beta);
-    result.v_history() = prev.v_history();
-    result.v_history().push_back(next_v);
-    result.V_history() = prev.V_history();
-    result.V_history().push_back(next_V);
-
-    // Update mean_history
-    if (ws < l_window_) {
-        result.mean_history() = result.rearrange_states();
-    } else {
-        const int hist_cols = static_cast<int>(prev.mean_history().cols());
-        const int new_steps = static_cast<int>(new_mean.size()) / sd;
-        Eigen::MatrixXd new_hist(sd, hist_cols + 1);
-        new_hist.leftCols(hist_cols - l_window_ + 2) = prev.mean_history().leftCols(hist_cols - l_window_ + 2);
-        Eigen::MatrixXd rearranged = Eigen::Map<const Eigen::MatrixXd>(new_mean.data(), sd, new_steps);
-        new_hist.rightCols(new_steps) = rearranged;
-        result.mean_history() = new_hist;
-    }
+    new_ggiw.basis() = prev_ggiw.basis();
+    new_ggiw.eigenvalues() = prev_ggiw.eigenvalues();
+    result.history().push_back(std::move(new_ggiw));
 
     return result;
 }
 
 TrajectoryGGIWOrientationEKF::CorrectionResult TrajectoryGGIWOrientationEKF::correct(
     const Eigen::VectorXd& measurement,
-    const models::TrajectoryGGIWOrientation& predicted) const {
+    const TrajectoryType& predicted) const {
 
     const int sd = predicted.state_dim;
-    const int ws = predicted.window_size;
+    const int ws = predicted.window_size();
     const Eigen::VectorXd prev_state = predicted.get_last_state();
     const Eigen::MatrixXd& prev_cov = predicted.covariance();
     const int total_dim = static_cast<int>(prev_cov.rows());
 
-    const double prev_alpha = predicted.alpha();
-    const double prev_beta = predicted.beta();
-    const double prev_v = predicted.v();
-    const Eigen::MatrixXd& prev_V = predicted.V();
+    const auto& pred_ggiw = predicted.current();
+    const double prev_alpha = pred_ggiw.alpha();
+    const double prev_beta = pred_ggiw.beta();
+    const double prev_v = pred_ggiw.v();
+    const Eigen::MatrixXd& prev_V = pred_ggiw.V();
     const int d = static_cast<int>(prev_V.rows());
 
     // Determine W (number of measurements)
@@ -236,7 +214,7 @@ TrajectoryGGIWOrientationEKF::CorrectionResult TrajectoryGGIWOrientationEKF::cor
     Eigen::VectorXd S_vals = svd.singularValues();
 
     // Previous basis (defaults to identity if not yet set)
-    Eigen::MatrixXd U_prev = predicted.basis();
+    Eigen::MatrixXd U_prev = pred_ggiw.basis();
     if (U_prev.size() == 0) {
         U_prev = Eigen::MatrixXd::Identity(d, d);
     }
@@ -274,62 +252,47 @@ TrajectoryGGIWOrientationEKF::CorrectionResult TrajectoryGGIWOrientationEKF::cor
     next_V = U_aligned * S_aligned.asDiagonal() * U_aligned.transpose();
 
     // Build result
-    models::TrajectoryGGIWOrientation result;
+    TrajectoryType result;
     result.state_dim = sd;
-    result.init_idx = predicted.init_idx;
-    result.window_size = ws;
     result.mean() = new_mean;
     result.covariance() = new_cov;
-    result.alpha() = next_alpha;
-    result.beta() = next_beta;
-    result.v() = next_v;
-    result.V() = next_V;
 
-    // Store aligned basis and eigenvalues
-    result.basis() = U_aligned;
-    result.eigenvalues() = S_aligned.asDiagonal();
-
-    // Update histories
-    result.cov_history() = predicted.cov_history();
-    if (!result.cov_history().empty()) {
-        result.cov_history().back() = new_cov.block(total_dim - sd, total_dim - sd, sd, sd);
-    }
-
-    result.alpha_history() = predicted.alpha_history();
-    if (!result.alpha_history().empty()) result.alpha_history().back() = next_alpha;
-    result.beta_history() = predicted.beta_history();
-    if (!result.beta_history().empty()) result.beta_history().back() = next_beta;
-    result.v_history() = predicted.v_history();
-    if (!result.v_history().empty()) result.v_history().back() = next_v;
-    result.V_history() = predicted.V_history();
-    if (!result.V_history().empty()) result.V_history().back() = next_V;
-
-    // Update mean_history
+    // Copy history and update windowed entries
+    result.history() = predicted.history();
     const int new_steps = static_cast<int>(new_mean.size()) / sd;
-    Eigen::MatrixXd rearranged = Eigen::Map<const Eigen::MatrixXd>(new_mean.data(), sd, new_steps);
-    if (predicted.mean_history().cols() > 0) {
-        Eigen::MatrixXd new_hist = predicted.mean_history();
-        const int hist_cols = static_cast<int>(new_hist.cols());
-        new_hist.rightCols(std::min(new_steps, hist_cols)) =
-            rearranged.rightCols(std::min(new_steps, hist_cols));
-        result.mean_history() = new_hist;
-    } else {
-        result.mean_history() = rearranged;
+    Eigen::MatrixXd rearranged = Eigen::Map<const Eigen::MatrixXd>(
+        new_mean.data(), sd, new_steps);
+    const int h = static_cast<int>(result.history().size());
+    for (int i = 0; i < new_steps && i < h; ++i) {
+        int hist_idx = h - new_steps + i;
+        if (hist_idx >= 0) {
+            result.history()[hist_idx].mean() = rearranged.col(i);
+        }
     }
+    // Update last entry with corrected parameters + aligned basis
+    auto& last = result.history().back();
+    last.covariance() = new_cov.block(total_dim - sd, total_dim - sd, sd, sd);
+    last.alpha() = next_alpha;
+    last.beta() = next_beta;
+    last.v() = next_v;
+    last.V() = next_V;
+    last.basis() = U_aligned;
+    last.eigenvalues() = S_aligned.asDiagonal();
 
     return { std::move(result), likelihood };
 }
 
 double TrajectoryGGIWOrientationEKF::gate(
     const Eigen::VectorXd& measurement,
-    const models::TrajectoryGGIWOrientation& predicted) const {
+    const TrajectoryType& predicted) const {
 
     const Eigen::VectorXd state = predicted.get_last_state();
     const Eigen::MatrixXd P = predicted.get_last_cov();
 
-    const int d = static_cast<int>(predicted.V().rows());
+    const auto& ggiw = predicted.current();
+    const int d = static_cast<int>(ggiw.V().rows());
     const double dof_floor = 2.0 * d + 2.0;
-    Eigen::MatrixXd X_hat = predicted.V() / std::max(predicted.v() - dof_floor, 1e-12);
+    Eigen::MatrixXd X_hat = ggiw.V() / std::max(ggiw.v() - dof_floor, 1e-12);
 
     const Eigen::VectorXd z_hat = estimate_measurement(state);
     const Eigen::MatrixXd H = get_measurement_matrix(state);

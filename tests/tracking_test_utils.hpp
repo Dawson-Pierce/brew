@@ -4,10 +4,8 @@
 #include "brew/models/mixture.hpp"
 #include "brew/models/gaussian.hpp"
 #include "brew/models/ggiw.hpp"
-#include "brew/models/trajectory_gaussian.hpp"
-#include "brew/models/trajectory_ggiw.hpp"
+#include "brew/models/trajectory.hpp"
 #include "brew/models/ggiw_orientation.hpp"
-#include "brew/models/trajectory_ggiw_orientation.hpp"
 #include "brew/filters/ekf.hpp"
 #include "brew/filters/ggiw_ekf.hpp"
 #include "brew/filters/ggiw_orientation_ekf.hpp"
@@ -409,6 +407,12 @@ struct is_ggiw_type<T,
     std::void_t<decltype(std::declval<const T&>().V())>
 > : std::true_type {};
 
+// For Trajectory<T>, check the inner type
+template <typename T>
+struct is_ggiw_type<models::Trajectory<T>,
+    std::void_t<decltype(std::declval<const T&>().V())>
+> : std::true_type {};
+
 template <typename T>
 constexpr bool is_extended_distribution_v = is_ggiw_type<T>::value;
 
@@ -417,6 +421,12 @@ struct is_orientation_type : std::false_type {};
 
 template <typename T>
 struct is_orientation_type<T,
+    std::void_t<decltype(std::declval<const T&>().basis())>
+> : std::true_type {};
+
+// For Trajectory<T>, check the inner type
+template <typename T>
+struct is_orientation_type<models::Trajectory<T>,
     std::void_t<decltype(std::declval<const T&>().basis())>
 > : std::true_type {};
 
@@ -650,10 +660,10 @@ make_ggiw_orientation_birth(double weight = 0.1)
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::TrajectoryGaussian>>
+inline std::unique_ptr<models::Mixture<models::Trajectory<models::Gaussian>>>
 make_trajectory_gaussian_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::TrajectoryGaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::Gaussian>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
@@ -662,17 +672,17 @@ make_trajectory_gaussian_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TrajectoryGaussian>(0, 4, b1, birth_cov), weight);
+        std::make_unique<models::Trajectory<models::Gaussian>>(4, models::Gaussian(b1, birth_cov)), weight);
     birth->add_component(
-        std::make_unique<models::TrajectoryGaussian>(0, 4, b2, birth_cov), weight);
+        std::make_unique<models::Trajectory<models::Gaussian>>(4, models::Gaussian(b2, birth_cov)), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::TrajectoryGGIW>>
+inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIW>>>
 make_trajectory_ggiw_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::TrajectoryGGIW>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIW>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -680,11 +690,11 @@ make_trajectory_ggiw_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TrajectoryGGIW>(
-            0, 4, b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+        std::make_unique<models::Trajectory<models::GGIW>>(
+            4, models::GGIW(b1, b_cov, 10.0, 1.0, 10.0, b_V)), weight);
     birth->add_component(
-        std::make_unique<models::TrajectoryGGIW>(
-            0, 4, b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+        std::make_unique<models::Trajectory<models::GGIW>>(
+            4, models::GGIW(b2, b_cov, 10.0, 1.0, 10.0, b_V)), weight);
 
     return birth;
 }
@@ -710,10 +720,10 @@ inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF> make_trajectory_gg
     return ekf;
 }
 
-inline std::unique_ptr<models::Mixture<models::TrajectoryGGIWOrientation>>
+inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIWOrientation>>>
 make_trajectory_ggiw_orientation_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::TrajectoryGGIWOrientation>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIWOrientation>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -721,11 +731,11 @@ make_trajectory_ggiw_orientation_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TrajectoryGGIWOrientation>(
-            0, 4, b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+        std::make_unique<models::Trajectory<models::GGIWOrientation>>(
+            4, models::GGIWOrientation(b1, b_cov, 10.0, 1.0, 10.0, b_V)), weight);
     birth->add_component(
-        std::make_unique<models::TrajectoryGGIWOrientation>(
-            0, 4, b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+        std::make_unique<models::Trajectory<models::GGIWOrientation>>(
+            4, models::GGIWOrientation(b2, b_cov, 10.0, 1.0, 10.0, b_V)), weight);
 
     return birth;
 }

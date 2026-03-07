@@ -29,12 +29,12 @@ TEST_F(TrajectoryGaussianEKFTest, PredictWindowGrowth) {
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
 
-    models::TrajectoryGaussian tg(0, 4, mean, cov);
-    EXPECT_EQ(tg.window_size, 1);
+    models::Trajectory<models::Gaussian> tg(4, models::Gaussian(mean, cov));
+    EXPECT_EQ(tg.window_size(), 1);
 
     // Predict should grow the trajectory
     auto pred1 = filter.predict(1.0, tg);
-    EXPECT_EQ(pred1.window_size, 2);
+    EXPECT_EQ(pred1.window_size(), 2);
     EXPECT_EQ(pred1.mean().size(), 8); // 2 states * 4 dims
 
     // Mean of new state should be propagated
@@ -43,7 +43,7 @@ TEST_F(TrajectoryGaussianEKFTest, PredictWindowGrowth) {
 
     // Second predict
     auto pred2 = filter.predict(1.0, pred1);
-    EXPECT_EQ(pred2.window_size, 3);
+    EXPECT_EQ(pred2.window_size(), 3);
     EXPECT_EQ(pred2.mean().size(), 12);
 }
 
@@ -52,7 +52,7 @@ TEST_F(TrajectoryGaussianEKFTest, LScanTrim) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    models::TrajectoryGaussian tg(0, 4, mean, cov);
+    models::Trajectory<models::Gaussian> tg(4, models::Gaussian(mean, cov));
 
     // Predict 6 times (window size = 5)
     auto current = tg;
@@ -63,7 +63,7 @@ TEST_F(TrajectoryGaussianEKFTest, LScanTrim) {
     // Window should be capped at l_window+1 = 6 states (but covariance trimmed)
     // The stacked state should not grow beyond l_window blocks
     EXPECT_LE(current.mean().size(), (filter.clone()->clone() ? 28 : 28)); // sanity
-    EXPECT_EQ(current.window_size, 7);
+    EXPECT_EQ(current.window_size(), 7);
     // Covariance should be trimmed to at most l_window blocks
     EXPECT_LE(current.covariance().rows(), 5 * 4);
 }
@@ -72,7 +72,7 @@ TEST_F(TrajectoryGaussianEKFTest, CorrectStep) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    models::TrajectoryGaussian tg(0, 4, mean, cov);
+    models::Trajectory<models::Gaussian> tg(4, models::Gaussian(mean, cov));
 
     auto pred = filter.predict(1.0, tg);
 
@@ -82,7 +82,7 @@ TEST_F(TrajectoryGaussianEKFTest, CorrectStep) {
     auto [corrected, likelihood] = filter.correct(meas, pred);
 
     // Window size should stay the same after correct
-    EXPECT_EQ(corrected.window_size, pred.window_size);
+    EXPECT_EQ(corrected.window_size(), pred.window_size());
 
     // Last state should move toward measurement
     EXPECT_GT(corrected.get_last_state()(0), 0.9);
@@ -95,7 +95,7 @@ TEST_F(TrajectoryGaussianEKFTest, Gate) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    models::TrajectoryGaussian tg(0, 4, mean, cov);
+    models::Trajectory<models::Gaussian> tg(4, models::Gaussian(mean, cov));
 
     Eigen::VectorXd meas_close(2);
     meas_close << 0.1, 0.1;

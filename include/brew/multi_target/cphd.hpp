@@ -3,7 +3,7 @@
 #include "brew/multi_target/rfs_base.hpp"
 #include "brew/multi_target/elementary_symmetric.hpp"
 #include "brew/models/mixture.hpp"
-#include "brew/models/trajectory_base_model.hpp"
+#include "brew/models/trajectory.hpp"
 #include "brew/filters/filter.hpp"
 #include "brew/fusion/prune.hpp"
 #include "brew/fusion/merge.hpp"
@@ -149,9 +149,6 @@ public:
             auto birth_copy = birth_model_->clone();
             intensity_->add_components(*birth_copy);
 
-            for (std::size_t k = 0; k < birth_model_->size(); ++k) {
-                increment_init_idx(birth_model_->component(k));
-            }
         }
 
         // --- Phase B: Cardinality prediction ---
@@ -399,14 +396,6 @@ private:
         double s = result.sum();
         if (s > 0.0) result /= s;
         return result;
-    }
-
-    // Helper to increment init_idx for trajectory types (no-op for non-trajectory)
-    template <typename U>
-    static void increment_init_idx(U& /*dist*/) {}
-
-    static void increment_init_idx(models::TrajectoryBaseModel& dist) {
-        dist.init_idx += 1;
     }
 
     std::unique_ptr<filters::Filter<T>> filter_;

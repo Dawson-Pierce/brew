@@ -17,21 +17,20 @@ TEST(TrajectoryGGIWOrientationModel, ConstructAndAccessors) {
     V << 10.0, 2.0,
           2.0, 5.0;
 
-    models::TrajectoryGGIWOrientation g(0, 4, mean, cov, 10.0, 5.0, 10.0, V);
+    models::Trajectory<models::GGIWOrientation> g(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
 
-    EXPECT_EQ(g.extent_dim(), 2);
+    EXPECT_EQ(g.current().extent_dim(), 2);
     EXPECT_TRUE(g.is_extended());
-    EXPECT_DOUBLE_EQ(g.alpha(), 10.0);
-    EXPECT_DOUBLE_EQ(g.beta(), 5.0);
-    EXPECT_DOUBLE_EQ(g.v(), 10.0);
+    EXPECT_DOUBLE_EQ(g.current().alpha(), 10.0);
+    EXPECT_DOUBLE_EQ(g.current().beta(), 5.0);
+    EXPECT_DOUBLE_EQ(g.current().v(), 10.0);
     EXPECT_EQ(g.state_dim, 4);
-    EXPECT_EQ(g.init_idx, 0);
-    EXPECT_EQ(g.window_size, 1);
+    EXPECT_EQ(g.window_size(), 1);
 
     // Basis should be initialized from V decomposition
-    EXPECT_EQ(g.basis().rows(), 2);
-    EXPECT_EQ(g.basis().cols(), 2);
-    EXPECT_TRUE(g.has_eigenvalues());
+    EXPECT_EQ(g.current().basis().rows(), 2);
+    EXPECT_EQ(g.current().basis().cols(), 2);
+    EXPECT_TRUE(g.current().has_eigenvalues());
 
     // Trajectory helpers
     EXPECT_EQ(g.get_last_state().size(), 4);
@@ -45,14 +44,14 @@ TEST(TrajectoryGGIWOrientationModel, Clone) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::TrajectoryGGIWOrientation g(0, 4, mean, cov, 10.0, 5.0, 10.0, V);
+    models::Trajectory<models::GGIWOrientation> g(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
 
     auto typed_clone = g.clone_typed();
     ASSERT_NE(typed_clone, nullptr);
-    EXPECT_DOUBLE_EQ(typed_clone->alpha(), 10.0);
-    EXPECT_EQ(typed_clone->basis().rows(), 2);
+    EXPECT_DOUBLE_EQ(typed_clone->current().alpha(), 10.0);
+    EXPECT_EQ(typed_clone->current().basis().rows(), 2);
     EXPECT_EQ(typed_clone->state_dim, 4);
-    EXPECT_TRUE(typed_clone->has_eigenvalues());
+    EXPECT_TRUE(typed_clone->current().has_eigenvalues());
 }
 
 // ============================================================
@@ -86,12 +85,12 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, PredictGrowsTrajectory) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::TrajectoryGGIWOrientation tg(0, 4, mean, cov, 10.0, 5.0, 10.0, V);
+    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
 
     auto pred = filter.predict(1.0, tg);
 
     // Window should grow
-    EXPECT_EQ(pred.window_size, 2);
+    EXPECT_EQ(pred.window_size(), 2);
     EXPECT_EQ(pred.mean().size(), 8);  // 2 time steps * 4 state dim
 
     // Last state should propagate
@@ -99,7 +98,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, PredictGrowsTrajectory) {
     EXPECT_NEAR(last(0), 1.0, 1e-10);  // x += vx*dt
 
     // Basis should be preserved
-    EXPECT_EQ(pred.basis().rows(), 2);
+    EXPECT_EQ(pred.current().basis().rows(), 2);
 }
 
 TEST_F(TrajectoryGGIWOrientationEKFTest, CorrectPopulatesBasis) {
@@ -110,7 +109,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, CorrectPopulatesBasis) {
     V << 50.0, 10.0,
          10.0, 30.0;
 
-    models::TrajectoryGGIWOrientation tg(0, 4, mean, cov, 10.0, 5.0, 10.0, V);
+    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
 
     // Predict then correct
     auto pred = filter.predict(1.0, tg);
@@ -121,18 +120,18 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, CorrectPopulatesBasis) {
 
     EXPECT_GT(likelihood, 0.0);
     // Alpha increases by W=1 from predicted (which was decayed from 10 by eta=1 -> still 10)
-    EXPECT_DOUBLE_EQ(corrected.alpha(), pred.alpha() + 1.0);
-    EXPECT_DOUBLE_EQ(corrected.beta(), pred.beta() + 1.0);
+    EXPECT_DOUBLE_EQ(corrected.current().alpha(), pred.current().alpha() + 1.0);
+    EXPECT_DOUBLE_EQ(corrected.current().beta(), pred.current().beta() + 1.0);
     // v increases by W=1 from predicted (which was decayed during predict)
-    EXPECT_DOUBLE_EQ(corrected.v(), pred.v() + 1.0);
+    EXPECT_DOUBLE_EQ(corrected.current().v(), pred.current().v() + 1.0);
 
     // Basis should be populated from SVD alignment
-    EXPECT_EQ(corrected.basis().rows(), 2);
-    EXPECT_EQ(corrected.basis().cols(), 2);
-    EXPECT_TRUE(corrected.has_eigenvalues());
+    EXPECT_EQ(corrected.current().basis().rows(), 2);
+    EXPECT_EQ(corrected.current().basis().cols(), 2);
+    EXPECT_TRUE(corrected.current().has_eigenvalues());
 
     // Window size unchanged by correct
-    EXPECT_EQ(corrected.window_size, pred.window_size);
+    EXPECT_EQ(corrected.window_size(), pred.window_size());
 }
 
 TEST_F(TrajectoryGGIWOrientationEKFTest, MultipleStepsBasisAlignment) {
@@ -143,7 +142,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, MultipleStepsBasisAlignment) {
     V << 80.0, 5.0,
           5.0, 20.0;
 
-    models::TrajectoryGGIWOrientation tg(0, 4, mean, cov, 10.0, 5.0, 10.0, V);
+    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
 
     // Step 1: predict + correct
     auto pred1 = filter.predict(1.0, tg);
@@ -151,7 +150,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, MultipleStepsBasisAlignment) {
     meas1 << 1.05, 0.05;
     auto [corr1, lik1] = filter.correct(meas1, pred1);
 
-    Eigen::MatrixXd basis1 = corr1.basis();
+    Eigen::MatrixXd basis1 = corr1.current().basis();
 
     // Step 2: predict + correct
     auto pred2 = filter.predict(1.0, corr1);
@@ -159,7 +158,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, MultipleStepsBasisAlignment) {
     meas2 << 2.1, 0.05;
     auto [corr2, lik2] = filter.correct(meas2, pred2);
 
-    Eigen::MatrixXd basis2 = corr2.basis();
+    Eigen::MatrixXd basis2 = corr2.current().basis();
 
     // Basis should remain aligned across steps
     Eigen::MatrixXd alignment = (basis2.transpose() * basis1).cwiseAbs();
@@ -168,7 +167,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, MultipleStepsBasisAlignment) {
     }
 
     // Trajectory should have grown
-    EXPECT_EQ(corr2.window_size, 3);
+    EXPECT_EQ(corr2.window_size(), 3);
     EXPECT_EQ(corr2.mean().size(), 12);  // 3 steps * 4
 }
 
@@ -178,7 +177,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, Gate) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::TrajectoryGGIWOrientation tg(0, 4, mean, cov, 10.0, 5.0, 10.0, V);
+    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
 
     Eigen::VectorXd meas_close(2);
     meas_close << 0.1, 0.1;
@@ -203,26 +202,25 @@ TEST(TrajectoryGGIWOrientationSerialization, RoundTrip) {
     V << 10.0, 2.0,
           2.0, 5.0;
 
-    models::TrajectoryGGIWOrientation original(0, 4, mean, cov, 10.0, 5.0, 10.0, V);
+    models::Trajectory<models::GGIWOrientation> original(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
 
     auto j = serialization::to_json(original);
     EXPECT_EQ(j["type"], "TrajectoryGGIWOrientation");
 
     auto restored = serialization::trajectory_ggiw_orientation_from_json(j);
 
-    EXPECT_DOUBLE_EQ(restored.alpha(), original.alpha());
-    EXPECT_DOUBLE_EQ(restored.beta(), original.beta());
-    EXPECT_DOUBLE_EQ(restored.v(), original.v());
+    EXPECT_DOUBLE_EQ(restored.current().alpha(), original.current().alpha());
+    EXPECT_DOUBLE_EQ(restored.current().beta(), original.current().beta());
+    EXPECT_DOUBLE_EQ(restored.current().v(), original.current().v());
     EXPECT_EQ(restored.state_dim, 4);
-    EXPECT_EQ(restored.init_idx, 0);
 
     for (int i = 0; i < mean.size(); ++i) {
         EXPECT_NEAR(restored.mean()(i), original.mean()(i), 1e-10);
     }
 
     // Basis should have been re-derived from V
-    EXPECT_EQ(restored.basis().rows(), 2);
-    EXPECT_TRUE(restored.has_eigenvalues());
+    EXPECT_EQ(restored.current().basis().rows(), 2);
+    EXPECT_TRUE(restored.current().has_eigenvalues());
 }
 
 TEST(TrajectoryGGIWOrientationSerialization, DistributionSerializer) {
@@ -231,11 +229,11 @@ TEST(TrajectoryGGIWOrientationSerialization, DistributionSerializer) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::TrajectoryGGIWOrientation original(0, 4, mean, cov, 10.0, 5.0, 10.0, V);
+    models::Trajectory<models::GGIWOrientation> original(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
 
-    auto j = serialization::DistributionSerializer<models::TrajectoryGGIWOrientation>::serialize(original);
-    auto restored = serialization::DistributionSerializer<models::TrajectoryGGIWOrientation>::deserialize(j);
+    auto j = serialization::DistributionSerializer<models::Trajectory<models::GGIWOrientation>>::serialize(original);
+    auto restored = serialization::DistributionSerializer<models::Trajectory<models::GGIWOrientation>>::deserialize(j);
 
-    EXPECT_DOUBLE_EQ(restored.alpha(), 10.0);
+    EXPECT_DOUBLE_EQ(restored.current().alpha(), 10.0);
     EXPECT_EQ(restored.state_dim, 4);
 }

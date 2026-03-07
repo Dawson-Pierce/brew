@@ -3,7 +3,7 @@
 #include "brew/multi_target/rfs_base.hpp"
 #include "brew/models/mixture.hpp"
 #include "brew/models/bernoulli.hpp"
-#include "brew/models/trajectory_base_model.hpp"
+#include "brew/models/trajectory.hpp"
 #include "brew/filters/filter.hpp"
 #include "brew/fusion/prune.hpp"
 #include "brew/fusion/merge.hpp"
@@ -144,10 +144,6 @@ public:
         for (const auto& bb : birth_bernoullis_) {
             auto new_bern = bb->clone();
             new_bern->set_id(next_track_id_++);
-            // Handle trajectory init_idx
-            if (new_bern->has_distribution()) {
-                increment_init_idx(new_bern->distribution());
-            }
             std::size_t idx = bernoullis_.size();
             bernoullis_.push_back(std::move(new_bern));
             birth_indices.push_back(idx);
@@ -168,12 +164,6 @@ public:
             }
         }
 
-        // Increment init_idx on birth model for trajectory types
-        for (const auto& bb : birth_bernoullis_) {
-            if (bb->has_distribution()) {
-                increment_init_idx(const_cast<T&>(bb->distribution()));
-            }
-        }
     }
 
     void correct(const Eigen::MatrixXd& measurements) override {
@@ -491,14 +481,6 @@ private:
         std::sort(global_hypotheses_.begin(), global_hypotheses_.end(),
             [](const auto& a, const auto& b) { return a.log_weight > b.log_weight; });
         global_hypotheses_.resize(max_hypotheses_);
-    }
-
-    // Trajectory init_idx helpers
-    template <typename U>
-    static void increment_init_idx(U& /*dist*/) {}
-
-    static void increment_init_idx(models::TrajectoryBaseModel& dist) {
-        dist.init_idx += 1;
     }
 
     // SFINAE trait for trajectory-type distributions
