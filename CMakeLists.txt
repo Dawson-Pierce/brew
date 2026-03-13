@@ -10,8 +10,15 @@ if(MSVC)
     add_compile_definitions(_USE_MATH_DEFINES)
 endif()
 
+# MinGW: allow large object files from heavy template instantiation (Eigen)
+if(MINGW)
+    add_compile_options(-Wa,-mbig-obj)
+endif()
+
 # Dependencies
 include(FetchContent)
+set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/dependencies" CACHE PATH
+    "Directory for fetched dependencies")
 
 # Options
 option(BREW_ENABLE_PLOTTING "Enable plotting utilities (matplot++)" ON)
@@ -52,6 +59,7 @@ add_subdirectory(src/brew/multi_target)
 add_subdirectory(src/brew/clustering)
 add_subdirectory(src/brew/metrics)
 add_subdirectory(src/brew/serialization)
+add_subdirectory(src/brew/template_matching)
 if(BREW_ENABLE_PLOTTING)
     # --- Fetch matplot++ ---
     FetchContent_Declare(
@@ -85,6 +93,7 @@ target_link_libraries(brew INTERFACE
     brew_clustering
     brew_metrics
     brew_serialization
+    brew_template_matching
 )
 if(BREW_ENABLE_PLOTTING)
     target_link_libraries(brew INTERFACE brew_plot_utils)

@@ -4,6 +4,7 @@
 #include <brew/models/ggiw.hpp>
 #include <brew/models/mixture.hpp>
 #include <brew/models/trajectory.hpp>
+#include <brew/template_matching/point_cloud.hpp>
 #include <brew/plot_utils/plot_options.hpp>
 
 namespace brew {
@@ -25,6 +26,8 @@ void plot(const models::Mixture<models::GGIW>& mix,
 void plot(const models::Mixture<models::Trajectory<models::Gaussian>>& mix,
           const plot_utils::PlotOptions& opts);
 void plot(const models::Mixture<models::Trajectory<models::GGIW>>& mix,
+          const plot_utils::PlotOptions& opts);
+void plot(const template_matching::PointCloud& cloud,
           const plot_utils::PlotOptions& opts);
 
 } // namespace brew

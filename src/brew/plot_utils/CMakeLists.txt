@@ -9,6 +9,7 @@ add_library(brew_plot_utils
     plot_trajectory_ggiw.cpp
     plot_trajectory_ggiw_orientation.cpp
     plot_mixture.cpp
+    plot_point_cloud.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../plot.cpp
 )
 
@@ -18,5 +19,6 @@ target_include_directories(brew_plot_utils PUBLIC
 
 target_link_libraries(brew_plot_utils PUBLIC
     brew_models
+    brew_template_matching
     matplot
 )

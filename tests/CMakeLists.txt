@@ -40,6 +40,7 @@ add_executable(brew_tests
     GGIWTrajectory_test.cpp
     GGIWTrajectoryOrientation_test.cpp
     test_eigenrand.cpp
+    test_tm_phd.cpp
 )
 
 target_link_libraries(brew_tests PRIVATE

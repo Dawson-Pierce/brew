@@ -2,6 +2,7 @@
 #include <brew/plot_utils/plot_gaussian.hpp>
 #include <brew/plot_utils/plot_ggiw.hpp>
 #include <brew/plot_utils/plot_mixture.hpp>
+#include <brew/plot_utils/plot_point_cloud.hpp>
 #include <brew/plot_utils/plot_trajectory_gaussian.hpp>
 #include <brew/plot_utils/plot_trajectory_ggiw.hpp>
 
@@ -45,6 +46,11 @@ void plot(const models::Mixture<models::Trajectory<models::Gaussian>>& mix,
 void plot(const models::Mixture<models::Trajectory<models::GGIW>>& mix,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_mixture(mix, opts);
+}
+
+void plot(const template_matching::PointCloud& cloud,
+          const plot_utils::PlotOptions& opts) {
+    plot_utils::plot_point_cloud(cloud, opts);
 }
 
 } // namespace brew
