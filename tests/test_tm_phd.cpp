@@ -373,6 +373,7 @@ TEST(TmPhd, Tracking2D) {
               << std::setw(12) << "pos_b"
               << std::setw(12) << "rot_a"
               << std::setw(12) << "rot_b"
+              << "  | weights"
               << "\n";
 
     int converged_steps = 0;
@@ -427,7 +428,11 @@ TEST(TmPhd, Tracking2D) {
                   << std::setw(12) << pos_b
                   << std::setw(12) << std::setprecision(3) << rot_a
                   << std::setw(12) << rot_b
-                  << "\n";
+                  << "  |";
+        for (std::size_t i = 0; i < phd.intensity().size(); ++i) {
+            std::cout << " " << std::setprecision(4) << phd.intensity().weight(i);
+        }
+        std::cout << "\n";
     }
 
     std::cout << "Converged steps (k>=" << warmup
@@ -625,6 +630,7 @@ TEST(TmPhd, TrajectoryTracking2D) {
               << std::setw(12) << "pos_b"
               << std::setw(12) << "rot_a"
               << std::setw(12) << "rot_b"
+              << "  | weights"
               << "\n";
 
     int converged_steps = 0;
@@ -680,7 +686,11 @@ TEST(TmPhd, TrajectoryTracking2D) {
                   << std::setw(12) << pos_b
                   << std::setw(12) << std::setprecision(3) << rot_a
                   << std::setw(12) << rot_b
-                  << "\n";
+                  << "  |";
+        for (std::size_t i = 0; i < phd.intensity().size(); ++i) {
+            std::cout << " " << std::setprecision(4) << phd.intensity().weight(i);
+        }
+        std::cout << "\n";
     }
 
     std::cout << "Converged steps (k>=" << warmup
