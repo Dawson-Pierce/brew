@@ -17,6 +17,19 @@ void save_point_cloud(const PointCloud& cloud, const std::string& filepath);
 /// Extracts unique vertices from the triangle mesh.
 [[nodiscard]] PointCloud load_stl(const std::string& filepath);
 
+/// Sample N points uniformly on the surface of an STL mesh.
+/// Uses area-weighted triangle sampling with barycentric coordinates.
+[[nodiscard]] PointCloud sample_stl(const std::string& filepath, int num_points);
+
+/// Sample N points with per-point face normals.
+/// normals_out is resized to 3×N, each column is the unit face normal for that point.
+[[nodiscard]] PointCloud sample_stl(const std::string& filepath, int num_points,
+                                    Eigen::MatrixXd& normals_out);
+
+/// Load triangle vertices from an STL file for wireframe rendering.
+/// Returns a 3×(3*num_triangles) matrix: columns [v0,v1,v2, v0,v1,v2, ...].
+[[nodiscard]] Eigen::MatrixXd load_stl_triangles(const std::string& filepath);
+
 // ---- Sampling ----
 
 /// Poisson disk sample an existing point cloud down to approximately N points.

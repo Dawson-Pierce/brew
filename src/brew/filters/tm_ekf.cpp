@@ -116,6 +116,7 @@ TmEkf::CorrectionResult TmEkf::correct(
     Eigen::VectorXd t_pred = predicted.position();
 
     // Run ICP (embed to 3D if 2D)
+    last_icp_iterations_ = 0;
     template_matching::IcpResult icp_result;
     Eigen::VectorXd t_icp(d);
     Eigen::MatrixXd R_icp(d, d);
@@ -153,6 +154,8 @@ TmEkf::CorrectionResult TmEkf::correct(
         t_icp = icp_result.translation;
     }
 
+    last_icp_iterations_ = icp_result.iterations;
+
     // Build H_pos: selects position indices from translational state
     Eigen::MatrixXd H_pos = Eigen::MatrixXd::Zero(d, n_trans);
     for (int i = 0; i < d; ++i) {
@@ -188,6 +191,22 @@ TmEkf::CorrectionResult TmEkf::correct(
     Eigen::MatrixXd S = H_aug * P * H_aug.transpose() + measurement_noise_;
     S = 0.5 * (S + S.transpose());
 
+    // Innovation gate: reject ICP results that are statistically implausible.
+    // This prevents ICP failures from corrupting the state.
+    auto S_ldlt = S.ldlt();
+    double mahal = innovation.transpose() * S_ldlt.solve(innovation);
+
+    // If innovation is too large (chi-squared gate), return predicted with low likelihood
+    const double chi2_gate = 50.0;  // generous gate
+    if (mahal > chi2_gate) {
+        return {
+            models::TemplatePose(predicted.mean(), predicted.covariance(),
+                                  predicted.rotation(),
+                                  predicted.template_ptr(), predicted.pos_indices()),
+            1e-300
+        };
+    }
+
     // Kalman gain
     Eigen::MatrixXd K = P * H_aug.transpose() * S.inverse();
 
@@ -211,14 +230,17 @@ TmEkf::CorrectionResult TmEkf::correct(
     Eigen::MatrixXd next_cov = (I_aug - K * H_aug) * P;
     next_cov = 0.5 * (next_cov + next_cov.transpose());
 
-    // Likelihood = L_template * L_pose
-    // L_pose: Gaussian innovation likelihood
-    double log_det_S = S.ldlt().vectorD().array().abs().log().sum();
-    double mahal = innovation.transpose() * S.ldlt().solve(innovation);
+    // Combined likelihood = L_template * L_pose
+    // L_pose: zero-mean Gaussian innovation likelihood N(innovation; 0, S)
+    double log_det_S = S_ldlt.vectorD().array().abs().log().sum();
     double log_L_pose = -0.5 * (m_dim * std::log(2.0 * M_PI) + log_det_S + mahal);
 
-    // L_template: from ICP result
-    double likelihood = icp_result.likelihood * std::exp(log_L_pose);
+    // L_template: how well the template shape fits the measurement (from ICP)
+    double log_L = icp_result.log_likelihood + log_L_pose;
+    double likelihood = std::exp(std::clamp(log_L, -500.0, 500.0));
+    if (!std::isfinite(likelihood) || likelihood <= 0.0) {
+        likelihood = 1e-300;
+    }
 
     return {
         models::TemplatePose(std::move(next_mean), std::move(next_cov),

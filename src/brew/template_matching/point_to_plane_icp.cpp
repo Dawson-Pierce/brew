@@ -145,51 +145,35 @@ IcpResult PointToPlaneIcp::align(
         }
     }
 
-    // Compute final likelihood and inlier ratio
+    // Compute final likelihood using reverse correspondences (target→source).
+    // This gives p(measurement | template, pose): each measurement point finds
+    // its nearest template point, independent of template point count.
     Eigen::MatrixXd src_final = R * source.points();
     src_final.colwise() += t;
     auto final_corr = find_correspondences(
-        src_final, target.points(), params_.max_correspondence_dist);
-    result.likelihood = compute_gaussian_likelihood(
-        src_final, target.points(), final_corr);
-    result.inlier_ratio = static_cast<double>(final_corr.size()) / source.num_points();
+        target.points(), src_final, params_.max_correspondence_dist);
+    result.log_likelihood = compute_log_likelihood(
+        target.points(), src_final, final_corr);
+    result.inlier_ratio = static_cast<double>(final_corr.size()) / target.num_points();
 
     return result;
 }
 
-double PointToPlaneIcp::likelihood(
+double PointToPlaneIcp::log_likelihood(
     const PointCloud& source,
     const PointCloud& target,
     const Eigen::Matrix3d& R,
     const Eigen::Vector3d& t) const {
 
-    // Use point-to-plane distances for likelihood
-    const int k = std::min(10, target.num_points());
-    Eigen::MatrixXd normals = estimate_normals(target, k);
-
     Eigen::MatrixXd src_transformed = R * source.points();
     src_transformed.colwise() += t;
 
+    // Reverse correspondences: each target (measurement) point finds nearest source (template)
     auto correspondences = find_correspondences(
-        src_transformed, target.points(), params_.max_correspondence_dist);
+        target.points(), src_transformed, params_.max_correspondence_dist);
 
-    if (correspondences.empty()) return 0.0;
-
-    const int N = static_cast<int>(correspondences.size());
-
-    // Point-to-plane residuals
-    double sum_sq = 0.0;
-    for (const auto& [si, ti] : correspondences) {
-        double d = normals.col(ti).dot(
-            src_transformed.col(si) - target.points().col(ti));
-        sum_sq += d * d;
-    }
-
-    // 1D Gaussian per residual (scalar plane distance)
-    double log_L = -0.5 * N * std::log(2.0 * M_PI * params_.sigma_sq)
-                    - sum_sq / (2.0 * params_.sigma_sq);
-
-    return std::exp(log_L);
+    return compute_log_likelihood(
+        target.points(), src_transformed, correspondences);
 }
 
 } // namespace brew::template_matching

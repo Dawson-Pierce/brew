@@ -258,7 +258,12 @@ TrajectoryTmEkf::CorrectionResult TrajectoryTmEkf::correct(
     double log_det_S = S.ldlt().vectorD().array().abs().log().sum();
     double mahal = innovation.transpose() * S.ldlt().solve(innovation);
     double log_L_pose = -0.5 * (m_dim * std::log(2.0 * M_PI) + log_det_S + mahal);
-    double likelihood = icp_result.likelihood * std::exp(log_L_pose);
+
+    double log_L = icp_result.log_likelihood + log_L_pose;
+    double likelihood = std::exp(std::clamp(log_L, -500.0, 500.0));
+    if (!std::isfinite(likelihood) || likelihood <= 0.0) {
+        likelihood = 1e-300;
+    }
 
     // --- Build result ---
 

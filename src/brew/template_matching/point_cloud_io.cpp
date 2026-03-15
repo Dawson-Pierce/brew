@@ -206,6 +206,74 @@ PointCloud load_stl(const std::string& filepath) {
     return PointCloud(std::move(points));
 }
 
+Eigen::MatrixXd load_stl_triangles(const std::string& filepath) {
+    auto triangles = parse_stl(filepath);
+    if (triangles.empty()) {
+        throw std::runtime_error("No triangles found in STL file: " + filepath);
+    }
+    Eigen::MatrixXd result(3, 3 * static_cast<int>(triangles.size()));
+    for (std::size_t i = 0; i < triangles.size(); ++i) {
+        result.col(3 * i + 0) = triangles[i].v0;
+        result.col(3 * i + 1) = triangles[i].v1;
+        result.col(3 * i + 2) = triangles[i].v2;
+    }
+    return result;
+}
+
+static void sample_stl_impl(const std::string& filepath, int num_points,
+                            Eigen::MatrixXd& points_out, Eigen::MatrixXd* normals_out) {
+    auto triangles = parse_stl(filepath);
+    if (triangles.empty()) {
+        throw std::runtime_error("No triangles found in STL file: " + filepath);
+    }
+
+    // Build cumulative area distribution for area-weighted sampling
+    std::vector<double> cumulative_area(triangles.size());
+    cumulative_area[0] = triangles[0].area();
+    for (std::size_t i = 1; i < triangles.size(); ++i) {
+        cumulative_area[i] = cumulative_area[i - 1] + triangles[i].area();
+    }
+    double total_area = cumulative_area.back();
+
+    // Sample points uniformly on the mesh surface
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    points_out.resize(3, num_points);
+    if (normals_out) normals_out->resize(3, num_points);
+
+    for (int i = 0; i < num_points; ++i) {
+        // Pick a triangle proportional to its area
+        double r = dist(rng) * total_area;
+        auto it = std::lower_bound(cumulative_area.begin(), cumulative_area.end(), r);
+        int tri_idx = static_cast<int>(std::distance(cumulative_area.begin(), it));
+        tri_idx = std::min(tri_idx, static_cast<int>(triangles.size()) - 1);
+
+        // Sample a random point on that triangle
+        points_out.col(i) = sample_triangle(triangles[tri_idx], dist(rng), dist(rng));
+
+        if (normals_out) {
+            const auto& tri = triangles[tri_idx];
+            Eigen::Vector3d n = (tri.v1 - tri.v0).cross(tri.v2 - tri.v0);
+            double len = n.norm();
+            (*normals_out).col(i) = (len > 1e-15) ? (n / len).eval() : Eigen::Vector3d::UnitZ();
+        }
+    }
+}
+
+PointCloud sample_stl(const std::string& filepath, int num_points) {
+    Eigen::MatrixXd points;
+    sample_stl_impl(filepath, num_points, points, nullptr);
+    return PointCloud(std::move(points));
+}
+
+PointCloud sample_stl(const std::string& filepath, int num_points,
+                      Eigen::MatrixXd& normals_out) {
+    Eigen::MatrixXd points;
+    sample_stl_impl(filepath, num_points, points, &normals_out);
+    return PointCloud(std::move(points));
+}
+
 // ---- Poisson disk sampling ----
 
 static Eigen::MatrixXd poisson_disk_filter(const Eigen::MatrixXd& candidates, int num_points) {

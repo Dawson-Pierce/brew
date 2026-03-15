@@ -15,7 +15,7 @@ struct IcpResult {
     Eigen::Matrix3d rotation = Eigen::Matrix3d::Identity();
     Eigen::Vector3d translation = Eigen::Vector3d::Zero();
     double rmse = 0.0;
-    double likelihood = 0.0;
+    double log_likelihood = -std::numeric_limits<double>::infinity();
     double inlier_ratio = 0.0;
     int iterations = 0;
     bool converged = false;
@@ -43,7 +43,8 @@ public:
         const Eigen::Matrix3d& R_init = Eigen::Matrix3d::Identity(),
         const Eigen::Vector3d& t_init = Eigen::Vector3d::Zero()) const = 0;
 
-    [[nodiscard]] virtual double likelihood(
+    /// Compute log-likelihood of the alignment (stays in log space).
+    [[nodiscard]] virtual double log_likelihood(
         const PointCloud& source,
         const PointCloud& target,
         const Eigen::Matrix3d& R,
@@ -106,13 +107,14 @@ protected:
         return correspondences;
     }
 
-    /// Compute Gaussian log-likelihood of point-to-point residuals.
-    [[nodiscard]] double compute_gaussian_likelihood(
+    /// Compute mean Gaussian log-likelihood per correspondence.
+    /// Returns log-likelihood (not exponentiated) to stay in log space.
+    [[nodiscard]] double compute_log_likelihood(
         const Eigen::MatrixXd& source_transformed,
         const Eigen::MatrixXd& target,
         const std::vector<std::pair<int, int>>& correspondences) const {
 
-        if (correspondences.empty()) return 0.0;
+        if (correspondences.empty()) return -std::numeric_limits<double>::infinity();
 
         const int N = static_cast<int>(correspondences.size());
         const int d = static_cast<int>(source_transformed.rows());
@@ -122,10 +124,9 @@ protected:
             sum_sq += (target.col(ti) - source_transformed.col(si)).squaredNorm();
         }
 
-        double log_L = -0.5 * N * d * std::log(2.0 * M_PI * params_.sigma_sq)
-                        - sum_sq / (2.0 * params_.sigma_sq);
-
-        return std::exp(log_L);
+        // Mean log-likelihood per correspondence
+        return -0.5 * d * std::log(2.0 * M_PI * params_.sigma_sq)
+               - sum_sq / (2.0 * N * params_.sigma_sq);
     }
 };
 

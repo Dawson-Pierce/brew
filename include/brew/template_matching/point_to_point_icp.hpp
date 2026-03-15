@@ -15,7 +15,7 @@ public:
         const Eigen::Matrix3d& R_init = Eigen::Matrix3d::Identity(),
         const Eigen::Vector3d& t_init = Eigen::Vector3d::Zero()) const override;
 
-    [[nodiscard]] double likelihood(
+    [[nodiscard]] double log_likelihood(
         const PointCloud& source,
         const PointCloud& target,
         const Eigen::Matrix3d& R,

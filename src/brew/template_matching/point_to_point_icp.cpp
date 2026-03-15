@@ -90,19 +90,21 @@ IcpResult PointToPointIcp::align(
         }
     }
 
-    // Compute final likelihood and inlier ratio
+    // Compute final likelihood using reverse correspondences (target→source).
+    // This gives p(measurement | template, pose): each measurement point finds
+    // its nearest template point, independent of template point count.
     Eigen::MatrixXd src_final = R * source.points();
     src_final.colwise() += t;
     auto final_corr = find_correspondences(
-        src_final, target.points(), params_.max_correspondence_dist);
-    result.likelihood = compute_gaussian_likelihood(
-        src_final, target.points(), final_corr);
-    result.inlier_ratio = static_cast<double>(final_corr.size()) / source.num_points();
+        target.points(), src_final, params_.max_correspondence_dist);
+    result.log_likelihood = compute_log_likelihood(
+        target.points(), src_final, final_corr);
+    result.inlier_ratio = static_cast<double>(final_corr.size()) / target.num_points();
 
     return result;
 }
 
-double PointToPointIcp::likelihood(
+double PointToPointIcp::log_likelihood(
     const PointCloud& source,
     const PointCloud& target,
     const Eigen::Matrix3d& R,
@@ -111,11 +113,12 @@ double PointToPointIcp::likelihood(
     Eigen::MatrixXd src_transformed = R * source.points();
     src_transformed.colwise() += t;
 
+    // Reverse correspondences: each target (measurement) point finds nearest source (template)
     auto correspondences = find_correspondences(
-        src_transformed, target.points(), params_.max_correspondence_dist);
+        target.points(), src_transformed, params_.max_correspondence_dist);
 
-    return compute_gaussian_likelihood(
-        src_transformed, target.points(), correspondences);
+    return compute_log_likelihood(
+        target.points(), src_transformed, correspondences);
 }
 
 } // namespace brew::template_matching

@@ -36,9 +36,13 @@ public:
         icp_ = std::move(icp);
     }
 
+    /// ICP iterations from the last correct() call.
+    [[nodiscard]] int last_icp_iterations() const { return last_icp_iterations_; }
+
 private:
     Eigen::MatrixXd rotation_process_noise_;
     std::shared_ptr<template_matching::IcpBase> icp_;
+    mutable int last_icp_iterations_ = 0;
 };
 
 } // namespace brew::filters
