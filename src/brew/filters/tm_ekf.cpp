@@ -60,6 +60,7 @@ std::unique_ptr<Filter<models::TemplatePose>> TmEkf::clone() const {
     c->measurement_noise_ = measurement_noise_;
     c->rotation_process_noise_ = rotation_process_noise_;
     c->icp_ = icp_;
+    c->icp_map_ = icp_map_;
     return c;
 }
 
@@ -71,10 +72,23 @@ models::TemplatePose TmEkf::predict(
     const int n_rot = prev.rot_dim();
     const int n_aug = prev.aug_dim();
 
-    // Propagate translational state via dynamics
-    const auto F = dyn_obj_->get_state_mat(dt, prev.mean());
-    const auto G = dyn_obj_->get_input_mat(dt, prev.mean());
-    Eigen::VectorXd next_mean = dyn_obj_->propagate_state(dt, prev.mean());
+    // Propagate translational state via dynamics (with rotation coupling if supported)
+    Eigen::MatrixXd F, G;
+    Eigen::VectorXd next_mean;
+    Eigen::MatrixXd next_rotation;
+
+    if (prev.has_rotation()) {
+        F = dyn_obj_->get_state_mat(dt, prev.mean(), prev.rotation());
+        G = dyn_obj_->get_input_mat(dt, prev.mean(), prev.rotation());
+        next_mean = dyn_obj_->propagate_state(dt, prev.mean(), prev.rotation());
+        next_rotation = dyn_obj_->propagate_extent(dt, prev.mean(), prev.rotation());
+    } else {
+        // No rotation yet (birth component) — use base dynamics
+        F = dyn_obj_->get_state_mat(dt, prev.mean());
+        G = dyn_obj_->get_input_mat(dt, prev.mean());
+        next_mean = dyn_obj_->propagate_state(dt, prev.mean());
+        next_rotation = Eigen::MatrixXd();  // stays empty
+    }
 
     // Build augmented F: [F, 0; 0, I_rot]
     Eigen::MatrixXd F_aug = Eigen::MatrixXd::Identity(n_aug, n_aug);
@@ -88,9 +102,6 @@ models::TemplatePose TmEkf::predict(
     // Propagate augmented covariance
     Eigen::MatrixXd next_cov = F_aug * prev.covariance() * F_aug.transpose() + Q_aug;
     next_cov = 0.5 * (next_cov + next_cov.transpose());
-
-    // Rotation: use propagate_extent if dynamics provides it, else hold constant
-    Eigen::MatrixXd next_rotation = dyn_obj_->propagate_extent(dt, prev.mean(), prev.rotation());
 
     return models::TemplatePose(
         std::move(next_mean), std::move(next_cov), std::move(next_rotation),
@@ -112,21 +123,28 @@ TmEkf::CorrectionResult TmEkf::correct(
     Eigen::MatrixXd meas_mat = Eigen::Map<const Eigen::MatrixXd>(measurement.data(), d, M);
     template_matching::PointCloud meas_cloud(meas_mat);
 
-    // Current pose estimate
-    Eigen::VectorXd t_pred = predicted.position();
+    // Use measurement centroid as ICP initial translation — guarantees overlap
+    // even when the predicted position is far from the measurement cloud.
+    Eigen::VectorXd t_init = meas_mat.rowwise().mean();
 
-    // Run ICP (embed to 3D if 2D)
+    // Run ICP. Use PCA-ICP only for cold start (no rotation yet);
+    // during tracking, use the base ICP seeded with the filter's predicted rotation.
     last_icp_iterations_ = 0;
     template_matching::IcpResult icp_result;
     Eigen::VectorXd t_icp(d);
     Eigen::MatrixXd R_icp(d, d);
 
+    // Pick ICP variant: PCA for cold start, base ICP for tracking
+    const auto& icp_to_use = predicted.has_rotation()
+        ? *icp_ : get_icp(&predicted.get_template());
+
     if (d == 2) {
         // Embed 2D → 3D
         Eigen::Matrix3d R_pred_3d = Eigen::Matrix3d::Identity();
-        R_pred_3d.topLeftCorner(2, 2) = predicted.rotation();
-        Eigen::Vector3d t_pred_3d = Eigen::Vector3d::Zero();
-        t_pred_3d.head(2) = t_pred;
+        if (predicted.has_rotation())
+            R_pred_3d.topLeftCorner(2, 2) = predicted.rotation();
+        Eigen::Vector3d t_init_3d = Eigen::Vector3d::Zero();
+        t_init_3d.head(2) = t_init;
 
         // Embed template
         const auto& templ_pts = predicted.get_template().points();
@@ -139,16 +157,19 @@ TmEkf::CorrectionResult TmEkf::correct(
         meas_3d.topRows(2) = meas_mat;
         template_matching::PointCloud meas_cloud_3d(meas_3d);
 
-        icp_result = icp_->align(templ_cloud_3d, meas_cloud_3d, R_pred_3d, t_pred_3d);
+        icp_result = icp_to_use.align(templ_cloud_3d, meas_cloud_3d, R_pred_3d, t_init_3d);
 
         // Project back to 2D
         R_icp = icp_result.rotation.topLeftCorner(2, 2);
         t_icp = icp_result.translation.head(2);
     } else {
-        icp_result = icp_->align(
+        Eigen::Matrix3d R_pred = predicted.has_rotation()
+            ? Eigen::Matrix3d(predicted.rotation())
+            : Eigen::Matrix3d::Identity();
+
+        icp_result = icp_to_use.align(
             predicted.get_template(), meas_cloud,
-            Eigen::Matrix3d(predicted.rotation()),
-            Eigen::Vector3d(t_pred));
+            R_pred, Eigen::Vector3d(t_init));
 
         R_icp = icp_result.rotation;
         t_icp = icp_result.translation;
@@ -165,75 +186,86 @@ TmEkf::CorrectionResult TmEkf::correct(
     // Translation innovation
     Eigen::VectorXd trans_innov = t_icp - H_pos * predicted.mean();
 
-    // Rotation innovation
-    Eigen::VectorXd rot_innov(n_rot);
-    if (d == 3) {
-        Eigen::Matrix3d R_err = R_icp * predicted.rotation().transpose();
-        rot_innov = Log_SO3(Eigen::Matrix3d(R_err));
+    Eigen::VectorXd next_mean;
+    Eigen::MatrixXd next_rotation;
+    Eigen::MatrixXd next_cov;
+    double mahal;
+    double log_det_S;
+    int innov_dim;
+
+    if (!predicted.has_rotation()) {
+        // Cold start: no prior rotation. Use ICP rotation directly, standard
+        // EKF on translation only, skip rotation innovation.
+        const Eigen::MatrixXd& P = predicted.covariance();
+        Eigen::MatrixXd R_trans = measurement_noise_.topLeftCorner(d, d);
+        Eigen::MatrixXd S_trans = H_pos * P.topLeftCorner(n_trans, n_trans) * H_pos.transpose() + R_trans;
+        S_trans = 0.5 * (S_trans + S_trans.transpose());
+        auto S_ldlt = S_trans.ldlt();
+
+        Eigen::MatrixXd K_trans = P.topLeftCorner(n_trans, n_trans) * H_pos.transpose()
+            * S_ldlt.solve(Eigen::MatrixXd::Identity(d, d));
+
+        next_mean = predicted.mean() + K_trans * trans_innov;
+        next_rotation = R_icp;  // adopt ICP rotation directly
+
+        Eigen::MatrixXd I_trans = Eigen::MatrixXd::Identity(n_trans, n_trans);
+        Eigen::MatrixXd P_trans_updated = (I_trans - K_trans * H_pos) * P.topLeftCorner(n_trans, n_trans);
+
+        // Build full augmented covariance with rotation from prior
+        next_cov = predicted.covariance();
+        next_cov.topLeftCorner(n_trans, n_trans) = 0.5 * (P_trans_updated + P_trans_updated.transpose());
+
+        mahal = trans_innov.transpose() * S_ldlt.solve(trans_innov);
+        log_det_S = S_ldlt.vectorD().array().abs().log().sum();
+        innov_dim = d;
     } else {
-        Eigen::Matrix2d R_err = R_icp * predicted.rotation().transpose();
-        rot_innov(0) = Log_SO2(Eigen::Matrix2d(R_err));
+        // Tracking: full augmented EKF with rotation innovation
+        Eigen::VectorXd rot_innov(n_rot);
+        if (d == 3) {
+            Eigen::Matrix3d R_err = R_icp * predicted.rotation().transpose();
+            rot_innov = Log_SO3(Eigen::Matrix3d(R_err));
+        } else {
+            Eigen::Matrix2d R_err = R_icp * predicted.rotation().transpose();
+            rot_innov(0) = Log_SO2(Eigen::Matrix2d(R_err));
+        }
+
+        const int m_dim = d + n_rot;
+        Eigen::VectorXd innovation(m_dim);
+        innovation.head(d) = trans_innov;
+        innovation.tail(n_rot) = rot_innov;
+
+        Eigen::MatrixXd H_aug = Eigen::MatrixXd::Zero(m_dim, n_aug);
+        H_aug.topLeftCorner(d, n_trans) = H_pos;
+        H_aug.bottomRightCorner(n_rot, n_rot) = Eigen::MatrixXd::Identity(n_rot, n_rot);
+
+        const Eigen::MatrixXd& P = predicted.covariance();
+        Eigen::MatrixXd S = H_aug * P * H_aug.transpose() + measurement_noise_;
+        S = 0.5 * (S + S.transpose());
+
+        auto S_ldlt = S.ldlt();
+        Eigen::MatrixXd K = P * H_aug.transpose() * S_ldlt.solve(Eigen::MatrixXd::Identity(m_dim, m_dim));
+
+        Eigen::VectorXd delta = K * innovation;
+        next_mean = predicted.mean() + delta.head(n_trans);
+
+        Eigen::VectorXd delta_rot = delta.tail(n_rot);
+        if (d == 3) {
+            next_rotation = Exp_SO3(Eigen::Vector3d(delta_rot)) * predicted.rotation();
+        } else {
+            next_rotation = Exp_SO2(delta_rot(0)) * Eigen::Matrix2d(predicted.rotation());
+        }
+
+        Eigen::MatrixXd I_aug = Eigen::MatrixXd::Identity(n_aug, n_aug);
+        next_cov = (I_aug - K * H_aug) * P;
+        next_cov = 0.5 * (next_cov + next_cov.transpose());
+
+        mahal = innovation.transpose() * S_ldlt.solve(innovation);
+        log_det_S = S_ldlt.vectorD().array().abs().log().sum();
+        innov_dim = m_dim;
     }
-
-    // Full augmented innovation
-    const int m_dim = d + n_rot;
-    Eigen::VectorXd innovation(m_dim);
-    innovation.head(d) = trans_innov;
-    innovation.tail(n_rot) = rot_innov;
-
-    // Augmented measurement Jacobian
-    Eigen::MatrixXd H_aug = Eigen::MatrixXd::Zero(m_dim, n_aug);
-    H_aug.topLeftCorner(d, n_trans) = H_pos;
-    H_aug.bottomRightCorner(n_rot, n_rot) = Eigen::MatrixXd::Identity(n_rot, n_rot);
-
-    // Innovation covariance
-    const Eigen::MatrixXd& P = predicted.covariance();
-    Eigen::MatrixXd S = H_aug * P * H_aug.transpose() + measurement_noise_;
-    S = 0.5 * (S + S.transpose());
-
-    // Innovation gate: reject ICP results that are statistically implausible.
-    // This prevents ICP failures from corrupting the state.
-    auto S_ldlt = S.ldlt();
-    double mahal = innovation.transpose() * S_ldlt.solve(innovation);
-
-    // If innovation is too large (chi-squared gate), return predicted with low likelihood
-    const double chi2_gate = 50.0;  // generous gate
-    if (mahal > chi2_gate) {
-        return {
-            models::TemplatePose(predicted.mean(), predicted.covariance(),
-                                  predicted.rotation(),
-                                  predicted.template_ptr(), predicted.pos_indices()),
-            1e-300
-        };
-    }
-
-    // Kalman gain
-    Eigen::MatrixXd K = P * H_aug.transpose() * S.inverse();
-
-    // State correction
-    Eigen::VectorXd delta = K * innovation;
-
-    // Translational update (Euclidean)
-    Eigen::VectorXd next_mean = predicted.mean() + delta.head(n_trans);
-
-    // Rotation update (on manifold)
-    Eigen::VectorXd delta_rot = delta.tail(n_rot);
-    Eigen::MatrixXd next_rotation(d, d);
-    if (d == 3) {
-        next_rotation = Exp_SO3(Eigen::Vector3d(delta_rot)) * predicted.rotation();
-    } else {
-        next_rotation = Exp_SO2(delta_rot(0)) * Eigen::Matrix2d(predicted.rotation());
-    }
-
-    // Covariance update
-    Eigen::MatrixXd I_aug = Eigen::MatrixXd::Identity(n_aug, n_aug);
-    Eigen::MatrixXd next_cov = (I_aug - K * H_aug) * P;
-    next_cov = 0.5 * (next_cov + next_cov.transpose());
 
     // Combined likelihood = L_template * L_pose
-    // L_pose: zero-mean Gaussian innovation likelihood N(innovation; 0, S)
-    double log_det_S = S_ldlt.vectorD().array().abs().log().sum();
-    double log_L_pose = -0.5 * (m_dim * std::log(2.0 * M_PI) + log_det_S + mahal);
+    double log_L_pose = -0.5 * (innov_dim * std::log(2.0 * M_PI) + log_det_S + mahal);
 
     // L_template: how well the template shape fits the measurement (from ICP)
     double log_L = icp_result.log_likelihood + log_L_pose;

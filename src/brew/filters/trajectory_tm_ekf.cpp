@@ -50,6 +50,7 @@ std::unique_ptr<Filter<TrajectoryType>> TrajectoryTmEkf::clone() const {
     c->measurement_noise_ = measurement_noise_;
     c->rotation_process_noise_ = rotation_process_noise_;
     c->icp_ = icp_;
+    c->icp_map_ = icp_map_;
     c->l_window_ = l_window_;
     return c;
 }
@@ -72,10 +73,19 @@ TrajectoryType TrajectoryTmEkf::predict(
     Eigen::MatrixXd prev_cov = prev.covariance().block(
         start_idx, start_idx, total - start_idx, total - start_idx);
 
-    // Dynamics
-    Eigen::VectorXd next_state = dyn_obj_->propagate_state(dt, prev_state);
-    Eigen::MatrixXd F = dyn_obj_->get_state_mat(dt, prev_state);
-    Eigen::MatrixXd G = dyn_obj_->get_input_mat(dt, prev_state);
+    // Dynamics (with rotation coupling if supported)
+    const auto& prev_tp = prev.current();
+    Eigen::VectorXd next_state;
+    Eigen::MatrixXd F, G;
+    if (prev_tp.has_rotation()) {
+        next_state = dyn_obj_->propagate_state(dt, prev_state, prev_tp.rotation());
+        F = dyn_obj_->get_state_mat(dt, prev_state, prev_tp.rotation());
+        G = dyn_obj_->get_input_mat(dt, prev_state, prev_tp.rotation());
+    } else {
+        next_state = dyn_obj_->propagate_state(dt, prev_state);
+        F = dyn_obj_->get_state_mat(dt, prev_state);
+        G = dyn_obj_->get_input_mat(dt, prev_state);
+    }
 
     // F_dot: extends stacked state
     const int cov_dim = static_cast<int>(prev_cov.rows());
@@ -95,9 +105,11 @@ TrajectoryType TrajectoryTmEkf::predict(
     new_mean.head(cov_dim) = prev.mean().tail(total - start_idx);
     new_mean.tail(sd) = next_state;
 
-    // Rotation: propagate via dynamics (identity for SingleIntegrator)
-    const auto& prev_tp = prev.current();
-    Eigen::MatrixXd next_rotation = dyn_obj_->propagate_extent(dt, prev_state, prev_tp.rotation());
+    // Rotation: propagate via dynamics, or stay empty for birth
+    Eigen::MatrixXd next_rotation;
+    if (prev_tp.has_rotation()) {
+        next_rotation = dyn_obj_->propagate_extent(dt, prev_state, prev_tp.rotation());
+    }
 
     // Augmented covariance for the current step's TemplatePose
     const int n_rot = prev_tp.rot_dim();
@@ -143,19 +155,23 @@ TrajectoryTmEkf::CorrectionResult TrajectoryTmEkf::correct(
     Eigen::MatrixXd meas_mat = Eigen::Map<const Eigen::MatrixXd>(measurement.data(), d, M);
     template_matching::PointCloud meas_cloud(meas_mat);
 
-    // Current pose estimate
-    Eigen::VectorXd t_pred = pred_tp.position();
+    // Use measurement centroid as ICP initial translation
+    Eigen::VectorXd t_init = meas_mat.rowwise().mean();
 
-    // Run ICP (embed to 3D if 2D)
+    // Run ICP. Use PCA-ICP only for cold start (no rotation yet).
     template_matching::IcpResult icp_result;
     Eigen::VectorXd t_icp(d);
     Eigen::MatrixXd R_icp(d, d);
 
+    const auto& icp_to_use = pred_tp.has_rotation()
+        ? *icp_ : get_icp(&pred_tp.get_template());
+
     if (d == 2) {
         Eigen::Matrix3d R_pred_3d = Eigen::Matrix3d::Identity();
-        R_pred_3d.topLeftCorner(2, 2) = pred_tp.rotation();
-        Eigen::Vector3d t_pred_3d = Eigen::Vector3d::Zero();
-        t_pred_3d.head(2) = t_pred;
+        if (pred_tp.has_rotation())
+            R_pred_3d.topLeftCorner(2, 2) = pred_tp.rotation();
+        Eigen::Vector3d t_init_3d = Eigen::Vector3d::Zero();
+        t_init_3d.head(2) = t_init;
 
         const auto& templ_pts = pred_tp.get_template().points();
         Eigen::MatrixXd templ_3d = Eigen::MatrixXd::Zero(3, templ_pts.cols());
@@ -166,15 +182,18 @@ TrajectoryTmEkf::CorrectionResult TrajectoryTmEkf::correct(
         meas_3d.topRows(2) = meas_mat;
         template_matching::PointCloud meas_cloud_3d(meas_3d);
 
-        icp_result = icp_->align(templ_cloud_3d, meas_cloud_3d, R_pred_3d, t_pred_3d);
+        icp_result = icp_to_use.align(templ_cloud_3d, meas_cloud_3d, R_pred_3d, t_init_3d);
 
         R_icp = icp_result.rotation.topLeftCorner(2, 2);
         t_icp = icp_result.translation.head(2);
     } else {
-        icp_result = icp_->align(
+        Eigen::Matrix3d R_pred = pred_tp.has_rotation()
+            ? Eigen::Matrix3d(pred_tp.rotation())
+            : Eigen::Matrix3d::Identity();
+
+        icp_result = icp_to_use.align(
             pred_tp.get_template(), meas_cloud,
-            Eigen::Matrix3d(pred_tp.rotation()),
-            Eigen::Vector3d(t_pred));
+            R_pred, Eigen::Vector3d(t_init));
         R_icp = icp_result.rotation;
         t_icp = icp_result.translation;
     }
@@ -190,56 +209,78 @@ TrajectoryTmEkf::CorrectionResult TrajectoryTmEkf::correct(
     // Translation innovation
     Eigen::VectorXd trans_innov = t_icp - H_pos * prev_state;
 
-    // Rotation innovation
-    Eigen::VectorXd rot_innov(n_rot);
-    if (d == 3) {
-        Eigen::Matrix3d R_err = R_icp * pred_tp.rotation().transpose();
-        rot_innov = Log_SO3(Eigen::Matrix3d(R_err));
-    } else {
-        Eigen::Matrix2d R_err = R_icp * Eigen::Matrix2d(pred_tp.rotation().transpose());
-        rot_innov(0) = Log_SO2(Eigen::Matrix2d(R_err));
-    }
+    Eigen::MatrixXd next_rotation;
+    Eigen::MatrixXd next_aug_cov;
+    double mahal;
+    double log_det_S;
+    int innov_dim;
 
-    // Full augmented innovation
-    const int m_dim = d + n_rot;
-    Eigen::VectorXd innovation(m_dim);
-    innovation.head(d) = trans_innov;
-    innovation.tail(n_rot) = rot_innov;
-
-    // Augmented measurement Jacobian for current step
-    const int n_aug = sd + n_rot;
-    Eigen::MatrixXd H_aug = Eigen::MatrixXd::Zero(m_dim, n_aug);
-    H_aug.topLeftCorner(d, sd) = H_pos;
-    H_aug.bottomRightCorner(n_rot, n_rot) = Eigen::MatrixXd::Identity(n_rot, n_rot);
-
-    // Current step's augmented covariance
     const Eigen::MatrixXd& P_aug = pred_tp.covariance();
-
-    // Innovation covariance (using full augmented state)
     const Eigen::MatrixXd& R_meas = measurement_noise_;
-    Eigen::MatrixXd S = H_aug * P_aug * H_aug.transpose() + R_meas;
-    S = 0.5 * (S + S.transpose());
 
-    // Augmented Kalman gain
-    Eigen::MatrixXd K_aug = P_aug * H_aug.transpose() * S.inverse();
+    if (!pred_tp.has_rotation()) {
+        // Cold start: adopt ICP rotation directly, EKF on translation only
+        Eigen::MatrixXd R_trans = R_meas.topLeftCorner(d, d);
+        Eigen::MatrixXd S_t = H_pos * P_aug.topLeftCorner(sd, sd) * H_pos.transpose() + R_trans;
+        S_t = 0.5 * (S_t + S_t.transpose());
+        auto S_ldlt = S_t.ldlt();
 
-    // Augmented correction delta
-    Eigen::VectorXd delta = K_aug * innovation;
-    Eigen::VectorXd delta_trans = delta.head(sd);
-    Eigen::VectorXd delta_rot = delta.tail(n_rot);
+        Eigen::MatrixXd K_t = P_aug.topLeftCorner(sd, sd) * H_pos.transpose()
+            * S_ldlt.solve(Eigen::MatrixXd::Identity(d, d));
 
-    // Rotation update (on manifold)
-    Eigen::MatrixXd next_rotation(d, d);
-    if (d == 3) {
-        next_rotation = Exp_SO3(Eigen::Vector3d(delta_rot)) * pred_tp.rotation();
+        next_rotation = R_icp;
+        next_aug_cov = P_aug;
+        Eigen::MatrixXd P_trans_updated = (Eigen::MatrixXd::Identity(sd, sd) - K_t * H_pos)
+            * P_aug.topLeftCorner(sd, sd);
+        next_aug_cov.topLeftCorner(sd, sd) = 0.5 * (P_trans_updated + P_trans_updated.transpose());
+
+        mahal = trans_innov.transpose() * S_ldlt.solve(trans_innov);
+        log_det_S = S_ldlt.vectorD().array().abs().log().sum();
+        innov_dim = d;
     } else {
-        next_rotation = Exp_SO2(delta_rot(0)) * Eigen::Matrix2d(pred_tp.rotation());
-    }
+        // Tracking: full augmented EKF with rotation innovation
+        Eigen::VectorXd rot_innov(n_rot);
+        if (d == 3) {
+            Eigen::Matrix3d R_err = R_icp * pred_tp.rotation().transpose();
+            rot_innov = Log_SO3(Eigen::Matrix3d(R_err));
+        } else {
+            Eigen::Matrix2d R_err = R_icp * Eigen::Matrix2d(pred_tp.rotation().transpose());
+            rot_innov(0) = Log_SO2(Eigen::Matrix2d(R_err));
+        }
 
-    // Updated augmented covariance
-    Eigen::MatrixXd I_aug = Eigen::MatrixXd::Identity(n_aug, n_aug);
-    Eigen::MatrixXd next_aug_cov = (I_aug - K_aug * H_aug) * P_aug;
-    next_aug_cov = 0.5 * (next_aug_cov + next_aug_cov.transpose());
+        const int m_dim = d + n_rot;
+        Eigen::VectorXd innovation(m_dim);
+        innovation.head(d) = trans_innov;
+        innovation.tail(n_rot) = rot_innov;
+
+        const int n_aug = sd + n_rot;
+        Eigen::MatrixXd H_aug = Eigen::MatrixXd::Zero(m_dim, n_aug);
+        H_aug.topLeftCorner(d, sd) = H_pos;
+        H_aug.bottomRightCorner(n_rot, n_rot) = Eigen::MatrixXd::Identity(n_rot, n_rot);
+
+        Eigen::MatrixXd S = H_aug * P_aug * H_aug.transpose() + R_meas;
+        S = 0.5 * (S + S.transpose());
+
+        auto S_ldlt = S.ldlt();
+        Eigen::MatrixXd K_aug = P_aug * H_aug.transpose() * S.inverse();
+
+        Eigen::VectorXd delta = K_aug * innovation;
+        Eigen::VectorXd delta_rot = delta.tail(n_rot);
+
+        if (d == 3) {
+            next_rotation = Exp_SO3(Eigen::Vector3d(delta_rot)) * pred_tp.rotation();
+        } else {
+            next_rotation = Exp_SO2(delta_rot(0)) * Eigen::Matrix2d(pred_tp.rotation());
+        }
+
+        Eigen::MatrixXd I_aug = Eigen::MatrixXd::Identity(n_aug, n_aug);
+        next_aug_cov = (I_aug - K_aug * H_aug) * P_aug;
+        next_aug_cov = 0.5 * (next_aug_cov + next_aug_cov.transpose());
+
+        mahal = innovation.transpose() * S_ldlt.solve(innovation);
+        log_det_S = S_ldlt.vectorD().array().abs().log().sum();
+        innov_dim = m_dim;
+    }
 
     // --- Stacked translational correction ---
     // Use the translational innovation to correct the full stacked state
@@ -255,9 +296,7 @@ TrajectoryTmEkf::CorrectionResult TrajectoryTmEkf::correct(
 
     // --- Likelihood ---
 
-    double log_det_S = S.ldlt().vectorD().array().abs().log().sum();
-    double mahal = innovation.transpose() * S.ldlt().solve(innovation);
-    double log_L_pose = -0.5 * (m_dim * std::log(2.0 * M_PI) + log_det_S + mahal);
+    double log_L_pose = -0.5 * (innov_dim * std::log(2.0 * M_PI) + log_det_S + mahal);
 
     double log_L = icp_result.log_likelihood + log_L_pose;
     double likelihood = std::exp(std::clamp(log_L, -500.0, 500.0));

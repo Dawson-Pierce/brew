@@ -56,9 +56,9 @@ IcpResult PointToPlaneIcp::align(
     const Eigen::Matrix3d& R_init,
     const Eigen::Vector3d& t_init) const {
 
-    // Estimate target normals
-    const int k = std::min(10, target.num_points());
-    Eigen::MatrixXd normals = estimate_normals(target, k);
+    // Estimate normals from the source (template) — known dense geometry
+    const int k = std::min(10, source.num_points());
+    Eigen::MatrixXd src_normals = estimate_normals(source, k);
 
     Eigen::Matrix3d R = R_init;
     Eigen::Vector3d t = t_init;
@@ -68,11 +68,12 @@ IcpResult PointToPlaneIcp::align(
     result.translation = t;
 
     for (int iter = 0; iter < params_.max_iterations; ++iter) {
-        // Transform source
+        // Transform source points and normals
         Eigen::MatrixXd src_transformed = R * source.points();
         src_transformed.colwise() += t;
+        Eigen::MatrixXd normals_transformed = R * src_normals;
 
-        // Find correspondences
+        // Find correspondences: each source point → nearest target point
         auto correspondences = find_correspondences(
             src_transformed, target.points(), params_.max_correspondence_dist);
 
@@ -81,7 +82,7 @@ IcpResult PointToPlaneIcp::align(
         const int N = static_cast<int>(correspondences.size());
 
         // Build 6×6 linear system for point-to-plane
-        // Minimize Σ (n_i · (R*s_i + t - t_i))²
+        // Minimize Σ (n_i · (p_i - q_i))² where n_i is the source normal
         // Linearize R ≈ I + [α]× for small angles
         // Variables: x = [α, β, γ, tx, ty, tz]
         Eigen::MatrixXd A(N, 6);
@@ -91,7 +92,7 @@ IcpResult PointToPlaneIcp::align(
             const auto& [si, ti] = correspondences[idx];
             const Eigen::Vector3d& p = src_transformed.col(si);
             const Eigen::Vector3d& q = target.points().col(ti);
-            const Eigen::Vector3d& n = normals.col(ti);
+            const Eigen::Vector3d& n = normals_transformed.col(si);
 
             // A row: [p × n, n]
             A(idx, 0) = p(1) * n(2) - p(2) * n(1);
@@ -123,12 +124,13 @@ IcpResult PointToPlaneIcp::align(
         R = delta_R * R;
         t = delta_R * t + delta_t;
 
-        // Compute RMSE (point-to-plane)
+        // Compute RMSE (point-to-plane using source normals)
         double sum_sq = 0.0;
         Eigen::MatrixXd src_new = R * source.points();
         src_new.colwise() += t;
+        Eigen::MatrixXd normals_new = R * src_normals;
         for (const auto& [si, ti] : correspondences) {
-            double d = normals.col(ti).dot(src_new.col(si) - target.points().col(ti));
+            double d = normals_new.col(si).dot(src_new.col(si) - target.points().col(ti));
             sum_sq += d * d;
         }
         double rmse = std::sqrt(sum_sq / N);

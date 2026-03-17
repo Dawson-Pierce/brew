@@ -48,6 +48,7 @@ public:
     // ---- Rotation ----
     [[nodiscard]] const Eigen::MatrixXd& rotation() const { return rotation_; }
     [[nodiscard]] Eigen::MatrixXd& rotation() { return rotation_; }
+    [[nodiscard]] bool has_rotation() const { return rotation_.size() > 0; }
 
     // ---- Template ----
     [[nodiscard]] const template_matching::PointCloud& get_template() const { return *template_; }

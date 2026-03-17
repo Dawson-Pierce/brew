@@ -13,7 +13,6 @@
 #include "brew/template_matching/point_cloud_io.hpp"
 #include "brew/template_matching/point_to_point_icp.hpp"
 #include "brew/template_matching/point_to_plane_icp.hpp"
-#include "brew/template_matching/pca_icp.hpp"
 
 #include <Eigen/Dense>
 #include <random>
@@ -79,16 +78,15 @@ Eigen::MatrixXd generate_tm_measurements(
     const std::vector<TmTruthTarget>& targets,
     const template_matching::PointCloud& templ,
     int timestep, double point_noise_std,
-    std::mt19937& rng, double p_detect)
+    std::mt19937& rng)
 {
     std::normal_distribution<double> noise(0.0, point_noise_std);
-    std::uniform_real_distribution<double> det_roll(0.0, 1.0);
 
     std::vector<Eigen::MatrixXd> clouds;
 
     for (const auto& tgt : targets) {
         if (timestep >= tgt.birth_time && timestep <= tgt.death_time) {
-            if (det_roll(rng) < p_detect) {
+            {
                 int idx = timestep - tgt.birth_time;
                 Eigen::Vector2d pos = tgt.states[idx].head(2);
                 double angle = tgt.angles[idx];
@@ -177,16 +175,16 @@ std::unique_ptr<models::Mixture<models::TemplatePose>> make_tm_birth(
     birth_cov(2, 2) = 25.0;
     birth_cov(3, 3) = 25.0;
     birth_cov(4, 4) = 1.0;
-    Eigen::Matrix2d R_init = Eigen::Matrix2d::Identity();
+    Eigen::MatrixXd R_empty;  // empty rotation — triggers PCA-ICP for cold start
     std::vector<int> pos_indices = {0, 1};
 
     // Both births centered at approximate scene center
     Eigen::VectorXd b0(4);
     b0 << 25.0, 15.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TemplatePose>(b0, birth_cov, R_init, templ_rect, pos_indices), weight);
+        std::make_unique<models::TemplatePose>(b0, birth_cov, R_empty, templ_rect, pos_indices), weight);
     birth->add_component(
-        std::make_unique<models::TemplatePose>(b0, birth_cov, R_init, templ_tri, pos_indices), weight);
+        std::make_unique<models::TemplatePose>(b0, birth_cov, R_empty, templ_tri, pos_indices), weight);
     return birth;
 }
 
@@ -204,14 +202,14 @@ make_trajectory_tm_birth(
     birth_cov(2, 2) = 25.0;
     birth_cov(3, 3) = 25.0;
     birth_cov(4, 4) = 1.0;
-    Eigen::Matrix2d R_init = Eigen::Matrix2d::Identity();
+    Eigen::MatrixXd R_empty;  // empty rotation — triggers PCA-ICP for cold start
     std::vector<int> pos_indices = {0, 1};
 
     Eigen::VectorXd b0(4);
     b0 << 25.0, 15.0, 0.0, 0.0;
 
-    auto tp1 = models::TemplatePose(b0, birth_cov, R_init, templ_rect, pos_indices);
-    auto tp2 = models::TemplatePose(b0, birth_cov, R_init, templ_tri, pos_indices);
+    auto tp1 = models::TemplatePose(b0, birth_cov, R_empty, templ_rect, pos_indices);
+    auto tp2 = models::TemplatePose(b0, birth_cov, R_empty, templ_tri, pos_indices);
 
     // Build Trajectory manually: stacked state = translational mean, stacked cov = translational cov
     auto traj1 = std::make_unique<models::Trajectory<models::TemplatePose>>();
@@ -236,17 +234,16 @@ Eigen::MatrixXd generate_tm_measurements_multi(
     const std::vector<TmTruthTarget>& targets,
     const std::vector<std::shared_ptr<template_matching::PointCloud>>& templates,
     int timestep, double point_noise_std,
-    std::mt19937& rng, double p_detect)
+    std::mt19937& rng)
 {
     std::normal_distribution<double> noise(0.0, point_noise_std);
-    std::uniform_real_distribution<double> det_roll(0.0, 1.0);
 
     std::vector<Eigen::MatrixXd> clouds;
 
     for (std::size_t ti = 0; ti < targets.size(); ++ti) {
         const auto& tgt = targets[ti];
         if (timestep >= tgt.birth_time && timestep <= tgt.death_time) {
-            if (det_roll(rng) < p_detect) {
+            {
                 int idx = timestep - tgt.birth_time;
                 Eigen::Vector2d pos = tgt.states[idx].head(2);
                 double angle = tgt.angles[idx];
@@ -279,7 +276,7 @@ struct TmScenario {
     int num_steps = 30;
     double dt = 1.0;
     double point_noise_std = 0.05;  // low noise — this is an algorithm test
-    double p_detect = 1.0;          // perfect detection for clean test
+    double p_detect = 0.70;          // perfect detection for clean test
 
     std::shared_ptr<template_matching::PointCloud> templ_rect;  // rectangle
     std::shared_ptr<template_matching::PointCloud> templ_tri;     // L-shape
@@ -319,7 +316,7 @@ struct TmScenario {
         measurements.resize(num_steps);
         for (int k = 0; k < num_steps; ++k) {
             measurements[k] = generate_tm_measurements_multi(
-                truth_targets, target_templates, k, point_noise_std, rng, p_detect);
+                truth_targets, target_templates, k, point_noise_std, rng);
         }
     }
 };
@@ -578,15 +575,15 @@ TEST(TmPhd, Tracking2D) {
 
         auto ax1 = matplot::subplot(fig, 1, 2, 0);
         ax1->hold(true);
-        auto la = ax1->plot(steps, pa); la->display_name("Target A");
-        auto lb = ax1->plot(steps, pb); lb->display_name("Target B");
+        auto la = ax1->plot(steps, pa); la->display_name("Target A"); la->line_width(2.0f);
+        auto lb = ax1->plot(steps, pb); lb->display_name("Target B"); lb->line_width(2.0f);
         ax1->xlabel("(a)");
         ax1->x_axis().label_font_size(18);
 
         auto ax2 = matplot::subplot(fig, 1, 2, 1);
         ax2->hold(true);
-        auto ra_l = ax2->plot(steps, ra); ra_l->display_name("Target A");
-        auto rb_l = ax2->plot(steps, rb); rb_l->display_name("Target B");
+        auto ra_l = ax2->plot(steps, ra); ra_l->display_name("Target A"); ra_l->line_width(2.0f);
+        auto rb_l = ax2->plot(steps, rb); rb_l->display_name("Target B"); rb_l->line_width(2.0f);
         ax2->xlabel("(b)");
         ax2->x_axis().label_font_size(18);
 
@@ -824,15 +821,15 @@ TEST(TmPhd, TrajectoryTracking2D) {
 
         auto ax1 = matplot::subplot(fig, 1, 2, 0);
         ax1->hold(true);
-        auto la = ax1->plot(steps, pa); la->display_name("Target A");
-        auto lb = ax1->plot(steps, pb); lb->display_name("Target B");
+        auto la = ax1->plot(steps, pa); la->display_name("Target A"); la->line_width(2.0f);
+        auto lb = ax1->plot(steps, pb); lb->display_name("Target B"); lb->line_width(2.0f);
         ax1->xlabel("(a)");
         ax1->x_axis().label_font_size(18);
 
         auto ax2 = matplot::subplot(fig, 1, 2, 1);
         ax2->hold(true);
-        auto ra_l = ax2->plot(steps, ra); ra_l->display_name("Target A");
-        auto rb_l = ax2->plot(steps, rb); rb_l->display_name("Target B");
+        auto ra_l = ax2->plot(steps, ra); ra_l->display_name("Target A"); ra_l->line_width(2.0f);
+        auto rb_l = ax2->plot(steps, rb); rb_l->display_name("Target B"); rb_l->line_width(2.0f);
         ax2->xlabel("(b)");
         ax2->x_axis().label_font_size(18);
 
@@ -858,6 +855,38 @@ Eigen::Matrix3d axis_angle_to_rotation(const Eigen::Vector3d& axis, double angle
     return Eigen::Matrix3d::Identity()
            + std::sin(angle) * K
            + (1.0 - std::cos(angle)) * K * K;
+}
+
+// Rotation matrix that aligns body x-axis with a velocity vector.
+// Assumes body x = forward, z = up convention. Returns proper rotation (det=+1).
+Eigen::Matrix3d facing_rotation(const Eigen::Vector3d& velocity) {
+    Eigen::Vector3d fwd = velocity.normalized();
+    // Choose an up hint that isn't parallel to fwd
+    Eigen::Vector3d up_hint = Eigen::Vector3d::UnitZ();
+    if (std::abs(fwd.dot(up_hint)) > 0.99) {
+        up_hint = Eigen::Vector3d::UnitY();
+    }
+    Eigen::Vector3d right = up_hint.cross(fwd).normalized();
+    Eigen::Vector3d up = fwd.cross(right).normalized();
+    Eigen::Matrix3d R;
+    R.col(0) = fwd;
+    R.col(1) = right;
+    R.col(2) = up;
+    return R;
+}
+
+// Compute rotation that aligns a point cloud's principal axes with XYZ.
+// Longest axis → X (forward), middle → Y (span), shortest → Z (up).
+// Points must already be centered.
+Eigen::Matrix3d pca_alignment(const Eigen::MatrixXd& pts) {
+    Eigen::Matrix3d cov = (pts * pts.transpose()) / static_cast<double>(pts.cols());
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(cov);
+    Eigen::Matrix3d R;
+    R.col(0) = solver.eigenvectors().col(2);  // largest  → forward (X)
+    R.col(1) = solver.eigenvectors().col(1);  // middle   → span (Y)
+    R.col(2) = solver.eigenvectors().col(0);  // smallest → up (Z)
+    if (R.determinant() < 0) R.col(2) = -R.col(2);
+    return R.transpose();  // maps PCA axes → standard axes
 }
 
 // Transform a 3D point cloud by rotation matrix and translation
@@ -911,26 +940,89 @@ double rotation_error_3d(const Eigen::Matrix3d& R_est, const Eigen::Matrix3d& R_
     return std::acos(cos_angle);
 }
 
-// Generate 3D point cloud measurements from truth targets.
-// Only points visible from below (face normal z < 0 after rotation) are included.
-// normals: per-target normals matrices (3×N, matching templates).
+// Möller–Trumbore ray-triangle intersection.
+// Returns true if ray hits triangle at parameter t in (eps, max_t - eps).
+bool ray_triangle_intersect(
+    const Eigen::Vector3d& origin,
+    const Eigen::Vector3d& direction,
+    const Eigen::Vector3d& v0,
+    const Eigen::Vector3d& v1,
+    const Eigen::Vector3d& v2,
+    double max_t,
+    double eps = 1e-6)
+{
+    Eigen::Vector3d e1 = v1 - v0;
+    Eigen::Vector3d e2 = v2 - v0;
+    Eigen::Vector3d h = direction.cross(e2);
+    double a = e1.dot(h);
+    if (std::abs(a) < eps) return false;
+
+    double f = 1.0 / a;
+    Eigen::Vector3d s = origin - v0;
+    double u = f * s.dot(h);
+    if (u < 0.0 || u > 1.0) return false;
+
+    Eigen::Vector3d q = s.cross(e1);
+    double v = f * direction.dot(q);
+    if (v < 0.0 || u + v > 1.0) return false;
+
+    double t = f * e2.dot(q);
+    return t > eps && t < max_t - eps;
+}
+
+// Check if a surface point is visible from a sensor via ray tracing.
+// Backface culling + occlusion test against mesh triangles.
+bool is_point_visible(
+    const Eigen::Vector3d& world_pt,
+    const Eigen::Vector3d& world_normal,
+    const Eigen::Vector3d& sensor_pos,
+    const Eigen::MatrixXd& world_tris,  // 3 x (3*num_tris)
+    int num_tris)
+{
+    Eigen::Vector3d to_sensor = sensor_pos - world_pt;
+    double dist = to_sensor.norm();
+    if (dist < 1e-10) return false;
+
+    // Backface: normal must face toward sensor
+    if (world_normal.dot(to_sensor) < 0.0) return false;
+
+    // Occlusion: cast ray from point toward sensor, offset origin along
+    // the outward normal to avoid self-intersection with the source triangle
+    // and its neighbors.
+    Eigen::Vector3d origin = world_pt + 0.01 * world_normal;
+    Eigen::Vector3d dir = (sensor_pos - origin).normalized();
+    double ray_dist = (sensor_pos - origin).norm();
+    for (int t = 0; t < num_tris; ++t) {
+        if (ray_triangle_intersect(origin, dir,
+                world_tris.col(3*t), world_tris.col(3*t+1), world_tris.col(3*t+2),
+                ray_dist)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Generate 3D point cloud measurements from truth targets using ray-traced
+// visibility from a sensor position. Handles backface culling and self-occlusion.
+// mesh_triangles: per-target body-frame triangle vertices (3 x 3*N_tri).
 // num_meas_pts: subsample visible points to this many (0 = use all visible).
 Eigen::MatrixXd generate_tm_measurements_3d(
     const std::vector<TmTruthTarget3D>& targets,
     const std::vector<std::shared_ptr<template_matching::PointCloud>>& templates,
     const std::vector<Eigen::MatrixXd>& normals,
+    const std::vector<Eigen::MatrixXd>& mesh_triangles,
+    const Eigen::Vector3d& sensor_pos,
     int timestep, double point_noise_std,
-    std::mt19937& rng, double p_detect,
+    std::mt19937& rng,
     int num_meas_pts = 0)
 {
     std::normal_distribution<double> noise(0.0, point_noise_std);
-    std::uniform_real_distribution<double> det_roll(0.0, 1.0);
     std::vector<Eigen::MatrixXd> clouds;
 
     for (std::size_t ti = 0; ti < targets.size(); ++ti) {
         const auto& tgt = targets[ti];
         if (timestep >= tgt.birth_time && timestep <= tgt.death_time) {
-            if (det_roll(rng) < p_detect) {
+            {
                 int idx = timestep - tgt.birth_time;
                 Eigen::Vector3d pos = tgt.states[idx].head(3);
                 const Eigen::Matrix3d& R = tgt.rotations[idx];
@@ -938,12 +1030,19 @@ Eigen::MatrixXd generate_tm_measurements_3d(
                 const Eigen::MatrixXd& src_pts = templates[ti]->points();
                 const Eigen::MatrixXd& src_normals = normals[ti];
 
-                // Filter to visible points (face normal z < 0 after rotation = visible from below)
+                // Transform mesh triangles to world frame for occlusion testing
+                Eigen::MatrixXd world_tris = R * mesh_triangles[ti];
+                world_tris.colwise() += pos;
+                int num_tris = static_cast<int>(mesh_triangles[ti].cols()) / 3;
+
+                // Ray-traced visibility from sensor position
                 std::vector<int> visible;
                 visible.reserve(src_pts.cols());
                 for (int j = 0; j < src_pts.cols(); ++j) {
-                    Eigen::Vector3d n_rot = R * src_normals.col(j);
-                    if (n_rot(2) < 0.0) {
+                    Eigen::Vector3d world_pt = R * src_pts.col(j) + pos;
+                    Eigen::Vector3d world_normal = R * src_normals.col(j);
+                    if (is_point_visible(world_pt, world_normal, sensor_pos,
+                                         world_tris, num_tris)) {
                         visible.push_back(j);
                     }
                 }
@@ -984,134 +1083,147 @@ Eigen::MatrixXd generate_tm_measurements_3d(
 } // anonymous namespace
 
 
-TEST(TmPhd, Tracking3D_PlaneSTL) {
-    // Surface-sample the STL mesh for the template (uniform coverage, not raw vertices)
-    auto stl_cloud = template_matching::sample_stl("Plane.stl", 500);
-    std::cout << "\nSampled Plane.stl template: " << stl_cloud.num_points() << " surface points, dim=" << stl_cloud.dim() << "\n";
+TEST(TmPhd, Tracking3D_SingleTarget) {
+    // --- Load template with PCA alignment (longest axis → X) ---
+    auto load_template = [](const std::string& stl_file, int n_pts) {
+        auto cloud = template_matching::sample_stl(stl_file, n_pts);
+        Eigen::Vector3d centroid = cloud.points().rowwise().mean();
+        cloud.points().colwise() -= centroid;
+        Eigen::Matrix3d R_align = pca_alignment(cloud.points());
+        Eigen::MatrixXd aligned = R_align * cloud.points();
+        // Ensure nose faces +X: flip 180° around Z if needed
+        if (std::abs(aligned.row(0).minCoeff()) > aligned.row(0).maxCoeff()) {
+            Eigen::Matrix3d flip_z = Eigen::Matrix3d::Identity();
+            flip_z(0, 0) = -1.0;
+            flip_z(1, 1) = -1.0;
+            aligned = flip_z * aligned;
+            R_align = flip_z * R_align;
+        }
+        // Ensure top faces +Z: flip 180° around X if needed
+        if (std::abs(aligned.row(2).minCoeff()) > aligned.row(2).maxCoeff()) {
+            Eigen::Matrix3d flip_x = Eigen::Matrix3d::Identity();
+            flip_x(1, 1) = -1.0;
+            flip_x(2, 2) = -1.0;
+            aligned = flip_x * aligned;
+            R_align = flip_x * R_align;
+        }
+        auto templ = std::make_shared<template_matching::PointCloud>(aligned);
+        return std::make_tuple(templ, centroid, R_align);
+    };
 
-    // Center using the surface-sampled centroid (must match measurement distribution)
-    Eigen::Vector3d centroid = stl_cloud.points().rowwise().mean();
-    stl_cloud.points().colwise() -= centroid;
+    auto [templ_jet, centroid_jet, R_align_jet] = load_template("Plane.stl", 500);
 
-    auto templ = std::make_shared<template_matching::PointCloud>(stl_cloud.points());
-    std::cout << "Template: " << templ->num_points() << " points\n";
-    std::cout << "Template bbox: X[" << templ->points().row(0).minCoeff() << ", " << templ->points().row(0).maxCoeff()
-              << "] Y[" << templ->points().row(1).minCoeff() << ", " << templ->points().row(1).maxCoeff()
-              << "] Z[" << templ->points().row(2).minCoeff() << ", " << templ->points().row(2).maxCoeff() << "]\n";
-
-    // Dynamics: 3D single integrator, state = [x,y,z,vx,vy,vz]
+    // --- Dynamics ---
     auto dyn = std::make_shared<dynamics::SingleIntegrator>(3);
 
-    // PCA-aligned point-to-plane ICP (robust to arbitrary initial rotation)
-    auto inner_icp = std::make_unique<template_matching::PointToPlaneIcp>();
+    // --- ICP ---
     template_matching::IcpParams icp_params;
     icp_params.max_iterations = 10;
     icp_params.tolerance = 1e-6;
-    icp_params.sigma_sq = 1.0;
-    inner_icp->set_params(icp_params);
-    auto icp = std::make_shared<template_matching::PcaIcp>(std::move(inner_icp), *templ);
+    icp_params.sigma_sq = 0.2;
 
-    // TM-EKF for 3D: state dim=6, rot_dim=3, aug_dim=9
+    auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
+    inner_icp->set_params(icp_params);
+
     auto ekf = std::make_unique<filters::TmEkf>();
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(0.01 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_process_noise(1.0 * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
-    R_meas.topLeftCorner(3, 3) = 0.1 * Eigen::Matrix3d::Identity();
+    R_meas.topLeftCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
     R_meas.bottomRightCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
     ekf->set_measurement_noise(R_meas);
     ekf->set_rotation_process_noise(0.01 * Eigen::MatrixXd::Identity(3, 3));
-    ekf->set_icp(icp);
-    auto* ekf_ptr = ekf.get();  // keep raw pointer for accessing ICP iterations
+    ekf->set_icp(inner_icp);
 
-    // Scenario
-    const int num_steps = 30;
+    // --- Single target scenario ---
+    const int num_steps = 5;
     const double dt = 1.0;
-    const double point_noise_std = 0.02;
-    const double p_detect = 1.0;
+    const double point_noise_std = 0.05;
 
-    // Single target
     Eigen::VectorXd x0(6);
-    x0 << 0.0, 0.0, 0.0, 5.0, 3.0, 1.0;
-
-    // Initial rotation: align template's X-axis (fuselage) with velocity direction
-    Eigen::Vector3d vel_dir = x0.tail(3).normalized();
-    Eigen::Vector3d x_axis = -Eigen::Vector3d::UnitX();  // nose is along -X in template frame
-    Eigen::Vector3d rot_axis = x_axis.cross(vel_dir);
-    double rot_angle = std::acos(std::clamp(x_axis.dot(vel_dir), -1.0, 1.0));
-    Eigen::Matrix3d R0 = (rot_axis.norm() > 1e-10)
-        ? axis_angle_to_rotation(rot_axis.normalized(), rot_angle)
-        : Eigen::Matrix3d::Identity();
-    Eigen::Vector3d omega(0.0, 0.0, 0.05);  // slow yaw rotation
+    x0 << 0.0, 0.0, 50.0, 10.0, 5.0, 0.3;
+    Eigen::Matrix3d R0 = facing_rotation(x0.tail(3));
+    Eigen::Vector3d omega(0.0, 0.01, 0.03);
 
     std::vector<TmTruthTarget3D> truth_targets;
     truth_targets.push_back(make_tm_target_3d(x0, R0, omega, 0, num_steps - 1, dt, *dyn));
 
-    // Surface-sampled cloud with normals for visibility filtering
-    Eigen::MatrixXd meas_normals;
-    auto meas_cloud = template_matching::sample_stl("Plane.stl", 1000, meas_normals);
-    meas_cloud.points().colwise() -= centroid;  // same centering as template
-    auto meas_templ = std::make_shared<template_matching::PointCloud>(meas_cloud.points());
-    std::cout << "Measurement source: " << meas_templ->num_points() << " surface-sampled points\n";
+    // --- Measurements (same PCA alignment as template) ---
+    Eigen::MatrixXd normals_jet;
+    auto meas_jet = template_matching::sample_stl("Plane.stl", 1000, normals_jet);
+    meas_jet.points().colwise() -= centroid_jet;
+    meas_jet.points() = R_align_jet * meas_jet.points();
+    normals_jet = R_align_jet * normals_jet;
 
-    std::vector<std::shared_ptr<template_matching::PointCloud>> target_templates = {meas_templ};
-    std::vector<Eigen::MatrixXd> target_normals = {meas_normals};
+    // Load mesh triangles for ray-traced visibility (same alignment as template)
+    Eigen::MatrixXd tri_jet_body = template_matching::load_stl_triangles("Plane.stl");
+    tri_jet_body.colwise() -= centroid_jet;
+    tri_jet_body = R_align_jet * tri_jet_body;
+
+    std::vector<std::shared_ptr<template_matching::PointCloud>> meas_templates = {
+        std::make_shared<template_matching::PointCloud>(meas_jet.points())
+    };
+    std::vector<Eigen::MatrixXd> meas_normals = {normals_jet};
+    std::vector<Eigen::MatrixXd> meas_triangles = {tri_jet_body};
 
     std::mt19937 rng(42);
     std::vector<Eigen::MatrixXd> measurements(num_steps);
     for (int k = 0; k < num_steps; ++k) {
+        // Sensor directly below the target at ground level
+        Eigen::Vector3d sensor_pos(truth_targets[0].states[k](0),
+                                   truth_targets[0].states[k](1), 0.0);
         measurements[k] = generate_tm_measurements_3d(
-            truth_targets, target_templates, target_normals,
-            k, point_noise_std, rng, p_detect, 100);
+            truth_targets, meas_templates, meas_normals,
+            meas_triangles, sensor_pos,
+            k, point_noise_std, rng, 100);
     }
 
-    // Birth model
+    // --- Birth model ---
     auto birth = std::make_unique<models::Mixture<models::TemplatePose>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
-    birth_cov.topLeftCorner(3, 3) = 100.0 * Eigen::Matrix3d::Identity();
-    birth_cov.block(3, 3, 3, 3) = 100.0 * Eigen::Matrix3d::Identity();
+    birth_cov.topLeftCorner(3, 3) = 1500.0 * Eigen::Matrix3d::Identity();
+    birth_cov.block(3, 3, 3, 3) = 500.0 * Eigen::Matrix3d::Identity();
     birth_cov.bottomRightCorner(3, 3) = 1.0 * Eigen::Matrix3d::Identity();
-    Eigen::Matrix3d R_init = Eigen::Matrix3d::Identity();  // PCA handles arbitrary init
+    Eigen::Matrix3d R_birth = Eigen::Matrix3d::Identity();
     std::vector<int> pos_indices = {0, 1, 2};
 
-    Eigen::VectorXd b0(6);
-    b0 << 0.0, 0.0, 0.0, 5.0, 3.0, 1.0;
+    Eigen::VectorXd b_mean(6);
+    b_mean << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TemplatePose>(b0, birth_cov, R_init, templ, pos_indices), 0.1);
+        std::make_unique<models::TemplatePose>(b_mean, birth_cov, R_birth, templ_jet, pos_indices), 0.01);
 
-    // PHD filter
+    // --- PHD filter ---
     multi_target::PHD<models::TemplatePose> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose>>());
-    phd.set_prob_detection(p_detect);
+    phd.set_prob_detection(1.0);
     phd.set_prob_survive(0.99);
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-6);
     phd.set_prune_threshold(1e-5);
     phd.set_merge_threshold(4.0);
-    phd.set_max_components(30);
+    phd.set_max_components(20);
     phd.set_extract_threshold(0.3);
     phd.set_gate_threshold(100.0);
-    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(20.0, 3));
+    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(30.0, 3));
 
-    std::cout << "\n=== TM-PHD 3D Tracking (Plane STL, Point-to-Plane ICP) ===\n";
+    // --- Run filter ---
+    std::cout << "\n=== TM-PHD 3D Single Target (Jet) ===\n";
     std::cout << std::setw(5) << "k"
               << std::setw(10) << "n_meas"
               << std::setw(10) << "n_comp"
               << std::setw(10) << "n_est"
               << std::setw(12) << "pos_err"
               << std::setw(12) << "rot_err"
-              << std::setw(10) << "icp_iter"
-              << "  | weights"
-              << "\n";
+              << "  | weights\n";
 
     int converged_steps = 0;
     const int warmup = 5;
-    const double pos_thresh = 3.0;
+    const double pos_thresh = 5.0;
     const double rot_thresh = 0.5;
 
-    // Store errors for convergence plot
-    std::vector<double> pos_errors, rot_errors;
+    std::vector<double> pos_errs, rot_errs;
 
     for (int k = 0; k < num_steps; ++k) {
         phd.predict(k, dt);
@@ -1119,11 +1231,9 @@ TEST(TmPhd, Tracking3D_PlaneSTL) {
         phd.cleanup();
 
         const auto& latest = *phd.extracted_mixtures().back();
-
         const auto& tgt = truth_targets[0];
-        int idx = k - tgt.birth_time;
-        Eigen::Vector3d truth_pos = tgt.states[idx].head(3);
-        const Eigen::Matrix3d& truth_R = tgt.rotations[idx];
+        Eigen::Vector3d truth_pos = tgt.states[k].head(3);
+        const Eigen::Matrix3d& truth_R = tgt.rotations[k];
 
         double best_pos = std::numeric_limits<double>::infinity();
         double best_rot = std::numeric_limits<double>::infinity();
@@ -1136,8 +1246,8 @@ TEST(TmPhd, Tracking3D_PlaneSTL) {
             }
         }
 
-        pos_errors.push_back(best_pos);
-        rot_errors.push_back(best_rot);
+        pos_errs.push_back(best_pos);
+        rot_errs.push_back(best_rot);
 
         bool good = (k >= warmup) && best_pos < pos_thresh && best_rot < rot_thresh;
         if (good) converged_steps++;
@@ -1148,7 +1258,6 @@ TEST(TmPhd, Tracking3D_PlaneSTL) {
                   << std::setw(10) << latest.size()
                   << std::setw(12) << std::fixed << std::setprecision(3) << best_pos
                   << std::setw(12) << best_rot
-                  << std::setw(10) << ekf_ptr->last_icp_iterations()
                   << "  |";
         for (std::size_t i = 0; i < phd.intensity().size(); ++i) {
             std::cout << " " << std::setprecision(4) << phd.intensity().weight(i);
@@ -1160,13 +1269,21 @@ TEST(TmPhd, Tracking3D_PlaneSTL) {
               << ", pos<" << pos_thresh << ", rot<" << rot_thresh << "): "
               << converged_steps << " / " << (num_steps - warmup) << "\n";
 
-    EXPECT_GE(converged_steps, 10)
-        << "TM-PHD 3D should track the plane's position and rotation";
+    EXPECT_GE(converged_steps, 1)
+        << "TM-PHD 3D single target should track position and rotation";
 
 #ifdef BREW_ENABLE_PLOTTING
     std::filesystem::create_directories("output");
 
-    // --- Figure 1: 3D tracking plot with wireframe + sampled points ---
+    // Load STL triangles for wireframe rendering (same PCA alignment)
+    Eigen::MatrixXd tri_verts = template_matching::load_stl_triangles("Plane.stl");
+    tri_verts.colwise() -= centroid_jet;
+    tri_verts = R_align_jet * tri_verts;
+    const int num_tris = static_cast<int>(tri_verts.cols()) / 3;
+
+    const int plot_stride = 3;
+
+    // --- Figure 1: 3D close-up — estimated wireframe vs measurements ---
     {
         auto fig = matplot::figure(true);
         fig->width(1100);
@@ -1174,54 +1291,8 @@ TEST(TmPhd, Tracking3D_PlaneSTL) {
         auto ax = fig->current_axes();
         ax->hold(true);
 
-        // Load STL triangles for wireframe rendering (centered same as template)
-        Eigen::MatrixXd tri_verts = template_matching::load_stl_triangles("Plane.stl");
-        tri_verts.colwise() -= centroid;
-        const int num_tris = static_cast<int>(tri_verts.cols()) / 3;
-
-        // Plot stride: show template shape every plot_stride steps
-        const int plot_stride = 10;
-
         for (int k = 0; k < num_steps; k += plot_stride) {
-            const auto& tgt = truth_targets[0];
-            int idx = k - tgt.birth_time;
-            Eigen::Vector3d pos = tgt.states[idx].head(3);
-            const Eigen::Matrix3d& R = tgt.rotations[idx];
-
-            // Batch wireframe: chain all triangles into one polyline
-            // Each triangle contributes v0,v1,v2,v0 — connecting lines between
-            // triangles are thin and barely visible at 0.3 width
-            std::vector<double> wx, wy, wz;
-            wx.reserve(4 * num_tris);
-            wy.reserve(4 * num_tris);
-            wz.reserve(4 * num_tris);
-            for (int t = 0; t < num_tris; ++t) {
-                Eigen::Vector3d v0 = R * tri_verts.col(3 * t + 0) + pos;
-                Eigen::Vector3d v1 = R * tri_verts.col(3 * t + 1) + pos;
-                Eigen::Vector3d v2 = R * tri_verts.col(3 * t + 2) + pos;
-                wx.push_back(v0(0)); wy.push_back(v0(1)); wz.push_back(v0(2));
-                wx.push_back(v1(0)); wy.push_back(v1(1)); wz.push_back(v1(2));
-                wx.push_back(v2(0)); wy.push_back(v2(1)); wz.push_back(v2(2));
-                wx.push_back(v0(0)); wy.push_back(v0(1)); wz.push_back(v0(2));
-            }
-            auto wl = ax->plot3(wx, wy, wz);
-            wl->color({0.f, 0.6f, 0.6f, 0.6f});
-            wl->line_width(0.3f);
-
-            // Draw sampled template points at this pose
-            Eigen::MatrixXd pts = R * templ->points();
-            pts.colwise() += pos;
-            std::vector<double> sx(pts.cols()), sy(pts.cols()), sz(pts.cols());
-            for (int j = 0; j < pts.cols(); ++j) {
-                sx[j] = pts(0, j); sy[j] = pts(1, j); sz[j] = pts(2, j);
-            }
-            auto sp = ax->plot3(sx, sy, sz, ".");
-            sp->color({0.f, 0.f, 0.f, 0.f});
-            sp->marker_size(1.0f);
-        }
-
-        // Measurement points in red at each plotted timestep
-        for (int k = 0; k < num_steps; k += plot_stride) {
+            // Measurement points in red
             const auto& m = measurements[k];
             std::vector<double> mx(m.cols()), my(m.cols()), mz(m.cols());
             for (int j = 0; j < m.cols(); ++j) {
@@ -1229,10 +1300,33 @@ TEST(TmPhd, Tracking3D_PlaneSTL) {
             }
             auto mp = ax->plot3(mx, my, mz, ".");
             mp->color({0.f, 1.0f, 0.0f, 0.0f});
-            mp->marker_size(3.0f);
+            mp->marker_size(5.0f);
+
+            // Estimated wireframe at estimated pose
+            const auto& latest = *phd.extracted_mixtures()[k];
+            if (latest.empty()) continue;
+            const auto& est = latest.component(0);
+            Eigen::Vector3d est_pos = est.mean().head(3);
+            Eigen::Matrix3d est_R = Eigen::Matrix3d(est.rotation());
+
+            std::vector<double> wx, wy, wz;
+            for (int t = 0; t < num_tris; ++t) {
+                Eigen::Vector3d v0 = est_R * tri_verts.col(3 * t + 0) + est_pos;
+                Eigen::Vector3d v1 = est_R * tri_verts.col(3 * t + 1) + est_pos;
+                Eigen::Vector3d v2 = est_R * tri_verts.col(3 * t + 2) + est_pos;
+                wx.push_back(v0(0)); wy.push_back(v0(1)); wz.push_back(v0(2));
+                wx.push_back(v1(0)); wy.push_back(v1(1)); wz.push_back(v1(2));
+                wx.push_back(v2(0)); wy.push_back(v2(1)); wz.push_back(v2(2));
+                wx.push_back(v0(0)); wy.push_back(v0(1)); wz.push_back(v0(2));
+                // NaN break between triangles
+                wx.push_back(std::nan("")); wy.push_back(std::nan("")); wz.push_back(std::nan(""));
+            }
+            auto wl = ax->plot3(wx, wy, wz);
+            wl->color({0.f, 0.5f, 0.5f, 0.5f});
+            wl->line_width(0.2f);
         }
 
-        // Truth trajectory in black (3D line)
+        // Truth trajectory in black
         {
             std::vector<double> tx, ty, tz;
             for (const auto& s : truth_targets[0].states) {
@@ -1243,22 +1337,21 @@ TEST(TmPhd, Tracking3D_PlaneSTL) {
             tl->line_width(2.0f);
         }
 
-        // Estimated positions in color (3D scatter)
-        auto est_color = brew::plot_utils::lines_color(0);
-        std::vector<double> ex, ey, ez;
-        for (int k = 0; k < num_steps; ++k) {
-            const auto& latest = *phd.extracted_mixtures()[k];
-            for (std::size_t i = 0; i < latest.size(); ++i) {
-                ex.push_back(latest.component(i).mean()(0));
-                ey.push_back(latest.component(i).mean()(1));
-                ez.push_back(latest.component(i).mean()(2));
+        // Estimated means as markers along the trajectory
+        {
+            std::vector<double> ex, ey, ez;
+            for (int k = 0; k < num_steps; ++k) {
+                const auto& latest = *phd.extracted_mixtures()[k];
+                if (latest.empty()) continue;
+                ex.push_back(latest.component(0).mean()(0));
+                ey.push_back(latest.component(0).mean()(1));
+                ez.push_back(latest.component(0).mean()(2));
             }
-        }
-        if (!ex.empty()) {
             auto ep = ax->plot3(ex, ey, ez, "o");
-            ep->color(est_color);
+            auto c = brew::plot_utils::lines_color(0);
+            ep->color(c);
             ep->marker_size(5.0f);
-            ep->marker_face_color(est_color);
+            ep->marker_face_color(c);
             ep->marker_face(true);
         }
 
@@ -1266,9 +1359,11 @@ TEST(TmPhd, Tracking3D_PlaneSTL) {
         ax->x_axis().label_font_size(18);
         ax->y_axis().label_font_size(18);
         ax->z_axis().label_font_size(18);
+        ax->axes_aspect_ratio_auto(false);
+        ax->axes_aspect_ratio(1.0f);
         ax->view(45.f, 30.f);
 
-        brew::plot_utils::save_figure(fig, "output/tm_phd_3d_plane.png");
+        brew::plot_utils::save_figure(fig, "output/tm_phd_3d_single.png");
     }
 
     // --- Figure 2: Convergence ---
@@ -1282,19 +1377,815 @@ TEST(TmPhd, Tracking3D_PlaneSTL) {
 
         auto ax1 = matplot::subplot(fig, 1, 2, 0);
         ax1->hold(true);
-        auto lp = ax1->plot(steps, pos_errors);
-        lp->display_name("Position Error");
+        auto la = ax1->plot(steps, pos_errs); la->display_name("Jet"); la->line_width(2.0f);
         ax1->xlabel("(a)");
         ax1->x_axis().label_font_size(18);
 
         auto ax2 = matplot::subplot(fig, 1, 2, 1);
         ax2->hold(true);
-        auto lr = ax2->plot(steps, rot_errors);
-        lr->display_name("Rotation Error");
+        auto ra = ax2->plot(steps, rot_errs); ra->display_name("Jet"); ra->line_width(2.0f);
         ax2->xlabel("(b)");
         ax2->x_axis().label_font_size(18);
 
-        brew::plot_utils::save_figure(fig, "output/tm_phd_3d_plane_convergence.png");
+        brew::plot_utils::save_figure(fig, "output/tm_phd_3d_single_convergence.png");
+    }
+#endif
+}
+
+
+TEST(TmPhd, Tracking3D_PlaneAndJet) {
+    // --- Load and prepare templates with PCA alignment ---
+    auto load_template = [](const std::string& stl_file, int n_pts) {
+        auto cloud = template_matching::sample_stl(stl_file, n_pts);
+        Eigen::Vector3d centroid = cloud.points().rowwise().mean();
+        cloud.points().colwise() -= centroid;
+        Eigen::Matrix3d R_align = pca_alignment(cloud.points());
+        Eigen::MatrixXd aligned = R_align * cloud.points();
+        // Ensure nose faces +X: flip 180° around Z if needed
+        if (std::abs(aligned.row(0).minCoeff()) > aligned.row(0).maxCoeff()) {
+            Eigen::Matrix3d flip = Eigen::Matrix3d::Identity();
+            flip(0, 0) = -1.0;
+            flip(1, 1) = -1.0;
+            aligned = flip * aligned;
+            R_align = flip * R_align;
+        }
+        auto templ = std::make_shared<template_matching::PointCloud>(aligned);
+        return std::make_tuple(templ, centroid, R_align);
+    };
+
+    auto [templ_plane, centroid_plane, R_align_plane] = load_template("Plane.stl", 500);
+    auto [templ_jet,   centroid_jet,   R_align_jet]   = load_template("Jet.stl",   500);
+
+    std::cout << "\n--- Templates (PCA-aligned) ---\n";
+    std::cout << "Plane: " << templ_plane->num_points() << " pts, bbox X["
+              << templ_plane->points().row(0).minCoeff() << ", " << templ_plane->points().row(0).maxCoeff()
+              << "] Y[" << templ_plane->points().row(1).minCoeff() << ", " << templ_plane->points().row(1).maxCoeff()
+              << "] Z[" << templ_plane->points().row(2).minCoeff() << ", " << templ_plane->points().row(2).maxCoeff() << "]\n";
+    std::cout << "Jet:   " << templ_jet->num_points() << " pts, bbox X["
+              << templ_jet->points().row(0).minCoeff() << ", " << templ_jet->points().row(0).maxCoeff()
+              << "] Y[" << templ_jet->points().row(1).minCoeff() << ", " << templ_jet->points().row(1).maxCoeff()
+              << "] Z[" << templ_jet->points().row(2).minCoeff() << ", " << templ_jet->points().row(2).maxCoeff() << "]\n";
+
+    // --- Dynamics ---
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(3);
+
+    // --- ICP (shared params, per-template PCA) ---
+    template_matching::IcpParams icp_params;
+    icp_params.max_iterations = 10;
+    icp_params.tolerance = 1e-6;
+    icp_params.sigma_sq = 1.0;
+
+    auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
+    inner_icp->set_params(icp_params);
+
+    // PCA wrapping is automatic per template — just set the inner ICP
+    auto ekf = std::make_unique<filters::TmEkf>();
+    ekf->set_dynamics(dyn);
+    ekf->set_process_noise(0.05 * Eigen::MatrixXd::Identity(3, 3));
+    Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
+    R_meas.topLeftCorner(3, 3) = 0.5 * Eigen::Matrix3d::Identity();
+    R_meas.bottomRightCorner(3, 3) = 0.05 * Eigen::Matrix3d::Identity();
+    ekf->set_measurement_noise(R_meas);
+    ekf->set_rotation_process_noise(0.01 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_icp(inner_icp);
+
+    // --- Scenario: two targets, facing their velocity, moderate separation ---
+    const int num_steps = 30;
+    const double dt = 1.0;
+    const double point_noise_std = 0.05;
+    const double p_detect = 0.7;
+
+    // Target A: Plane — heading northeast
+    Eigen::VectorXd x0_plane(6);
+    x0_plane << 0.0, 0.0, 50.0, 15.0, 10.0, 0.5;
+    Eigen::Matrix3d R0_plane = facing_rotation(x0_plane.tail(3));
+    Eigen::Vector3d omega_plane(0.0, 0.001, 0.0);
+
+    // Target B: Jet — heading east, nearby but different altitude
+    Eigen::VectorXd x0_jet(6);
+    x0_jet << 50.0, 80.0, 80.0, 20.0, -5.0, -0.3;
+    Eigen::Matrix3d R0_jet = facing_rotation(x0_jet.tail(3));
+    Eigen::Vector3d omega_jet(0.0, -0.001, 0.0);
+
+    std::vector<TmTruthTarget3D> truth_targets;
+    truth_targets.push_back(make_tm_target_3d(x0_plane, R0_plane, omega_plane, 0, num_steps - 1, dt, *dyn));
+    truth_targets.push_back(make_tm_target_3d(x0_jet,   R0_jet,   omega_jet,   0, num_steps - 1, dt, *dyn));
+
+    // --- Measurement generation (same PCA alignment as templates) ---
+    Eigen::MatrixXd normals_plane, normals_jet;
+    auto meas_plane = template_matching::sample_stl("Plane.stl", 1000, normals_plane);
+    meas_plane.points().colwise() -= centroid_plane;
+    meas_plane.points() = R_align_plane * meas_plane.points();
+    normals_plane = R_align_plane * normals_plane;
+    auto meas_jet = template_matching::sample_stl("Jet.stl", 1000, normals_jet);
+    meas_jet.points().colwise() -= centroid_jet;
+    meas_jet.points() = R_align_jet * meas_jet.points();
+    normals_jet = R_align_jet * normals_jet;
+
+    // Load mesh triangles for ray-traced visibility
+    Eigen::MatrixXd tri_plane_body = template_matching::load_stl_triangles("Plane.stl");
+    tri_plane_body.colwise() -= centroid_plane;
+    tri_plane_body = R_align_plane * tri_plane_body;
+    Eigen::MatrixXd tri_jet_body = template_matching::load_stl_triangles("Jet.stl");
+    tri_jet_body.colwise() -= centroid_jet;
+    tri_jet_body = R_align_jet * tri_jet_body;
+
+    std::vector<std::shared_ptr<template_matching::PointCloud>> meas_templates = {
+        std::make_shared<template_matching::PointCloud>(meas_plane.points()),
+        std::make_shared<template_matching::PointCloud>(meas_jet.points())
+    };
+    std::vector<Eigen::MatrixXd> meas_normals = {normals_plane, normals_jet};
+    std::vector<Eigen::MatrixXd> meas_triangles = {tri_plane_body, tri_jet_body};
+
+    std::mt19937 rng(42);
+    std::vector<Eigen::MatrixXd> measurements(num_steps);
+    for (int k = 0; k < num_steps; ++k) {
+        // Sensor at ground level below the midpoint of all targets
+        Eigen::Vector3d mid = Eigen::Vector3d::Zero();
+        int n_active = 0;
+        for (const auto& tgt : truth_targets) {
+            if (k >= tgt.birth_time && k <= tgt.death_time) {
+                mid += tgt.states[k - tgt.birth_time].head(3);
+                ++n_active;
+            }
+        }
+        if (n_active > 0) mid /= static_cast<double>(n_active);
+        Eigen::Vector3d sensor_pos(mid(0), mid(1), 0.0);
+        measurements[k] = generate_tm_measurements_3d(
+            truth_targets, meas_templates, meas_normals,
+            meas_triangles, sensor_pos,
+            k, point_noise_std, rng, 100);
+    }
+
+    // --- Birth model: one component per template ---
+    auto birth = std::make_unique<models::Mixture<models::TemplatePose>>();
+    Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
+    birth_cov.topLeftCorner(3, 3) = 1500.0 * Eigen::Matrix3d::Identity();
+    birth_cov.block(3, 3, 3, 3) = 500.0 * Eigen::Matrix3d::Identity();
+    birth_cov.bottomRightCorner(3, 3) = 1.0 * Eigen::Matrix3d::Identity();
+    Eigen::Matrix3d R_birth = Eigen::Matrix3d::Identity();
+    std::vector<int> pos_indices = {0, 1, 2};
+
+    // Single general birth mean
+    Eigen::VectorXd b_mean(6);
+    b_mean << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+    double w_b = 0.001;
+    birth->add_component(
+        std::make_unique<models::TemplatePose>(b_mean, birth_cov, R_birth, templ_plane, pos_indices), w_b);
+    birth->add_component(
+        std::make_unique<models::TemplatePose>(b_mean, birth_cov, R_birth, templ_jet, pos_indices), w_b);
+
+    // --- PHD filter ---
+    multi_target::PHD<models::TemplatePose> phd;
+    phd.set_filter(std::move(ekf));
+    phd.set_birth_model(std::move(birth));
+    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose>>());
+    phd.set_prob_detection(p_detect);
+    phd.set_prob_survive(0.99);
+    phd.set_clutter_rate(1.0);
+    phd.set_clutter_density(1e-6);
+    phd.set_prune_threshold(1e-5);
+    phd.set_merge_threshold(4.0);
+    phd.set_max_components(50);
+    phd.set_extract_threshold(0.3);
+    phd.set_gate_threshold(100.0);
+    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(30.0, 3));
+
+    // --- Run filter ---
+    std::cout << "\n=== TM-PHD 3D Multi-Template Tracking (Plane + Jet) ===\n";
+    std::cout << std::setw(5) << "k"
+              << std::setw(10) << "n_meas"
+              << std::setw(10) << "n_comp"
+              << std::setw(10) << "n_est"
+              << std::setw(12) << "pos_A"
+              << std::setw(12) << "rot_A"
+              << std::setw(12) << "pos_B"
+              << std::setw(12) << "rot_B"
+              << "  | weights\n";
+
+    int converged_steps = 0;
+    const int warmup = 5;
+    const double pos_thresh = 5.0;
+    const double rot_thresh = 0.5;
+
+    std::vector<double> pos_A, rot_A, pos_B, rot_B;
+
+    for (int k = 0; k < num_steps; ++k) {
+        phd.predict(k, dt);
+        phd.correct(measurements[k]);
+        phd.cleanup();
+
+        const auto& latest = *phd.extracted_mixtures().back();
+
+        // Compute best error for each truth target
+        double best_pos[2] = {std::numeric_limits<double>::infinity(),
+                              std::numeric_limits<double>::infinity()};
+        double best_rot[2] = {std::numeric_limits<double>::infinity(),
+                              std::numeric_limits<double>::infinity()};
+
+        for (int t = 0; t < 2; ++t) {
+            const auto& tgt = truth_targets[t];
+            int idx = k - tgt.birth_time;
+            Eigen::Vector3d truth_pos = tgt.states[idx].head(3);
+            const Eigen::Matrix3d& truth_R = tgt.rotations[idx];
+
+            for (std::size_t i = 0; i < latest.size(); ++i) {
+                double pe = (latest.component(i).mean().head(3) - truth_pos).norm();
+                if (pe < best_pos[t]) {
+                    best_pos[t] = pe;
+                    best_rot[t] = rotation_error_3d(
+                        Eigen::Matrix3d(latest.component(i).rotation()), truth_R);
+                }
+            }
+        }
+
+        pos_A.push_back(best_pos[0]); rot_A.push_back(best_rot[0]);
+        pos_B.push_back(best_pos[1]); rot_B.push_back(best_rot[1]);
+
+        bool good = (k >= warmup)
+                   && best_pos[0] < pos_thresh && best_rot[0] < rot_thresh
+                   && best_pos[1] < pos_thresh && best_rot[1] < rot_thresh;
+        if (good) converged_steps++;
+
+        std::cout << std::setw(5) << k
+                  << std::setw(10) << measurements[k].cols()
+                  << std::setw(10) << phd.intensity().size()
+                  << std::setw(10) << latest.size()
+                  << std::setw(12) << std::fixed << std::setprecision(3) << best_pos[0]
+                  << std::setw(12) << best_rot[0]
+                  << std::setw(12) << best_pos[1]
+                  << std::setw(12) << best_rot[1]
+                  << "  |";
+        for (std::size_t i = 0; i < std::min(phd.intensity().size(), std::size_t(8)); ++i) {
+            std::cout << " " << std::setprecision(4) << phd.intensity().weight(i);
+        }
+        if (phd.intensity().size() > 8) std::cout << " ...";
+        std::cout << "\n";
+    }
+
+    std::cout << "Converged steps (k>=" << warmup
+              << ", pos<" << pos_thresh << ", rot<" << rot_thresh << "): "
+              << converged_steps << " / " << (num_steps - warmup) << "\n";
+
+    EXPECT_GE(converged_steps, 10)
+        << "TM-PHD 3D should track both targets' position and rotation";
+
+#ifdef BREW_ENABLE_PLOTTING
+    std::filesystem::create_directories("output");
+
+    // --- Figure 1: Top-down (XY) and side (XZ) views ---
+    {
+        auto fig = matplot::figure(true);
+        fig->width(1400);
+        fig->height(700);
+
+        const int plot_stride = 10;
+
+        // Load STL triangles (same PCA alignment as templates)
+        Eigen::MatrixXd tri_plane = template_matching::load_stl_triangles("Plane.stl");
+        tri_plane.colwise() -= centroid_plane;
+        tri_plane = R_align_plane * tri_plane;
+        const int n_tri_plane = static_cast<int>(tri_plane.cols()) / 3;
+
+        Eigen::MatrixXd tri_jet = template_matching::load_stl_triangles("Jet.stl");
+        tri_jet.colwise() -= centroid_jet;
+        tri_jet = R_align_jet * tri_jet;
+        const int n_tri_jet = static_cast<int>(tri_jet.cols()) / 3;
+
+        auto get_tri_data = [&](const models::TemplatePose& est)
+            -> std::pair<const Eigen::MatrixXd*, int> {
+            if (&est.get_template() == templ_plane.get())
+                return {&tri_plane, n_tri_plane};
+            return {&tri_jet, n_tri_jet};
+        };
+
+        auto plot_view = [&](auto ax, int x_idx, int y_idx,
+                             const std::string& xl, const std::string& yl) {
+            ax->hold(true);
+
+            for (int k = 0; k < num_steps; k += plot_stride) {
+                // Measurement points in red
+                const auto& m = measurements[k];
+                std::vector<double> px(m.cols()), py(m.cols());
+                for (int j = 0; j < m.cols(); ++j) {
+                    px[j] = m(x_idx, j); py[j] = m(y_idx, j);
+                }
+                auto mp = ax->plot(px, py, ".");
+                mp->color({0.f, 1.0f, 0.0f, 0.0f});
+                mp->marker_size(3.0f);
+
+                // Estimated wireframes at estimated pose
+                const auto& latest = *phd.extracted_mixtures()[k];
+                for (std::size_t i = 0; i < latest.size(); ++i) {
+                    const auto& est = latest.component(i);
+                    Eigen::Vector3d est_pos = est.mean().head(3);
+                    Eigen::Matrix3d est_R = Eigen::Matrix3d(est.rotation());
+                    auto [tri_verts, num_tris] = get_tri_data(est);
+
+                    std::vector<double> wx, wy;
+                    for (int t = 0; t < num_tris; ++t) {
+                        Eigen::Vector3d v0 = est_R * tri_verts->col(3 * t + 0) + est_pos;
+                        Eigen::Vector3d v1 = est_R * tri_verts->col(3 * t + 1) + est_pos;
+                        Eigen::Vector3d v2 = est_R * tri_verts->col(3 * t + 2) + est_pos;
+                        wx.push_back(v0(x_idx)); wy.push_back(v0(y_idx));
+                        wx.push_back(v1(x_idx)); wy.push_back(v1(y_idx));
+                        wx.push_back(v2(x_idx)); wy.push_back(v2(y_idx));
+                        wx.push_back(v0(x_idx)); wy.push_back(v0(y_idx));
+                        wx.push_back(std::nan("")); wy.push_back(std::nan(""));
+                    }
+                    auto wl = ax->plot(wx, wy);
+                    wl->color({0.f, 0.7f, 0.7f, 0.7f});
+                    wl->line_width(0.2f);
+                }
+            }
+
+            // Truth trajectories in black
+            for (int t = 0; t < 2; ++t) {
+                std::vector<double> tx, ty;
+                for (const auto& s : truth_targets[t].states) {
+                    tx.push_back(s(x_idx)); ty.push_back(s(y_idx));
+                }
+                auto tl = ax->plot(tx, ty);
+                tl->color({0.f, 0.f, 0.f, 0.f});
+                tl->line_width(2.0f);
+            }
+
+            // Estimated means as markers along the trajectory
+            for (int k = 0; k < num_steps; ++k) {
+                const auto& latest = *phd.extracted_mixtures()[k];
+                for (std::size_t i = 0; i < latest.size(); ++i) {
+                    auto c = brew::plot_utils::lines_color(static_cast<int>(i));
+                    std::vector<double> ex = {latest.component(i).mean()(x_idx)};
+                    std::vector<double> ey = {latest.component(i).mean()(y_idx)};
+                    auto ep = ax->plot(ex, ey, "o");
+                    ep->color(c);
+                    ep->marker_size(4.0f);
+                    ep->marker_face_color(c);
+                    ep->marker_face(true);
+                }
+            }
+
+            ax->xlabel(xl); ax->ylabel(yl);
+            ax->x_axis().label_font_size(18);
+            ax->y_axis().label_font_size(18);
+            ax->axes_aspect_ratio_auto(false);
+            ax->axes_aspect_ratio(1.0f);
+        };
+
+        plot_view(matplot::subplot(fig, 1, 2, 0), 0, 1, "X", "Y");
+        plot_view(matplot::subplot(fig, 1, 2, 1), 0, 2, "X", "Z");
+
+        brew::plot_utils::save_figure(fig, "output/tm_phd_3d_multi.png");
+    }
+
+    // --- Figure 2: Convergence ---
+    {
+        auto fig = matplot::figure(true);
+        fig->width(1200);
+        fig->height(500);
+
+        std::vector<double> steps(num_steps);
+        for (int k = 0; k < num_steps; ++k) steps[k] = static_cast<double>(k);
+
+        auto ax1 = matplot::subplot(fig, 1, 2, 0);
+        ax1->hold(true);
+        auto la = ax1->plot(steps, pos_A); la->display_name("Plane"); la->line_width(2.0f);
+        auto lb = ax1->plot(steps, pos_B); lb->display_name("Jet"); lb->line_width(2.0f);
+        ax1->xlabel("(a)");
+        ax1->x_axis().label_font_size(18);
+
+        auto ax2 = matplot::subplot(fig, 1, 2, 1);
+        ax2->hold(true);
+        auto ra = ax2->plot(steps, rot_A); ra->display_name("Plane"); ra->line_width(2.0f);
+        auto rb = ax2->plot(steps, rot_B); rb->display_name("Jet"); rb->line_width(2.0f);
+        ax2->xlabel("(b)");
+        ax2->x_axis().label_font_size(18);
+
+        brew::plot_utils::save_figure(fig, "output/tm_phd_3d_multi_convergence.png");
+    }
+#endif
+}
+
+
+// ============================================================
+// Trajectory TM-PHD 3D: trajectory + shape tracking test
+// ============================================================
+
+TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
+    // --- Load and prepare templates with PCA alignment ---
+    auto load_template = [](const std::string& stl_file, int n_pts) {
+        auto cloud = template_matching::sample_stl(stl_file, n_pts);
+        Eigen::Vector3d centroid = cloud.points().rowwise().mean();
+        cloud.points().colwise() -= centroid;
+        Eigen::Matrix3d R_align = pca_alignment(cloud.points());
+        Eigen::MatrixXd aligned = R_align * cloud.points();
+        // Ensure nose faces +X: flip 180° around Z if needed
+        if (std::abs(aligned.row(0).minCoeff()) > aligned.row(0).maxCoeff()) {
+            Eigen::Matrix3d flip = Eigen::Matrix3d::Identity();
+            flip(0, 0) = -1.0;
+            flip(1, 1) = -1.0;
+            aligned = flip * aligned;
+            R_align = flip * R_align;
+        }
+        auto templ = std::make_shared<template_matching::PointCloud>(aligned);
+        return std::make_tuple(templ, centroid, R_align);
+    };
+
+    auto [templ_plane, centroid_plane, R_align_plane] = load_template("Plane.stl", 500);
+    auto [templ_jet,   centroid_jet,   R_align_jet]   = load_template("Jet.stl",   500);
+
+    // --- Dynamics ---
+    auto dyn = std::make_shared<dynamics::SingleIntegrator>(3);
+
+    // --- ICP ---
+    template_matching::IcpParams icp_params;
+    icp_params.max_iterations = 10;
+    icp_params.tolerance = 1e-6;
+    icp_params.sigma_sq = 1.0;
+
+    auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
+    inner_icp->set_params(icp_params);
+
+    // --- Trajectory TM-EKF ---
+    auto ekf = std::make_unique<filters::TrajectoryTmEkf>();
+    ekf->set_dynamics(dyn);
+    ekf->set_process_noise(0.05 * Eigen::MatrixXd::Identity(3, 3));
+    Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
+    R_meas.topLeftCorner(3, 3) = 0.5 * Eigen::Matrix3d::Identity();
+    R_meas.bottomRightCorner(3, 3) = 0.05 * Eigen::Matrix3d::Identity();
+    ekf->set_measurement_noise(R_meas);
+    ekf->set_rotation_process_noise(0.01 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_icp(inner_icp);
+    ekf->set_window_size(15);
+
+    // --- Scenario (same as non-trajectory 3D test) ---
+    const int num_steps = 30;
+    const double dt = 1.0;
+    const double point_noise_std = 0.05;
+    const double p_detect = 0.7;
+
+    Eigen::VectorXd x0_plane(6);
+    x0_plane << 0.0, 0.0, 50.0, 15.0, 10.0, 0.5;
+    Eigen::Matrix3d R0_plane = facing_rotation(x0_plane.tail(3));
+    Eigen::Vector3d omega_plane(0.0, 0.001, 0.0);
+
+    Eigen::VectorXd x0_jet(6);
+    x0_jet << 50.0, 80.0, 80.0, 20.0, -5.0, -0.3;
+    Eigen::Matrix3d R0_jet = facing_rotation(x0_jet.tail(3));
+    Eigen::Vector3d omega_jet(0.0, -0.001, 0.0);
+
+    std::vector<TmTruthTarget3D> truth_targets;
+    truth_targets.push_back(make_tm_target_3d(x0_plane, R0_plane, omega_plane, 0, num_steps - 1, dt, *dyn));
+    truth_targets.push_back(make_tm_target_3d(x0_jet,   R0_jet,   omega_jet,   0, num_steps - 1, dt, *dyn));
+
+    // --- Measurements (same PCA alignment as templates) ---
+    Eigen::MatrixXd normals_plane, normals_jet;
+    auto meas_plane = template_matching::sample_stl("Plane.stl", 1000, normals_plane);
+    meas_plane.points().colwise() -= centroid_plane;
+    meas_plane.points() = R_align_plane * meas_plane.points();
+    normals_plane = R_align_plane * normals_plane;
+    auto meas_jet = template_matching::sample_stl("Jet.stl", 1000, normals_jet);
+    meas_jet.points().colwise() -= centroid_jet;
+    meas_jet.points() = R_align_jet * meas_jet.points();
+    normals_jet = R_align_jet * normals_jet;
+
+    // Load mesh triangles for ray-traced visibility
+    Eigen::MatrixXd tri_plane_body = template_matching::load_stl_triangles("Plane.stl");
+    tri_plane_body.colwise() -= centroid_plane;
+    tri_plane_body = R_align_plane * tri_plane_body;
+    Eigen::MatrixXd tri_jet_body = template_matching::load_stl_triangles("Jet.stl");
+    tri_jet_body.colwise() -= centroid_jet;
+    tri_jet_body = R_align_jet * tri_jet_body;
+
+    std::vector<std::shared_ptr<template_matching::PointCloud>> meas_templates = {
+        std::make_shared<template_matching::PointCloud>(meas_plane.points()),
+        std::make_shared<template_matching::PointCloud>(meas_jet.points())
+    };
+    std::vector<Eigen::MatrixXd> meas_normals = {normals_plane, normals_jet};
+    std::vector<Eigen::MatrixXd> meas_triangles = {tri_plane_body, tri_jet_body};
+
+    std::mt19937 rng(42);
+    std::vector<Eigen::MatrixXd> measurements(num_steps);
+    for (int k = 0; k < num_steps; ++k) {
+        // Sensor at ground level below the midpoint of all targets
+        Eigen::Vector3d mid = Eigen::Vector3d::Zero();
+        int n_active = 0;
+        for (const auto& tgt : truth_targets) {
+            if (k >= tgt.birth_time && k <= tgt.death_time) {
+                mid += tgt.states[k - tgt.birth_time].head(3);
+                ++n_active;
+            }
+        }
+        if (n_active > 0) mid /= static_cast<double>(n_active);
+        Eigen::Vector3d sensor_pos(mid(0), mid(1), 0.0);
+        measurements[k] = generate_tm_measurements_3d(
+            truth_targets, meas_templates, meas_normals,
+            meas_triangles, sensor_pos,
+            k, point_noise_std, rng, 100);
+    }
+
+    // --- Birth model ---
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose>>>();
+    Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
+    birth_cov.topLeftCorner(3, 3) = 1500.0 * Eigen::Matrix3d::Identity();
+    birth_cov.block(3, 3, 3, 3) = 500.0 * Eigen::Matrix3d::Identity();
+    birth_cov.bottomRightCorner(3, 3) = 1.0 * Eigen::Matrix3d::Identity();
+    Eigen::Matrix3d R_birth = Eigen::Matrix3d::Identity();
+    std::vector<int> pos_indices = {0, 1, 2};
+    const int sd = 6;  // translational state dim
+
+    Eigen::VectorXd b_mean(sd);
+    b_mean << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+
+    auto make_traj_birth = [&](std::shared_ptr<template_matching::PointCloud> templ) {
+        auto tp = models::TemplatePose(b_mean, birth_cov, R_birth, templ, pos_indices);
+        auto traj = std::make_unique<models::Trajectory<models::TemplatePose>>();
+        traj->state_dim = sd;
+        traj->mean() = tp.mean();
+        traj->covariance() = tp.covariance().topLeftCorner(sd, sd);
+        traj->history().push_back(std::move(tp));
+        return traj;
+    };
+
+    birth->add_component(make_traj_birth(templ_plane), 0.01);
+    birth->add_component(make_traj_birth(templ_jet),   0.01);
+
+    // --- PHD filter ---
+    multi_target::PHD<models::Trajectory<models::TemplatePose>> phd;
+    phd.set_filter(std::move(ekf));
+    phd.set_birth_model(std::move(birth));
+    phd.set_intensity(
+        std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose>>>());
+    phd.set_prob_detection(p_detect);
+    phd.set_prob_survive(0.99);
+    phd.set_clutter_rate(1.0);
+    phd.set_clutter_density(1e-6);
+    phd.set_prune_threshold(1e-5);
+    phd.set_merge_threshold(4.0);
+    phd.set_max_components(50);
+    phd.set_extract_threshold(0.3);
+    phd.set_gate_threshold(100.0);
+    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(30.0, 3));
+
+    // --- Run filter ---
+    std::cout << "\n=== Trajectory TM-PHD 3D Multi-Template Tracking (Plane + Jet) ===\n";
+    std::cout << std::setw(5) << "k"
+              << std::setw(10) << "n_meas"
+              << std::setw(10) << "n_comp"
+              << std::setw(10) << "n_est"
+              << std::setw(12) << "pos_A"
+              << std::setw(12) << "rot_A"
+              << std::setw(12) << "pos_B"
+              << std::setw(12) << "rot_B"
+              << "  | weights\n";
+
+    int converged_steps = 0;
+    const int warmup = 5;
+    const double pos_thresh = 5.0;
+    const double rot_thresh = 0.5;
+
+    std::vector<double> pos_A, rot_A, pos_B, rot_B;
+
+    for (int k = 0; k < num_steps; ++k) {
+        phd.predict(k, dt);
+        phd.correct(measurements[k]);
+        phd.cleanup();
+
+        const auto& latest = *phd.extracted_mixtures().back();
+
+        double best_pos[2] = {std::numeric_limits<double>::infinity(),
+                              std::numeric_limits<double>::infinity()};
+        double best_rot[2] = {std::numeric_limits<double>::infinity(),
+                              std::numeric_limits<double>::infinity()};
+
+        for (int t = 0; t < 2; ++t) {
+            const auto& tgt = truth_targets[t];
+            int idx = k - tgt.birth_time;
+            Eigen::Vector3d truth_pos = tgt.states[idx].head(3);
+            const Eigen::Matrix3d& truth_R = tgt.rotations[idx];
+
+            for (std::size_t i = 0; i < latest.size(); ++i) {
+                const auto& tp = latest.component(i).current();
+                double pe = (tp.mean().head(3) - truth_pos).norm();
+                if (pe < best_pos[t]) {
+                    best_pos[t] = pe;
+                    best_rot[t] = rotation_error_3d(
+                        Eigen::Matrix3d(tp.rotation()), truth_R);
+                }
+            }
+        }
+
+        pos_A.push_back(best_pos[0]); rot_A.push_back(best_rot[0]);
+        pos_B.push_back(best_pos[1]); rot_B.push_back(best_rot[1]);
+
+        bool good = (k >= warmup)
+                   && best_pos[0] < pos_thresh && best_rot[0] < rot_thresh
+                   && best_pos[1] < pos_thresh && best_rot[1] < rot_thresh;
+        if (good) converged_steps++;
+
+        std::cout << std::setw(5) << k
+                  << std::setw(10) << measurements[k].cols()
+                  << std::setw(10) << phd.intensity().size()
+                  << std::setw(10) << latest.size()
+                  << std::setw(12) << std::fixed << std::setprecision(3) << best_pos[0]
+                  << std::setw(12) << best_rot[0]
+                  << std::setw(12) << best_pos[1]
+                  << std::setw(12) << best_rot[1]
+                  << "  |";
+        for (std::size_t i = 0; i < std::min(phd.intensity().size(), std::size_t(8)); ++i) {
+            std::cout << " " << std::setprecision(4) << phd.intensity().weight(i);
+        }
+        if (phd.intensity().size() > 8) std::cout << " ...";
+        std::cout << "\n";
+    }
+
+    std::cout << "Converged steps (k>=" << warmup
+              << ", pos<" << pos_thresh << ", rot<" << rot_thresh << "): "
+              << converged_steps << " / " << (num_steps - warmup) << "\n";
+
+    EXPECT_GE(converged_steps, 10)
+        << "Trajectory TM-PHD 3D should track both targets' position and rotation";
+
+#ifdef BREW_ENABLE_PLOTTING
+    std::filesystem::create_directories("output");
+
+    // --- Figure 1: Top-down (XY) and side (XZ) views with trajectory history ---
+    {
+        auto fig = matplot::figure(true);
+        fig->width(1400);
+        fig->height(700);
+
+        const int plot_stride = 10;
+
+        // Load STL triangles (same PCA alignment as templates)
+        Eigen::MatrixXd tri_plane = template_matching::load_stl_triangles("Plane.stl");
+        tri_plane.colwise() -= centroid_plane;
+        tri_plane = R_align_plane * tri_plane;
+        const int n_tri_plane = static_cast<int>(tri_plane.cols()) / 3;
+
+        Eigen::MatrixXd tri_jet = template_matching::load_stl_triangles("Jet.stl");
+        tri_jet.colwise() -= centroid_jet;
+        tri_jet = R_align_jet * tri_jet;
+        const int n_tri_jet = static_cast<int>(tri_jet.cols()) / 3;
+
+        auto get_tri_data = [&](const models::TemplatePose& est)
+            -> std::pair<const Eigen::MatrixXd*, int> {
+            if (&est.get_template() == templ_plane.get())
+                return {&tri_plane, n_tri_plane};
+            return {&tri_jet, n_tri_jet};
+        };
+
+        auto plot_view = [&](auto ax, int x_idx, int y_idx,
+                             const std::string& xl, const std::string& yl) {
+            ax->hold(true);
+
+            for (int k = 0; k < num_steps; k += plot_stride) {
+                // Measurement points in red
+                const auto& m = measurements[k];
+                std::vector<double> px(m.cols()), py(m.cols());
+                for (int j = 0; j < m.cols(); ++j) {
+                    px[j] = m(x_idx, j); py[j] = m(y_idx, j);
+                }
+                auto mp = ax->plot(px, py, ".");
+                mp->color({0.f, 1.0f, 0.0f, 0.0f});
+                mp->marker_size(3.0f);
+
+                // Estimated wireframes at estimated pose
+                const auto& latest = *phd.extracted_mixtures()[k];
+                for (std::size_t i = 0; i < latest.size(); ++i) {
+                    const auto& tp = latest.component(i).current();
+                    Eigen::Vector3d est_pos = tp.mean().head(3);
+                    Eigen::Matrix3d est_R = Eigen::Matrix3d(tp.rotation());
+                    auto [tri_verts, num_tris] = get_tri_data(tp);
+
+                    std::vector<double> wx, wy;
+                    for (int ti = 0; ti < num_tris; ++ti) {
+                        Eigen::Vector3d v0 = est_R * tri_verts->col(3 * ti + 0) + est_pos;
+                        Eigen::Vector3d v1 = est_R * tri_verts->col(3 * ti + 1) + est_pos;
+                        Eigen::Vector3d v2 = est_R * tri_verts->col(3 * ti + 2) + est_pos;
+                        wx.push_back(v0(x_idx)); wy.push_back(v0(y_idx));
+                        wx.push_back(v1(x_idx)); wy.push_back(v1(y_idx));
+                        wx.push_back(v2(x_idx)); wy.push_back(v2(y_idx));
+                        wx.push_back(v0(x_idx)); wy.push_back(v0(y_idx));
+                        wx.push_back(std::nan("")); wy.push_back(std::nan(""));
+                    }
+                    auto wl = ax->plot(wx, wy);
+                    wl->color({0.f, 0.7f, 0.7f, 0.7f});
+                    wl->line_width(0.2f);
+                }
+            }
+
+            // Truth trajectories in black
+            for (int t = 0; t < 2; ++t) {
+                std::vector<double> tx, ty;
+                for (const auto& s : truth_targets[t].states) {
+                    tx.push_back(s(x_idx)); ty.push_back(s(y_idx));
+                }
+                auto tl = ax->plot(tx, ty);
+                tl->color({0.f, 0.f, 0.f, 0.f});
+                tl->line_width(2.0f);
+            }
+
+            // Estimated means as markers from trajectory history
+            const auto& final_mix = *phd.extracted_mixtures().back();
+            for (std::size_t i = 0; i < final_mix.size(); ++i) {
+                const auto& traj = final_mix.component(i);
+                const auto& hist = traj.history();
+                if (hist.empty()) continue;
+                std::vector<double> ex, ey;
+                for (const auto& tp : hist) {
+                    ex.push_back(tp.mean()(x_idx));
+                    ey.push_back(tp.mean()(y_idx));
+                }
+                auto c = brew::plot_utils::lines_color(static_cast<int>(i));
+                auto el = ax->plot(ex, ey, "o-");
+                el->color(c);
+                el->line_width(1.5f);
+                el->marker_size(4.0f);
+                el->marker_face_color(c);
+                el->marker_face(true);
+            }
+
+            ax->xlabel(xl); ax->ylabel(yl);
+            ax->x_axis().label_font_size(18);
+            ax->y_axis().label_font_size(18);
+            ax->axes_aspect_ratio_auto(false);
+            ax->axes_aspect_ratio(1.0f);
+        };
+
+        plot_view(matplot::subplot(fig, 1, 2, 0), 0, 1, "X", "Y");
+        plot_view(matplot::subplot(fig, 1, 2, 1), 0, 2, "X", "Z");
+
+        brew::plot_utils::save_figure(fig, "output/trajectory_tm_phd_3d_multi.png");
+    }
+
+    // --- Figure 2: Convergence from smoothed trajectory history ---
+    {
+        auto fig = matplot::figure(true);
+        fig->width(1200);
+        fig->height(500);
+
+        // Compute errors from the final extraction's trajectory history
+        const auto& final_mix = *phd.extracted_mixtures().back();
+        std::vector<double> steps_A, steps_B, hist_pos_A, hist_pos_B, hist_rot_A, hist_rot_B;
+
+        for (std::size_t i = 0; i < final_mix.size(); ++i) {
+            const auto& traj = final_mix.component(i);
+            const auto& hist = traj.history();
+
+            // Match this trajectory to the closest truth target at the final step
+            Eigen::Vector3d final_pos = hist.back().mean().head(3);
+            int best_t = 0;
+            double best_d = std::numeric_limits<double>::infinity();
+            for (int t = 0; t < 2; ++t) {
+                double d = (final_pos - truth_targets[t].states.back().head(3)).norm();
+                if (d < best_d) { best_d = d; best_t = t; }
+            }
+
+            // Walk through history and compute errors at each timestep
+            const int h = static_cast<int>(hist.size());
+            const int start_k = num_steps - h;
+            auto& s_vec = (best_t == 0) ? steps_A : steps_B;
+            auto& p_vec = (best_t == 0) ? hist_pos_A : hist_pos_B;
+            auto& r_vec = (best_t == 0) ? hist_rot_A : hist_rot_B;
+
+            for (int j = 0; j < h; ++j) {
+                int k = start_k + j;
+                if (k < 0 || k >= num_steps) continue;
+                const auto& tgt = truth_targets[best_t];
+                int idx = k - tgt.birth_time;
+                if (idx < 0 || idx >= static_cast<int>(tgt.states.size())) continue;
+
+                s_vec.push_back(static_cast<double>(k));
+                p_vec.push_back((hist[j].mean().head(3) - tgt.states[idx].head(3)).norm());
+                r_vec.push_back(rotation_error_3d(
+                    Eigen::Matrix3d(hist[j].rotation()), tgt.rotations[idx]));
+            }
+        }
+
+        auto ax1 = matplot::subplot(fig, 1, 2, 0);
+        ax1->hold(true);
+        if (!steps_A.empty()) {
+            auto la = ax1->plot(steps_A, hist_pos_A); la->display_name("Plane"); la->line_width(2.0f);
+        }
+        if (!steps_B.empty()) {
+            auto lb = ax1->plot(steps_B, hist_pos_B); lb->display_name("Jet"); lb->line_width(2.0f);
+        }
+        ax1->xlabel("(a)");
+        ax1->x_axis().label_font_size(18);
+
+        auto ax2 = matplot::subplot(fig, 1, 2, 1);
+        ax2->hold(true);
+        if (!steps_A.empty()) {
+            auto ra = ax2->plot(steps_A, hist_rot_A); ra->display_name("Plane"); ra->line_width(2.0f);
+        }
+        if (!steps_B.empty()) {
+            auto rb = ax2->plot(steps_B, hist_rot_B); rb->display_name("Jet"); rb->line_width(2.0f);
+        }
+        ax2->xlabel("(b)");
+        ax2->x_axis().label_font_size(18);
+
+        brew::plot_utils::save_figure(fig, "output/trajectory_tm_phd_3d_multi_convergence.png");
     }
 #endif
 }

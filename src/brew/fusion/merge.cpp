@@ -515,25 +515,32 @@ void merge(models::Mixture<models::TemplatePose>& mix, double threshold) {
         Eigen::MatrixXd P_new = Eigen::MatrixXd::Zero(n_aug, n_aug);
         Eigen::MatrixXd R_sum = Eigen::MatrixXd::Zero(d, d);
 
+        bool any_has_rotation = false;
         for (auto idx : grp) {
             const double w = mix.weight(idx);
             m_new += w * mix.component(idx).mean();
             P_new += w * mix.component(idx).covariance();
-            R_sum += w * mix.component(idx).rotation();
+            if (mix.component(idx).has_rotation()) {
+                R_sum += w * mix.component(idx).rotation();
+                any_has_rotation = true;
+            }
         }
         m_new /= w_sum;
         P_new /= w_sum;
         P_new = 0.5 * (P_new + P_new.transpose());
 
-        // Rotation: projected arithmetic mean via SVD
-        R_sum /= w_sum;
-        Eigen::JacobiSVD<Eigen::MatrixXd> svd(R_sum, Eigen::ComputeFullU | Eigen::ComputeFullV);
-        Eigen::MatrixXd U = svd.matrixU();
-        Eigen::MatrixXd V = svd.matrixV();
-        // Ensure proper rotation (det = +1)
-        Eigen::MatrixXd D = Eigen::MatrixXd::Identity(d, d);
-        D(d - 1, d - 1) = (U * V.transpose()).determinant();
-        Eigen::MatrixXd R_new = U * D * V.transpose();
+        // Rotation: projected arithmetic mean via SVD (skip if no rotations)
+        Eigen::MatrixXd R_new;
+        if (any_has_rotation) {
+            R_sum /= w_sum;
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(R_sum, Eigen::ComputeFullU | Eigen::ComputeFullV);
+            Eigen::MatrixXd U = svd.matrixU();
+            Eigen::MatrixXd V = svd.matrixV();
+            // Ensure proper rotation (det = +1)
+            Eigen::MatrixXd D_mat = Eigen::MatrixXd::Identity(d, d);
+            D_mat(d - 1, d - 1) = (U * V.transpose()).determinant();
+            R_new = U * D_mat * V.transpose();
+        }
 
         result.add_component(
             std::make_unique<models::TemplatePose>(

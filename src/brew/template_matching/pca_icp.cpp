@@ -81,21 +81,14 @@ IcpResult PcaIcp::align(
         costs[c] = cost;
     }
 
-    // Find the best RMSE cost
+    // Pick the candidate with the lowest RMSE cost.
+    // PCA-ICP is only used for cold start (birth), so R_init is unreliable
+    // and we rely purely on geometric fit.
     double min_cost = *std::min_element(costs.begin(), costs.end());
-
-    // Among candidates within 20% of the best cost (near-symmetric ambiguity),
-    // pick the one closest to R_init (the filter's predicted rotation).
-    double cost_threshold = min_cost * 1.2;
     Eigen::Matrix3d best_R = candidates[0];
-    double best_dist = std::numeric_limits<double>::max();
     for (int c = 0; c < 8; ++c) {
-        if (costs[c] <= cost_threshold) {
-            double dist = (candidates[c] - R_init).squaredNorm();
-            if (dist < best_dist) {
-                best_dist = dist;
-                best_R = candidates[c];
-            }
+        if (costs[c] <= min_cost) {
+            best_R = candidates[c];
         }
     }
 
