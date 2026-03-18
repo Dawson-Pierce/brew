@@ -13,6 +13,7 @@
 #include "brew/template_matching/point_cloud_io.hpp"
 #include "brew/template_matching/point_to_point_icp.hpp"
 #include "brew/template_matching/point_to_plane_icp.hpp"
+#include "brew/measurement_sampling/measurement_sampling.hpp"
 
 #include <Eigen/Dense>
 #include <random>
@@ -137,7 +138,7 @@ std::unique_ptr<filters::TmEkf> make_tm_ekf(
     R_meas(1, 1) = 0.5;
     R_meas(2, 2) = 0.001;  // trust ICP rotation (no angular velocity in state)
     ekf->set_measurement_noise(R_meas);
-    ekf->set_rotation_process_noise(1.0 * Eigen::MatrixXd::Identity(1, 1));
+    ekf->set_rotation_process_noise(0.2 * Eigen::MatrixXd::Identity(1, 1));
     ekf->set_icp(icp);
     return ekf;
 }
@@ -156,7 +157,7 @@ std::unique_ptr<filters::TrajectoryTmEkf> make_trajectory_tm_ekf(
     R_meas(1, 1) = 0.5;
     R_meas(2, 2) = 0.001;  // trust ICP rotation (no angular velocity in state)
     ekf->set_measurement_noise(R_meas);
-    ekf->set_rotation_process_noise(1.0 * Eigen::MatrixXd::Identity(1, 1));
+    ekf->set_rotation_process_noise(0.2 * Eigen::MatrixXd::Identity(1, 1));
     ekf->set_icp(icp);
     ekf->set_window_size(window);
     return ekf;
@@ -288,9 +289,9 @@ struct TmScenario {
 
     void setup() {
         templ_rect = std::make_shared<template_matching::PointCloud>(
-            template_matching::sample_rectangle(3.0, 1.5, 20).points());
+            measurement_sampling::sample_rectangle(3.0, 1.5, 20).points());
         templ_tri = std::make_shared<template_matching::PointCloud>(
-            template_matching::sample_triangle(3.0, 2.5, 20).points());
+            measurement_sampling::sample_triangle(3.0, 2.5, 20).points());
         dyn = std::make_shared<dynamics::SingleIntegrator>(2);
 
         icp = std::make_shared<template_matching::PointToPointIcp>();
@@ -357,7 +358,7 @@ TEST(TmPhd, Tracking2D) {
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-4);
     phd.set_prune_threshold(1e-5);
-    phd.set_merge_threshold(4.0);
+    phd.set_merge_threshold(2.0);
     phd.set_max_components(30);
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(50.0);
@@ -614,7 +615,7 @@ TEST(TmPhd, TrajectoryTracking2D) {
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-4);
     phd.set_prune_threshold(1e-5);
-    phd.set_merge_threshold(4.0);
+    phd.set_merge_threshold(2.0);
     phd.set_max_components(30);
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(50.0);
@@ -1002,68 +1003,102 @@ bool is_point_visible(
     return true;
 }
 
-// Generate 3D point cloud measurements from truth targets using ray-traced
-// visibility from a sensor position. Handles backface culling and self-occlusion.
+// Generate 3D point cloud measurements by sampling mesh faces.
+// Samples points from triangle surfaces (area-weighted barycentric),
+// then filters by ray-traced visibility from the sensor position.
 // mesh_triangles: per-target body-frame triangle vertices (3 x 3*N_tri).
+// num_candidates: how many face points to sample before visibility filtering.
 // num_meas_pts: subsample visible points to this many (0 = use all visible).
 Eigen::MatrixXd generate_tm_measurements_3d(
     const std::vector<TmTruthTarget3D>& targets,
-    const std::vector<std::shared_ptr<template_matching::PointCloud>>& templates,
-    const std::vector<Eigen::MatrixXd>& normals,
     const std::vector<Eigen::MatrixXd>& mesh_triangles,
     const Eigen::Vector3d& sensor_pos,
     int timestep, double point_noise_std,
     std::mt19937& rng,
+    int num_candidates = 1000,
     int num_meas_pts = 0)
 {
     std::normal_distribution<double> noise(0.0, point_noise_std);
+    std::uniform_real_distribution<double> uniform(0.0, 1.0);
     std::vector<Eigen::MatrixXd> clouds;
 
     for (std::size_t ti = 0; ti < targets.size(); ++ti) {
         const auto& tgt = targets[ti];
         if (timestep >= tgt.birth_time && timestep <= tgt.death_time) {
-            {
-                int idx = timestep - tgt.birth_time;
-                Eigen::Vector3d pos = tgt.states[idx].head(3);
-                const Eigen::Matrix3d& R = tgt.rotations[idx];
+            int idx = timestep - tgt.birth_time;
+            Eigen::Vector3d pos = tgt.states[idx].head(3);
+            const Eigen::Matrix3d& R = tgt.rotations[idx];
 
-                const Eigen::MatrixXd& src_pts = templates[ti]->points();
-                const Eigen::MatrixXd& src_normals = normals[ti];
+            const Eigen::MatrixXd& body_tris = mesh_triangles[ti];
+            int num_tris = static_cast<int>(body_tris.cols()) / 3;
 
-                // Transform mesh triangles to world frame for occlusion testing
-                Eigen::MatrixXd world_tris = R * mesh_triangles[ti];
-                world_tris.colwise() += pos;
-                int num_tris = static_cast<int>(mesh_triangles[ti].cols()) / 3;
-
-                // Ray-traced visibility from sensor position
-                std::vector<int> visible;
-                visible.reserve(src_pts.cols());
-                for (int j = 0; j < src_pts.cols(); ++j) {
-                    Eigen::Vector3d world_pt = R * src_pts.col(j) + pos;
-                    Eigen::Vector3d world_normal = R * src_normals.col(j);
-                    if (is_point_visible(world_pt, world_normal, sensor_pos,
-                                         world_tris, num_tris)) {
-                        visible.push_back(j);
-                    }
-                }
-
-                if (visible.empty()) continue;
-
-                // Subsample visible points if requested
-                if (num_meas_pts > 0 && num_meas_pts < static_cast<int>(visible.size())) {
-                    std::shuffle(visible.begin(), visible.end(), rng);
-                    visible.resize(num_meas_pts);
-                }
-
-                Eigen::MatrixXd pts(3, static_cast<int>(visible.size()));
-                for (int j = 0; j < static_cast<int>(visible.size()); ++j) {
-                    pts.col(j) = R * src_pts.col(visible[j]) + pos;
-                    pts(0, j) += noise(rng);
-                    pts(1, j) += noise(rng);
-                    pts(2, j) += noise(rng);
-                }
-                clouds.push_back(pts);
+            // Build cumulative area distribution for face sampling
+            std::vector<double> cum_area(num_tris);
+            for (int t = 0; t < num_tris; ++t) {
+                Eigen::Vector3d e1 = body_tris.col(3*t+1) - body_tris.col(3*t);
+                Eigen::Vector3d e2 = body_tris.col(3*t+2) - body_tris.col(3*t);
+                double area = 0.5 * e1.cross(e2).norm();
+                cum_area[t] = (t > 0 ? cum_area[t-1] : 0.0) + area;
             }
+            double total_area = cum_area.back();
+
+            // Transform mesh to world frame for occlusion testing
+            Eigen::MatrixXd world_tris = R * body_tris;
+            world_tris.colwise() += pos;
+
+            // Sample candidate points from mesh faces and check visibility
+            std::vector<Eigen::Vector3d> visible_pts;
+            visible_pts.reserve(num_candidates);
+
+            for (int c = 0; c < num_candidates; ++c) {
+                // Pick a triangle proportional to area
+                double r = uniform(rng) * total_area;
+                auto it = std::lower_bound(cum_area.begin(), cum_area.end(), r);
+                int tri_idx = static_cast<int>(std::distance(cum_area.begin(), it));
+                tri_idx = std::min(tri_idx, num_tris - 1);
+
+                // Sample point on triangle via barycentric coordinates
+                double u = uniform(rng), v = uniform(rng);
+                double su = std::sqrt(u);
+                double b0 = 1.0 - su, b1 = v * su, b2 = 1.0 - b0 - b1;
+                Eigen::Vector3d body_pt = b0 * body_tris.col(3*tri_idx)
+                                        + b1 * body_tris.col(3*tri_idx+1)
+                                        + b2 * body_tris.col(3*tri_idx+2);
+
+                // Face normal
+                Eigen::Vector3d e1 = body_tris.col(3*tri_idx+1) - body_tris.col(3*tri_idx);
+                Eigen::Vector3d e2 = body_tris.col(3*tri_idx+2) - body_tris.col(3*tri_idx);
+                Eigen::Vector3d n = e1.cross(e2);
+                double len = n.norm();
+                if (len < 1e-15) continue;
+                n /= len;
+
+                // Transform to world frame
+                Eigen::Vector3d world_pt = R * body_pt + pos;
+                Eigen::Vector3d world_normal = R * n;
+
+                if (is_point_visible(world_pt, world_normal, sensor_pos,
+                                     world_tris, num_tris)) {
+                    visible_pts.push_back(world_pt);
+                }
+            }
+
+            if (visible_pts.empty()) continue;
+
+            // Subsample visible points if requested
+            if (num_meas_pts > 0 && num_meas_pts < static_cast<int>(visible_pts.size())) {
+                std::shuffle(visible_pts.begin(), visible_pts.end(), rng);
+                visible_pts.resize(num_meas_pts);
+            }
+
+            Eigen::MatrixXd pts(3, static_cast<int>(visible_pts.size()));
+            for (int j = 0; j < static_cast<int>(visible_pts.size()); ++j) {
+                pts.col(j) = visible_pts[j];
+                pts(0, j) += noise(rng);
+                pts(1, j) += noise(rng);
+                pts(2, j) += noise(rng);
+            }
+            clouds.push_back(pts);
         }
     }
 
@@ -1086,7 +1121,7 @@ Eigen::MatrixXd generate_tm_measurements_3d(
 TEST(TmPhd, Tracking3D_SingleTarget) {
     // --- Load template with PCA alignment (longest axis → X) ---
     auto load_template = [](const std::string& stl_file, int n_pts) {
-        auto cloud = template_matching::sample_stl(stl_file, n_pts);
+        auto cloud = measurement_sampling::sample_stl(stl_file, n_pts);
         Eigen::Vector3d centroid = cloud.points().rowwise().mean();
         cloud.points().colwise() -= centroid;
         Eigen::Matrix3d R_align = pca_alignment(cloud.points());
@@ -1118,21 +1153,21 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
 
     // --- ICP ---
     template_matching::IcpParams icp_params;
-    icp_params.max_iterations = 10;
+    icp_params.max_iterations = 15;
     icp_params.tolerance = 1e-6;
-    icp_params.sigma_sq = 0.2;
+    icp_params.sigma_sq = 0.1;
 
     auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
 
     auto ekf = std::make_unique<filters::TmEkf>();
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(1.0 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_process_noise(0.20 * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
-    R_meas.topLeftCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
-    R_meas.bottomRightCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
+    R_meas.topLeftCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
+    R_meas.bottomRightCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
     ekf->set_measurement_noise(R_meas);
-    ekf->set_rotation_process_noise(0.01 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_rotation_process_noise(0.1 * Eigen::MatrixXd::Identity(3, 3));
     ekf->set_icp(inner_icp);
 
     // --- Single target scenario ---
@@ -1148,22 +1183,11 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     std::vector<TmTruthTarget3D> truth_targets;
     truth_targets.push_back(make_tm_target_3d(x0, R0, omega, 0, num_steps - 1, dt, *dyn));
 
-    // --- Measurements (same PCA alignment as template) ---
-    Eigen::MatrixXd normals_jet;
-    auto meas_jet = template_matching::sample_stl("Plane.stl", 1000, normals_jet);
-    meas_jet.points().colwise() -= centroid_jet;
-    meas_jet.points() = R_align_jet * meas_jet.points();
-    normals_jet = R_align_jet * normals_jet;
-
-    // Load mesh triangles for ray-traced visibility (same alignment as template)
-    Eigen::MatrixXd tri_jet_body = template_matching::load_stl_triangles("Plane.stl");
+    // --- Mesh triangles for face-sampled measurements (same alignment as template) ---
+    Eigen::MatrixXd tri_jet_body = measurement_sampling::load_stl_triangles("Plane.stl");
     tri_jet_body.colwise() -= centroid_jet;
     tri_jet_body = R_align_jet * tri_jet_body;
 
-    std::vector<std::shared_ptr<template_matching::PointCloud>> meas_templates = {
-        std::make_shared<template_matching::PointCloud>(meas_jet.points())
-    };
-    std::vector<Eigen::MatrixXd> meas_normals = {normals_jet};
     std::vector<Eigen::MatrixXd> meas_triangles = {tri_jet_body};
 
     std::mt19937 rng(42);
@@ -1173,9 +1197,8 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
         Eigen::Vector3d sensor_pos(truth_targets[0].states[k](0),
                                    truth_targets[0].states[k](1), 0.0);
         measurements[k] = generate_tm_measurements_3d(
-            truth_targets, meas_templates, meas_normals,
-            meas_triangles, sensor_pos,
-            k, point_noise_std, rng, 100);
+            truth_targets, meas_triangles, sensor_pos,
+            k, point_noise_std, rng, 1000, 100);
     }
 
     // --- Birth model ---
@@ -1202,9 +1225,9 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-6);
     phd.set_prune_threshold(1e-5);
-    phd.set_merge_threshold(4.0);
+    phd.set_merge_threshold(2.0);
     phd.set_max_components(20);
-    phd.set_extract_threshold(0.3);
+    phd.set_extract_threshold(0.4); 
     phd.set_gate_threshold(100.0);
     phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(30.0, 3));
 
@@ -1276,7 +1299,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     std::filesystem::create_directories("output");
 
     // Load STL triangles for wireframe rendering (same PCA alignment)
-    Eigen::MatrixXd tri_verts = template_matching::load_stl_triangles("Plane.stl");
+    Eigen::MatrixXd tri_verts = measurement_sampling::load_stl_triangles("Plane.stl");
     tri_verts.colwise() -= centroid_jet;
     tri_verts = R_align_jet * tri_verts;
     const int num_tris = static_cast<int>(tri_verts.cols()) / 3;
@@ -1396,7 +1419,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
 TEST(TmPhd, Tracking3D_PlaneAndJet) {
     // --- Load and prepare templates with PCA alignment ---
     auto load_template = [](const std::string& stl_file, int n_pts) {
-        auto cloud = template_matching::sample_stl(stl_file, n_pts);
+        auto cloud = measurement_sampling::sample_stl(stl_file, n_pts);
         Eigen::Vector3d centroid = cloud.points().rowwise().mean();
         cloud.points().colwise() -= centroid;
         Eigen::Matrix3d R_align = pca_alignment(cloud.points());
@@ -1413,8 +1436,8 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
         return std::make_tuple(templ, centroid, R_align);
     };
 
-    auto [templ_plane, centroid_plane, R_align_plane] = load_template("Plane.stl", 500);
-    auto [templ_jet,   centroid_jet,   R_align_jet]   = load_template("Jet.stl",   500);
+    auto [templ_plane, centroid_plane, R_align_plane] = load_template("Plane.stl", 750);
+    auto [templ_jet,   centroid_jet,   R_align_jet]   = load_template("Jet.stl",   1000);
 
     std::cout << "\n--- Templates (PCA-aligned) ---\n";
     std::cout << "Plane: " << templ_plane->num_points() << " pts, bbox X["
@@ -1431,9 +1454,9 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
 
     // --- ICP (shared params, per-template PCA) ---
     template_matching::IcpParams icp_params;
-    icp_params.max_iterations = 10;
+    icp_params.max_iterations = 15;
     icp_params.tolerance = 1e-6;
-    icp_params.sigma_sq = 1.0;
+    icp_params.sigma_sq = 0.1;
 
     auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
@@ -1443,17 +1466,17 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(0.05 * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
-    R_meas.topLeftCorner(3, 3) = 0.5 * Eigen::Matrix3d::Identity();
-    R_meas.bottomRightCorner(3, 3) = 0.05 * Eigen::Matrix3d::Identity();
+    R_meas.topLeftCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
+    R_meas.bottomRightCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
     ekf->set_measurement_noise(R_meas);
-    ekf->set_rotation_process_noise(0.01 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_rotation_process_noise(0.1 * Eigen::MatrixXd::Identity(3, 3));
     ekf->set_icp(inner_icp);
 
     // --- Scenario: two targets, facing their velocity, moderate separation ---
     const int num_steps = 30;
     const double dt = 1.0;
-    const double point_noise_std = 0.05;
-    const double p_detect = 0.7;
+    const double point_noise_std = 0.01;
+    const double p_detect = 0.95;
 
     // Target A: Plane — heading northeast
     Eigen::VectorXd x0_plane(6);
@@ -1465,36 +1488,20 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
     Eigen::VectorXd x0_jet(6);
     x0_jet << 50.0, 80.0, 80.0, 20.0, -5.0, -0.3;
     Eigen::Matrix3d R0_jet = facing_rotation(x0_jet.tail(3));
-    Eigen::Vector3d omega_jet(0.0, -0.001, 0.0);
+    Eigen::Vector3d omega_jet(0.0, 0.001, 0.0);
 
     std::vector<TmTruthTarget3D> truth_targets;
     truth_targets.push_back(make_tm_target_3d(x0_plane, R0_plane, omega_plane, 0, num_steps - 1, dt, *dyn));
     truth_targets.push_back(make_tm_target_3d(x0_jet,   R0_jet,   omega_jet,   0, num_steps - 1, dt, *dyn));
 
-    // --- Measurement generation (same PCA alignment as templates) ---
-    Eigen::MatrixXd normals_plane, normals_jet;
-    auto meas_plane = template_matching::sample_stl("Plane.stl", 1000, normals_plane);
-    meas_plane.points().colwise() -= centroid_plane;
-    meas_plane.points() = R_align_plane * meas_plane.points();
-    normals_plane = R_align_plane * normals_plane;
-    auto meas_jet = template_matching::sample_stl("Jet.stl", 1000, normals_jet);
-    meas_jet.points().colwise() -= centroid_jet;
-    meas_jet.points() = R_align_jet * meas_jet.points();
-    normals_jet = R_align_jet * normals_jet;
-
-    // Load mesh triangles for ray-traced visibility
-    Eigen::MatrixXd tri_plane_body = template_matching::load_stl_triangles("Plane.stl");
+    // --- Mesh triangles for face-sampled measurements ---
+    Eigen::MatrixXd tri_plane_body = measurement_sampling::load_stl_triangles("Plane.stl");
     tri_plane_body.colwise() -= centroid_plane;
     tri_plane_body = R_align_plane * tri_plane_body;
-    Eigen::MatrixXd tri_jet_body = template_matching::load_stl_triangles("Jet.stl");
+    Eigen::MatrixXd tri_jet_body = measurement_sampling::load_stl_triangles("Jet.stl");
     tri_jet_body.colwise() -= centroid_jet;
     tri_jet_body = R_align_jet * tri_jet_body;
 
-    std::vector<std::shared_ptr<template_matching::PointCloud>> meas_templates = {
-        std::make_shared<template_matching::PointCloud>(meas_plane.points()),
-        std::make_shared<template_matching::PointCloud>(meas_jet.points())
-    };
-    std::vector<Eigen::MatrixXd> meas_normals = {normals_plane, normals_jet};
     std::vector<Eigen::MatrixXd> meas_triangles = {tri_plane_body, tri_jet_body};
 
     std::mt19937 rng(42);
@@ -1512,9 +1519,8 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
         if (n_active > 0) mid /= static_cast<double>(n_active);
         Eigen::Vector3d sensor_pos(mid(0), mid(1), 0.0);
         measurements[k] = generate_tm_measurements_3d(
-            truth_targets, meas_templates, meas_normals,
-            meas_triangles, sensor_pos,
-            k, point_noise_std, rng, 100);
+            truth_targets, meas_triangles, sensor_pos,
+            k, point_noise_std, rng, 1000, 100);
     }
 
     // --- Birth model: one component per template ---
@@ -1545,9 +1551,9 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-6);
     phd.set_prune_threshold(1e-5);
-    phd.set_merge_threshold(4.0);
+    phd.set_merge_threshold(2.0);
     phd.set_max_components(50);
-    phd.set_extract_threshold(0.3);
+    phd.set_extract_threshold(0.4); 
     phd.set_gate_threshold(100.0);
     phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(30.0, 3));
 
@@ -1633,21 +1639,23 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
 #ifdef BREW_ENABLE_PLOTTING
     std::filesystem::create_directories("output");
 
-    // --- Figure 1: Top-down (XY) and side (XZ) views ---
+    // --- Figure 1: 3D tracking plot ---
     {
         auto fig = matplot::figure(true);
-        fig->width(1400);
-        fig->height(700);
+        fig->width(1100);
+        fig->height(900);
+        auto ax = fig->current_axes();
+        ax->hold(true);
 
         const int plot_stride = 10;
 
         // Load STL triangles (same PCA alignment as templates)
-        Eigen::MatrixXd tri_plane = template_matching::load_stl_triangles("Plane.stl");
+        Eigen::MatrixXd tri_plane = measurement_sampling::load_stl_triangles("Plane.stl");
         tri_plane.colwise() -= centroid_plane;
         tri_plane = R_align_plane * tri_plane;
         const int n_tri_plane = static_cast<int>(tri_plane.cols()) / 3;
 
-        Eigen::MatrixXd tri_jet = template_matching::load_stl_triangles("Jet.stl");
+        Eigen::MatrixXd tri_jet = measurement_sampling::load_stl_triangles("Jet.stl");
         tri_jet.colwise() -= centroid_jet;
         tri_jet = R_align_jet * tri_jet;
         const int n_tri_jet = static_cast<int>(tri_jet.cols()) / 3;
@@ -1659,81 +1667,74 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
             return {&tri_jet, n_tri_jet};
         };
 
-        auto plot_view = [&](auto ax, int x_idx, int y_idx,
-                             const std::string& xl, const std::string& yl) {
-            ax->hold(true);
-
-            for (int k = 0; k < num_steps; k += plot_stride) {
-                // Measurement points in red
-                const auto& m = measurements[k];
-                std::vector<double> px(m.cols()), py(m.cols());
-                for (int j = 0; j < m.cols(); ++j) {
-                    px[j] = m(x_idx, j); py[j] = m(y_idx, j);
-                }
-                auto mp = ax->plot(px, py, ".");
-                mp->color({0.f, 1.0f, 0.0f, 0.0f});
-                mp->marker_size(3.0f);
-
-                // Estimated wireframes at estimated pose
-                const auto& latest = *phd.extracted_mixtures()[k];
-                for (std::size_t i = 0; i < latest.size(); ++i) {
-                    const auto& est = latest.component(i);
-                    Eigen::Vector3d est_pos = est.mean().head(3);
-                    Eigen::Matrix3d est_R = Eigen::Matrix3d(est.rotation());
-                    auto [tri_verts, num_tris] = get_tri_data(est);
-
-                    std::vector<double> wx, wy;
-                    for (int t = 0; t < num_tris; ++t) {
-                        Eigen::Vector3d v0 = est_R * tri_verts->col(3 * t + 0) + est_pos;
-                        Eigen::Vector3d v1 = est_R * tri_verts->col(3 * t + 1) + est_pos;
-                        Eigen::Vector3d v2 = est_R * tri_verts->col(3 * t + 2) + est_pos;
-                        wx.push_back(v0(x_idx)); wy.push_back(v0(y_idx));
-                        wx.push_back(v1(x_idx)); wy.push_back(v1(y_idx));
-                        wx.push_back(v2(x_idx)); wy.push_back(v2(y_idx));
-                        wx.push_back(v0(x_idx)); wy.push_back(v0(y_idx));
-                        wx.push_back(std::nan("")); wy.push_back(std::nan(""));
-                    }
-                    auto wl = ax->plot(wx, wy);
-                    wl->color({0.f, 0.7f, 0.7f, 0.7f});
-                    wl->line_width(0.2f);
-                }
+        for (int k = 0; k < num_steps; k += plot_stride) {
+            // Measurement points in red
+            const auto& m = measurements[k];
+            std::vector<double> mx(m.cols()), my(m.cols()), mz(m.cols());
+            for (int j = 0; j < m.cols(); ++j) {
+                mx[j] = m(0, j); my[j] = m(1, j); mz[j] = m(2, j);
             }
+            auto mp = ax->plot3(mx, my, mz, ".");
+            mp->color({0.f, 1.0f, 0.0f, 0.0f});
+            mp->marker_size(3.0f);
 
-            // Truth trajectories in black
-            for (int t = 0; t < 2; ++t) {
-                std::vector<double> tx, ty;
-                for (const auto& s : truth_targets[t].states) {
-                    tx.push_back(s(x_idx)); ty.push_back(s(y_idx));
+            // Estimated wireframes at estimated pose
+            const auto& latest = *phd.extracted_mixtures()[k];
+            for (std::size_t i = 0; i < latest.size(); ++i) {
+                const auto& est = latest.component(i);
+                Eigen::Vector3d est_pos = est.mean().head(3);
+                Eigen::Matrix3d est_R = Eigen::Matrix3d(est.rotation());
+                auto [tri_verts, num_tris] = get_tri_data(est);
+
+                std::vector<double> wx, wy, wz;
+                for (int t = 0; t < num_tris; ++t) {
+                    Eigen::Vector3d v0 = est_R * tri_verts->col(3 * t + 0) + est_pos;
+                    Eigen::Vector3d v1 = est_R * tri_verts->col(3 * t + 1) + est_pos;
+                    Eigen::Vector3d v2 = est_R * tri_verts->col(3 * t + 2) + est_pos;
+                    wx.push_back(v0(0)); wy.push_back(v0(1)); wz.push_back(v0(2));
+                    wx.push_back(v1(0)); wy.push_back(v1(1)); wz.push_back(v1(2));
+                    wx.push_back(v2(0)); wy.push_back(v2(1)); wz.push_back(v2(2));
+                    wx.push_back(v0(0)); wy.push_back(v0(1)); wz.push_back(v0(2));
+                    wx.push_back(std::nan("")); wy.push_back(std::nan("")); wz.push_back(std::nan(""));
                 }
-                auto tl = ax->plot(tx, ty);
-                tl->color({0.f, 0.f, 0.f, 0.f});
-                tl->line_width(2.0f);
+                auto wl = ax->plot3(wx, wy, wz);
+                wl->color({0.f, 0.7f, 0.7f, 0.7f});
+                wl->line_width(0.2f);
             }
+        }
 
-            // Estimated means as markers along the trajectory
-            for (int k = 0; k < num_steps; ++k) {
-                const auto& latest = *phd.extracted_mixtures()[k];
-                for (std::size_t i = 0; i < latest.size(); ++i) {
-                    auto c = brew::plot_utils::lines_color(static_cast<int>(i));
-                    std::vector<double> ex = {latest.component(i).mean()(x_idx)};
-                    std::vector<double> ey = {latest.component(i).mean()(y_idx)};
-                    auto ep = ax->plot(ex, ey, "o");
-                    ep->color(c);
-                    ep->marker_size(4.0f);
-                    ep->marker_face_color(c);
-                    ep->marker_face(true);
-                }
+        // Truth trajectories in black
+        for (int t = 0; t < 2; ++t) {
+            std::vector<double> tx, ty, tz;
+            for (const auto& s : truth_targets[t].states) {
+                tx.push_back(s(0)); ty.push_back(s(1)); tz.push_back(s(2));
             }
+            auto tl = ax->plot3(tx, ty, tz);
+            tl->color({0.f, 0.f, 0.f, 0.f});
+            tl->line_width(2.0f);
+        }
 
-            ax->xlabel(xl); ax->ylabel(yl);
-            ax->x_axis().label_font_size(18);
-            ax->y_axis().label_font_size(18);
-            ax->axes_aspect_ratio_auto(false);
-            ax->axes_aspect_ratio(1.0f);
-        };
+        // Estimated means as markers along the trajectory
+        for (int k = 0; k < num_steps; ++k) {
+            const auto& latest = *phd.extracted_mixtures()[k];
+            for (std::size_t i = 0; i < latest.size(); ++i) {
+                auto c = brew::plot_utils::lines_color(static_cast<int>(i));
+                std::vector<double> ex = {latest.component(i).mean()(0)};
+                std::vector<double> ey = {latest.component(i).mean()(1)};
+                std::vector<double> ez = {latest.component(i).mean()(2)};
+                auto ep = ax->plot3(ex, ey, ez, "o");
+                ep->color(c);
+                ep->marker_size(4.0f);
+                ep->marker_face_color(c);
+                ep->marker_face(true);
+            }
+        }
 
-        plot_view(matplot::subplot(fig, 1, 2, 0), 0, 1, "X", "Y");
-        plot_view(matplot::subplot(fig, 1, 2, 1), 0, 2, "X", "Z");
+        ax->xlabel("X"); ax->ylabel("Y"); ax->zlabel("Z");
+        ax->x_axis().label_font_size(18);
+        ax->y_axis().label_font_size(18);
+        ax->z_axis().label_font_size(18);
+        ax->view(45.f, 30.f);
 
         brew::plot_utils::save_figure(fig, "output/tm_phd_3d_multi.png");
     }
@@ -1774,7 +1775,7 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
 TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
     // --- Load and prepare templates with PCA alignment ---
     auto load_template = [](const std::string& stl_file, int n_pts) {
-        auto cloud = template_matching::sample_stl(stl_file, n_pts);
+        auto cloud = measurement_sampling::sample_stl(stl_file, n_pts);
         Eigen::Vector3d centroid = cloud.points().rowwise().mean();
         cloud.points().colwise() -= centroid;
         Eigen::Matrix3d R_align = pca_alignment(cloud.points());
@@ -1799,9 +1800,9 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
 
     // --- ICP ---
     template_matching::IcpParams icp_params;
-    icp_params.max_iterations = 10;
+    icp_params.max_iterations = 15;
     icp_params.tolerance = 1e-6;
-    icp_params.sigma_sq = 1.0;
+    icp_params.sigma_sq = 0.1;
 
     auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
@@ -1811,18 +1812,18 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(0.05 * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
-    R_meas.topLeftCorner(3, 3) = 0.5 * Eigen::Matrix3d::Identity();
-    R_meas.bottomRightCorner(3, 3) = 0.05 * Eigen::Matrix3d::Identity();
+    R_meas.topLeftCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
+    R_meas.bottomRightCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
     ekf->set_measurement_noise(R_meas);
-    ekf->set_rotation_process_noise(0.01 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_rotation_process_noise(0.1 * Eigen::MatrixXd::Identity(3, 3));
     ekf->set_icp(inner_icp);
-    ekf->set_window_size(15);
+    ekf->set_window_size(5);
 
     // --- Scenario (same as non-trajectory 3D test) ---
     const int num_steps = 30;
     const double dt = 1.0;
-    const double point_noise_std = 0.05;
-    const double p_detect = 0.7;
+    const double point_noise_std = 0.01;
+    const double p_detect = 0.95;
 
     Eigen::VectorXd x0_plane(6);
     x0_plane << 0.0, 0.0, 50.0, 15.0, 10.0, 0.5;
@@ -1838,30 +1839,14 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
     truth_targets.push_back(make_tm_target_3d(x0_plane, R0_plane, omega_plane, 0, num_steps - 1, dt, *dyn));
     truth_targets.push_back(make_tm_target_3d(x0_jet,   R0_jet,   omega_jet,   0, num_steps - 1, dt, *dyn));
 
-    // --- Measurements (same PCA alignment as templates) ---
-    Eigen::MatrixXd normals_plane, normals_jet;
-    auto meas_plane = template_matching::sample_stl("Plane.stl", 1000, normals_plane);
-    meas_plane.points().colwise() -= centroid_plane;
-    meas_plane.points() = R_align_plane * meas_plane.points();
-    normals_plane = R_align_plane * normals_plane;
-    auto meas_jet = template_matching::sample_stl("Jet.stl", 1000, normals_jet);
-    meas_jet.points().colwise() -= centroid_jet;
-    meas_jet.points() = R_align_jet * meas_jet.points();
-    normals_jet = R_align_jet * normals_jet;
-
-    // Load mesh triangles for ray-traced visibility
-    Eigen::MatrixXd tri_plane_body = template_matching::load_stl_triangles("Plane.stl");
+    // --- Mesh triangles for face-sampled measurements ---
+    Eigen::MatrixXd tri_plane_body = measurement_sampling::load_stl_triangles("Plane.stl");
     tri_plane_body.colwise() -= centroid_plane;
     tri_plane_body = R_align_plane * tri_plane_body;
-    Eigen::MatrixXd tri_jet_body = template_matching::load_stl_triangles("Jet.stl");
+    Eigen::MatrixXd tri_jet_body = measurement_sampling::load_stl_triangles("Jet.stl");
     tri_jet_body.colwise() -= centroid_jet;
     tri_jet_body = R_align_jet * tri_jet_body;
 
-    std::vector<std::shared_ptr<template_matching::PointCloud>> meas_templates = {
-        std::make_shared<template_matching::PointCloud>(meas_plane.points()),
-        std::make_shared<template_matching::PointCloud>(meas_jet.points())
-    };
-    std::vector<Eigen::MatrixXd> meas_normals = {normals_plane, normals_jet};
     std::vector<Eigen::MatrixXd> meas_triangles = {tri_plane_body, tri_jet_body};
 
     std::mt19937 rng(42);
@@ -1879,9 +1864,8 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
         if (n_active > 0) mid /= static_cast<double>(n_active);
         Eigen::Vector3d sensor_pos(mid(0), mid(1), 0.0);
         measurements[k] = generate_tm_measurements_3d(
-            truth_targets, meas_templates, meas_normals,
-            meas_triangles, sensor_pos,
-            k, point_noise_std, rng, 100);
+            truth_targets, meas_triangles, sensor_pos,
+            k, point_noise_std, rng, 1000, 100);
     }
 
     // --- Birth model ---
@@ -1907,8 +1891,10 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
         return traj;
     };
 
-    birth->add_component(make_traj_birth(templ_plane), 0.01);
-    birth->add_component(make_traj_birth(templ_jet),   0.01);
+    double w_b = 0.001;
+
+    birth->add_component(make_traj_birth(templ_plane), w_b);
+    birth->add_component(make_traj_birth(templ_jet), w_b);
 
     // --- PHD filter ---
     multi_target::PHD<models::Trajectory<models::TemplatePose>> phd;
@@ -1921,9 +1907,9 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-6);
     phd.set_prune_threshold(1e-5);
-    phd.set_merge_threshold(4.0);
+    phd.set_merge_threshold(2.0);
     phd.set_max_components(50);
-    phd.set_extract_threshold(0.3);
+    phd.set_extract_threshold(0.4); 
     phd.set_gate_threshold(100.0);
     phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(30.0, 3));
 
@@ -2009,21 +1995,23 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
 #ifdef BREW_ENABLE_PLOTTING
     std::filesystem::create_directories("output");
 
-    // --- Figure 1: Top-down (XY) and side (XZ) views with trajectory history ---
+    // --- Figure 1: 3D tracking plot with trajectory history ---
     {
         auto fig = matplot::figure(true);
-        fig->width(1400);
-        fig->height(700);
+        fig->width(1100);
+        fig->height(900);
+        auto ax = fig->current_axes();
+        ax->hold(true);
 
         const int plot_stride = 10;
 
         // Load STL triangles (same PCA alignment as templates)
-        Eigen::MatrixXd tri_plane = template_matching::load_stl_triangles("Plane.stl");
+        Eigen::MatrixXd tri_plane = measurement_sampling::load_stl_triangles("Plane.stl");
         tri_plane.colwise() -= centroid_plane;
         tri_plane = R_align_plane * tri_plane;
         const int n_tri_plane = static_cast<int>(tri_plane.cols()) / 3;
 
-        Eigen::MatrixXd tri_jet = template_matching::load_stl_triangles("Jet.stl");
+        Eigen::MatrixXd tri_jet = measurement_sampling::load_stl_triangles("Jet.stl");
         tri_jet.colwise() -= centroid_jet;
         tri_jet = R_align_jet * tri_jet;
         const int n_tri_jet = static_cast<int>(tri_jet.cols()) / 3;
@@ -2035,86 +2023,79 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
             return {&tri_jet, n_tri_jet};
         };
 
-        auto plot_view = [&](auto ax, int x_idx, int y_idx,
-                             const std::string& xl, const std::string& yl) {
-            ax->hold(true);
-
-            for (int k = 0; k < num_steps; k += plot_stride) {
-                // Measurement points in red
-                const auto& m = measurements[k];
-                std::vector<double> px(m.cols()), py(m.cols());
-                for (int j = 0; j < m.cols(); ++j) {
-                    px[j] = m(x_idx, j); py[j] = m(y_idx, j);
-                }
-                auto mp = ax->plot(px, py, ".");
-                mp->color({0.f, 1.0f, 0.0f, 0.0f});
-                mp->marker_size(3.0f);
-
-                // Estimated wireframes at estimated pose
-                const auto& latest = *phd.extracted_mixtures()[k];
-                for (std::size_t i = 0; i < latest.size(); ++i) {
-                    const auto& tp = latest.component(i).current();
-                    Eigen::Vector3d est_pos = tp.mean().head(3);
-                    Eigen::Matrix3d est_R = Eigen::Matrix3d(tp.rotation());
-                    auto [tri_verts, num_tris] = get_tri_data(tp);
-
-                    std::vector<double> wx, wy;
-                    for (int ti = 0; ti < num_tris; ++ti) {
-                        Eigen::Vector3d v0 = est_R * tri_verts->col(3 * ti + 0) + est_pos;
-                        Eigen::Vector3d v1 = est_R * tri_verts->col(3 * ti + 1) + est_pos;
-                        Eigen::Vector3d v2 = est_R * tri_verts->col(3 * ti + 2) + est_pos;
-                        wx.push_back(v0(x_idx)); wy.push_back(v0(y_idx));
-                        wx.push_back(v1(x_idx)); wy.push_back(v1(y_idx));
-                        wx.push_back(v2(x_idx)); wy.push_back(v2(y_idx));
-                        wx.push_back(v0(x_idx)); wy.push_back(v0(y_idx));
-                        wx.push_back(std::nan("")); wy.push_back(std::nan(""));
-                    }
-                    auto wl = ax->plot(wx, wy);
-                    wl->color({0.f, 0.7f, 0.7f, 0.7f});
-                    wl->line_width(0.2f);
-                }
+        for (int k = 0; k < num_steps; k += plot_stride) {
+            // Measurement points in red
+            const auto& m = measurements[k];
+            std::vector<double> mx(m.cols()), my(m.cols()), mz(m.cols());
+            for (int j = 0; j < m.cols(); ++j) {
+                mx[j] = m(0, j); my[j] = m(1, j); mz[j] = m(2, j);
             }
+            auto mp = ax->plot3(mx, my, mz, ".");
+            mp->color({0.f, 1.0f, 0.0f, 0.0f});
+            mp->marker_size(3.0f);
 
-            // Truth trajectories in black
-            for (int t = 0; t < 2; ++t) {
-                std::vector<double> tx, ty;
-                for (const auto& s : truth_targets[t].states) {
-                    tx.push_back(s(x_idx)); ty.push_back(s(y_idx));
+            // Estimated wireframes at estimated pose
+            const auto& latest = *phd.extracted_mixtures()[k];
+            for (std::size_t i = 0; i < latest.size(); ++i) {
+                const auto& tp = latest.component(i).current();
+                Eigen::Vector3d est_pos = tp.mean().head(3);
+                Eigen::Matrix3d est_R = Eigen::Matrix3d(tp.rotation());
+                auto [tri_verts, num_tris] = get_tri_data(tp);
+
+                std::vector<double> wx, wy, wz;
+                for (int ti = 0; ti < num_tris; ++ti) {
+                    Eigen::Vector3d v0 = est_R * tri_verts->col(3 * ti + 0) + est_pos;
+                    Eigen::Vector3d v1 = est_R * tri_verts->col(3 * ti + 1) + est_pos;
+                    Eigen::Vector3d v2 = est_R * tri_verts->col(3 * ti + 2) + est_pos;
+                    wx.push_back(v0(0)); wy.push_back(v0(1)); wz.push_back(v0(2));
+                    wx.push_back(v1(0)); wy.push_back(v1(1)); wz.push_back(v1(2));
+                    wx.push_back(v2(0)); wy.push_back(v2(1)); wz.push_back(v2(2));
+                    wx.push_back(v0(0)); wy.push_back(v0(1)); wz.push_back(v0(2));
+                    wx.push_back(std::nan("")); wy.push_back(std::nan("")); wz.push_back(std::nan(""));
                 }
-                auto tl = ax->plot(tx, ty);
-                tl->color({0.f, 0.f, 0.f, 0.f});
-                tl->line_width(2.0f);
+                auto wl = ax->plot3(wx, wy, wz);
+                wl->color({0.f, 0.7f, 0.7f, 0.7f});
+                wl->line_width(0.2f);
             }
+        }
 
-            // Estimated means as markers from trajectory history
-            const auto& final_mix = *phd.extracted_mixtures().back();
-            for (std::size_t i = 0; i < final_mix.size(); ++i) {
-                const auto& traj = final_mix.component(i);
-                const auto& hist = traj.history();
-                if (hist.empty()) continue;
-                std::vector<double> ex, ey;
-                for (const auto& tp : hist) {
-                    ex.push_back(tp.mean()(x_idx));
-                    ey.push_back(tp.mean()(y_idx));
-                }
-                auto c = brew::plot_utils::lines_color(static_cast<int>(i));
-                auto el = ax->plot(ex, ey, "o-");
-                el->color(c);
-                el->line_width(1.5f);
-                el->marker_size(4.0f);
-                el->marker_face_color(c);
-                el->marker_face(true);
+        // Truth trajectories in black
+        for (int t = 0; t < 2; ++t) {
+            std::vector<double> tx, ty, tz;
+            for (const auto& s : truth_targets[t].states) {
+                tx.push_back(s(0)); ty.push_back(s(1)); tz.push_back(s(2));
             }
+            auto tl = ax->plot3(tx, ty, tz);
+            tl->color({0.f, 0.f, 0.f, 0.f});
+            tl->line_width(2.0f);
+        }
 
-            ax->xlabel(xl); ax->ylabel(yl);
-            ax->x_axis().label_font_size(18);
-            ax->y_axis().label_font_size(18);
-            ax->axes_aspect_ratio_auto(false);
-            ax->axes_aspect_ratio(1.0f);
-        };
+        // Estimated means as markers from trajectory history
+        const auto& final_mix = *phd.extracted_mixtures().back();
+        for (std::size_t i = 0; i < final_mix.size(); ++i) {
+            const auto& traj = final_mix.component(i);
+            const auto& hist = traj.history();
+            if (hist.empty()) continue;
+            std::vector<double> ex, ey, ez;
+            for (const auto& tp : hist) {
+                ex.push_back(tp.mean()(0));
+                ey.push_back(tp.mean()(1));
+                ez.push_back(tp.mean()(2));
+            }
+            auto c = brew::plot_utils::lines_color(static_cast<int>(i));
+            auto el = ax->plot3(ex, ey, ez, "o-");
+            el->color(c);
+            el->line_width(1.5f);
+            el->marker_size(4.0f);
+            el->marker_face_color(c);
+            el->marker_face(true);
+        }
 
-        plot_view(matplot::subplot(fig, 1, 2, 0), 0, 1, "X", "Y");
-        plot_view(matplot::subplot(fig, 1, 2, 1), 0, 2, "X", "Z");
+        ax->xlabel("X"); ax->ylabel("Y"); ax->zlabel("Z");
+        ax->x_axis().label_font_size(18);
+        ax->y_axis().label_font_size(18);
+        ax->z_axis().label_font_size(18);
+        ax->view(45.f, 30.f);
 
         brew::plot_utils::save_figure(fig, "output/trajectory_tm_phd_3d_multi.png");
     }

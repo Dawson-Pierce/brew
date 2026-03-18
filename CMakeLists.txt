@@ -60,6 +60,7 @@ add_subdirectory(src/brew/clustering)
 add_subdirectory(src/brew/metrics)
 add_subdirectory(src/brew/serialization)
 add_subdirectory(src/brew/template_matching)
+add_subdirectory(src/brew/measurement_sampling)
 if(BREW_ENABLE_PLOTTING)
     # --- Fetch matplot++ ---
     FetchContent_Declare(
@@ -94,6 +95,7 @@ target_link_libraries(brew INTERFACE
     brew_metrics
     brew_serialization
     brew_template_matching
+    brew_measurement_sampling
 )
 if(BREW_ENABLE_PLOTTING)
     target_link_libraries(brew INTERFACE brew_plot_utils)
