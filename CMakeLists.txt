@@ -39,15 +39,16 @@ if(NOT Eigen3_FOUND)
     FetchContent_MakeAvailable(eigen)
 endif()
 
-# nlohmann/json for serialization
+# yaml-cpp for serialization
 FetchContent_Declare(
-    nlohmann_json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG        v3.11.3
+    yaml-cpp
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+    GIT_TAG        0.8.0
     GIT_SHALLOW    TRUE
 )
-set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(nlohmann_json)
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(yaml-cpp)
 
 # Library modules (order matters: dependencies first)
 add_subdirectory(src/brew/models)

@@ -456,6 +456,7 @@ void merge(models::Mixture<models::TemplatePose>& mix, double threshold) {
         double max_w = -1.0;
         std::size_t ref = 0;
         bool found = false;
+        // Find max weight of remaining mixture
         for (std::size_t i = 0; i < mix.size(); ++i) {
             if (remaining[i] && mix.weight(i) > max_w) {
                 max_w = mix.weight(i);
@@ -510,29 +511,30 @@ void merge(models::Mixture<models::TemplatePose>& mix, double threshold) {
         const int n_aug = mix.component(ref).aug_dim();
         const int d = mix.component(ref).dim();
 
-        // Weighted average of translational state
+        // --- Merged translational mean ---
         Eigen::VectorXd m_new = Eigen::VectorXd::Zero(n_trans);
-        Eigen::MatrixXd P_new = Eigen::MatrixXd::Zero(n_aug, n_aug);
-        Eigen::MatrixXd R_sum = Eigen::MatrixXd::Zero(d, d);
+        for (auto idx : grp) {
+            m_new += mix.weight(idx) * mix.component(idx).mean();
+        }
+        m_new /= w_sum;
 
+        // --- Merged rotation: projected arithmetic mean via SVD ---
+        // Only accumulate rotation weights from components that have rotation
+        Eigen::MatrixXd R_new;
+        Eigen::MatrixXd R_sum = Eigen::MatrixXd::Zero(d, d);
+        double w_rot_sum = 0.0;
         bool any_has_rotation = false;
         for (auto idx : grp) {
-            const double w = mix.weight(idx);
-            m_new += w * mix.component(idx).mean();
-            P_new += w * mix.component(idx).covariance();
             if (mix.component(idx).has_rotation()) {
+                const double w = mix.weight(idx);
                 R_sum += w * mix.component(idx).rotation();
+                w_rot_sum += w;
                 any_has_rotation = true;
             }
         }
-        m_new /= w_sum;
-        P_new /= w_sum;
-        P_new = 0.5 * (P_new + P_new.transpose());
 
-        // Rotation: projected arithmetic mean via SVD (skip if no rotations)
-        Eigen::MatrixXd R_new;
-        if (any_has_rotation) {
-            R_sum /= w_sum;
+        if (any_has_rotation && w_rot_sum > 0.0) {
+            R_sum /= w_rot_sum;
             Eigen::JacobiSVD<Eigen::MatrixXd> svd(R_sum, Eigen::ComputeFullU | Eigen::ComputeFullV);
             Eigen::MatrixXd U = svd.matrixU();
             Eigen::MatrixXd V = svd.matrixV();
@@ -541,6 +543,21 @@ void merge(models::Mixture<models::TemplatePose>& mix, double threshold) {
             D_mat(d - 1, d - 1) = (U * V.transpose()).determinant();
             R_new = U * D_mat * V.transpose();
         }
+
+        // --- Moment-matched covariance with translational spread-of-means ---
+        Eigen::MatrixXd P_new = Eigen::MatrixXd::Zero(n_aug, n_aug);
+        for (auto idx : grp) {
+            const double w = mix.weight(idx);
+            const Eigen::VectorXd dm = mix.component(idx).mean() - m_new;
+
+            // Spread term only in the translational block
+            Eigen::MatrixXd spread = Eigen::MatrixXd::Zero(n_aug, n_aug);
+            spread.topLeftCorner(n_trans, n_trans) = dm * dm.transpose();
+
+            P_new += w * (mix.component(idx).covariance() + spread);
+        }
+        P_new /= w_sum;
+        P_new = 0.5 * (P_new + P_new.transpose());
 
         result.add_component(
             std::make_unique<models::TemplatePose>(

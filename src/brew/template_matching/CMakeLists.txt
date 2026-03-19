@@ -5,4 +5,4 @@ add_library(brew_template_matching
     pca_icp.cpp
 )
 target_include_directories(brew_template_matching PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../../include)
-target_link_libraries(brew_template_matching PUBLIC Eigen3::Eigen nlohmann_json::nlohmann_json)
+target_link_libraries(brew_template_matching PUBLIC Eigen3::Eigen yaml-cpp::yaml-cpp)

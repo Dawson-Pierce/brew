@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include "brew/filters/ggiw_orientation_ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
-#include "brew/serialization/rfs_json.hpp"
+#include "brew/serialization/rfs_yaml.hpp"
 
 using namespace brew;
 
@@ -228,11 +228,11 @@ TEST(GGIWOrientationSerialization, RoundTrip) {
     models::GGIWOrientation original(mean, cov, 10.0, 5.0, 10.0, V);
 
     // Serialize
-    auto j = serialization::to_json(original);
-    EXPECT_EQ(j["type"], "GGIWOrientation");
+    auto j = serialization::to_yaml(original);
+    EXPECT_EQ(j["type"].as<std::string>(), "GGIWOrientation");
 
     // Deserialize
-    auto restored = serialization::ggiw_orientation_from_json(j);
+    auto restored = serialization::ggiw_orientation_from_yaml(j);
 
     EXPECT_DOUBLE_EQ(restored.alpha(), original.alpha());
     EXPECT_DOUBLE_EQ(restored.beta(), original.beta());

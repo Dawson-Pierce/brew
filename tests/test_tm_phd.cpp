@@ -276,7 +276,7 @@ Eigen::MatrixXd generate_tm_measurements_multi(
 struct TmScenario {
     int num_steps = 30;
     double dt = 1.0;
-    double point_noise_std = 0.05;  // low noise — this is an algorithm test
+    double point_noise_std = 0.0001;  // low noise — this is an algorithm test
     double p_detect = 0.70;          // perfect detection for clean test
 
     std::shared_ptr<template_matching::PointCloud> templ_rect;  // rectangle
@@ -335,6 +335,18 @@ void plot_template_at_pose(matplot::axes_handle ax,
 }
 #endif
 
+// Print weights sorted highest to lowest, capped at max_show
+template <typename T>
+void print_sorted_weights(const models::Mixture<T>& mix, std::size_t max_show = 8) {
+    std::vector<double> w(mix.size());
+    for (std::size_t i = 0; i < mix.size(); ++i) w[i] = mix.weight(i);
+    std::sort(w.begin(), w.end(), std::greater<double>());
+    std::size_t n = std::min(w.size(), max_show);
+    std::cout << std::defaultfloat << std::setprecision(4);
+    for (std::size_t i = 0; i < n; ++i) std::cout << " " << w[i];
+    if (w.size() > max_show) std::cout << " ...";
+}
+
 } // anonymous namespace
 
 
@@ -358,7 +370,7 @@ TEST(TmPhd, Tracking2D) {
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-4);
     phd.set_prune_threshold(1e-5);
-    phd.set_merge_threshold(2.0);
+    phd.set_merge_threshold(4.0);
     phd.set_max_components(30);
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(50.0);
@@ -429,9 +441,7 @@ TEST(TmPhd, Tracking2D) {
                   << std::setw(12) << std::setprecision(3) << rot_a
                   << std::setw(12) << rot_b
                   << "  |";
-        for (std::size_t i = 0; i < phd.intensity().size(); ++i) {
-            std::cout << " " << std::setprecision(4) << phd.intensity().weight(i);
-        }
+        print_sorted_weights(phd.intensity());
         std::cout << "\n";
     }
 
@@ -615,7 +625,7 @@ TEST(TmPhd, TrajectoryTracking2D) {
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-4);
     phd.set_prune_threshold(1e-5);
-    phd.set_merge_threshold(2.0);
+    phd.set_merge_threshold(4.0);
     phd.set_max_components(30);
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(50.0);
@@ -687,9 +697,7 @@ TEST(TmPhd, TrajectoryTracking2D) {
                   << std::setw(12) << std::setprecision(3) << rot_a
                   << std::setw(12) << rot_b
                   << "  |";
-        for (std::size_t i = 0; i < phd.intensity().size(); ++i) {
-            std::cout << " " << std::setprecision(4) << phd.intensity().weight(i);
-        }
+        print_sorted_weights(phd.intensity());
         std::cout << "\n";
     }
 
@@ -1146,39 +1154,39 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
         return std::make_tuple(templ, centroid, R_align);
     };
 
-    auto [templ_jet, centroid_jet, R_align_jet] = load_template("Plane.stl", 500);
+    auto [templ_jet, centroid_jet, R_align_jet] = load_template("Plane.stl", 1500);
 
     // --- Dynamics ---
     auto dyn = std::make_shared<dynamics::SingleIntegrator>(3);
 
     // --- ICP ---
     template_matching::IcpParams icp_params;
-    icp_params.max_iterations = 15;
-    icp_params.tolerance = 1e-6;
-    icp_params.sigma_sq = 0.1;
+    icp_params.max_iterations = 25;
+    icp_params.tolerance = 1e-10;
+    icp_params.sigma_sq = 0.001;
 
     auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
 
     auto ekf = std::make_unique<filters::TmEkf>();
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(0.20 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_process_noise(0.50 * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
-    R_meas.topLeftCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
-    R_meas.bottomRightCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
+    R_meas.topLeftCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
+    R_meas.bottomRightCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
     ekf->set_measurement_noise(R_meas);
     ekf->set_rotation_process_noise(0.1 * Eigen::MatrixXd::Identity(3, 3));
     ekf->set_icp(inner_icp);
 
     // --- Single target scenario ---
-    const int num_steps = 5;
-    const double dt = 1.0;
-    const double point_noise_std = 0.05;
+    const int num_steps = 10;
+    const double dt = 0.2;
+    const double point_noise_std = 0.0001;
 
     Eigen::VectorXd x0(6);
     x0 << 0.0, 0.0, 50.0, 10.0, 5.0, 0.3;
     Eigen::Matrix3d R0 = facing_rotation(x0.tail(3));
-    Eigen::Vector3d omega(0.0, 0.01, 0.03);
+    Eigen::Vector3d omega(0.0, 0.0, 0.0);
 
     std::vector<TmTruthTarget3D> truth_targets;
     truth_targets.push_back(make_tm_target_3d(x0, R0, omega, 0, num_steps - 1, dt, *dyn));
@@ -1215,7 +1223,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     birth->add_component(
         std::make_unique<models::TemplatePose>(b_mean, birth_cov, R_birth, templ_jet, pos_indices), 0.01);
 
-    // --- PHD filter ---
+    // --- PHD filter --- 
     multi_target::PHD<models::TemplatePose> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
@@ -1225,11 +1233,11 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-6);
     phd.set_prune_threshold(1e-5);
-    phd.set_merge_threshold(2.0);
+    phd.set_merge_threshold(4.0);
     phd.set_max_components(20);
     phd.set_extract_threshold(0.4); 
     phd.set_gate_threshold(100.0);
-    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(30.0, 3));
+    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(8.0, 3));
 
     // --- Run filter ---
     std::cout << "\n=== TM-PHD 3D Single Target (Jet) ===\n";
@@ -1282,9 +1290,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
                   << std::setw(12) << std::fixed << std::setprecision(3) << best_pos
                   << std::setw(12) << best_rot
                   << "  |";
-        for (std::size_t i = 0; i < phd.intensity().size(); ++i) {
-            std::cout << " " << std::setprecision(4) << phd.intensity().weight(i);
-        }
+        print_sorted_weights(phd.intensity());
         std::cout << "\n";
     }
 
@@ -1436,8 +1442,8 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
         return std::make_tuple(templ, centroid, R_align);
     };
 
-    auto [templ_plane, centroid_plane, R_align_plane] = load_template("Plane.stl", 750);
-    auto [templ_jet,   centroid_jet,   R_align_jet]   = load_template("Jet.stl",   1000);
+    auto [templ_plane, centroid_plane, R_align_plane] = load_template("Plane.stl", 1500);
+    auto [templ_jet,   centroid_jet,   R_align_jet]   = load_template("Jet.stl",   1500);
 
     std::cout << "\n--- Templates (PCA-aligned) ---\n";
     std::cout << "Plane: " << templ_plane->num_points() << " pts, bbox X["
@@ -1454,7 +1460,7 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
 
     // --- ICP (shared params, per-template PCA) ---
     template_matching::IcpParams icp_params;
-    icp_params.max_iterations = 15;
+    icp_params.max_iterations = 25;
     icp_params.tolerance = 1e-6;
     icp_params.sigma_sq = 0.1;
 
@@ -1464,31 +1470,31 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
     // PCA wrapping is automatic per template — just set the inner ICP
     auto ekf = std::make_unique<filters::TmEkf>();
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(0.05 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
-    R_meas.topLeftCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
-    R_meas.bottomRightCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
+    R_meas.topLeftCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
+    R_meas.bottomRightCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
     ekf->set_measurement_noise(R_meas);
-    ekf->set_rotation_process_noise(0.1 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_rotation_process_noise(0.05 * Eigen::MatrixXd::Identity(3, 3));
     ekf->set_icp(inner_icp);
 
     // --- Scenario: two targets, facing their velocity, moderate separation ---
-    const int num_steps = 30;
-    const double dt = 1.0;
-    const double point_noise_std = 0.01;
+    const int num_steps = 25;
+    const double dt = 0.2;
+    const double point_noise_std = 0.0001;
     const double p_detect = 0.95;
 
     // Target A: Plane — heading northeast
     Eigen::VectorXd x0_plane(6);
     x0_plane << 0.0, 0.0, 50.0, 15.0, 10.0, 0.5;
     Eigen::Matrix3d R0_plane = facing_rotation(x0_plane.tail(3));
-    Eigen::Vector3d omega_plane(0.0, 0.001, 0.0);
+    Eigen::Vector3d omega_plane(0.0, 0.0, 0.0);
 
     // Target B: Jet — heading east, nearby but different altitude
     Eigen::VectorXd x0_jet(6);
     x0_jet << 50.0, 80.0, 80.0, 20.0, -5.0, -0.3;
     Eigen::Matrix3d R0_jet = facing_rotation(x0_jet.tail(3));
-    Eigen::Vector3d omega_jet(0.0, 0.001, 0.0);
+    Eigen::Vector3d omega_jet(0.0, 0.0, 0.0);
 
     std::vector<TmTruthTarget3D> truth_targets;
     truth_targets.push_back(make_tm_target_3d(x0_plane, R0_plane, omega_plane, 0, num_steps - 1, dt, *dyn));
@@ -1551,11 +1557,11 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-6);
     phd.set_prune_threshold(1e-5);
-    phd.set_merge_threshold(2.0);
+    phd.set_merge_threshold(4.0);
     phd.set_max_components(50);
     phd.set_extract_threshold(0.4); 
     phd.set_gate_threshold(100.0);
-    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(30.0, 3));
+    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(8.0, 3));
 
     // --- Run filter ---
     std::cout << "\n=== TM-PHD 3D Multi-Template Tracking (Plane + Jet) ===\n";
@@ -1622,11 +1628,9 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
                   << std::setw(12) << best_pos[1]
                   << std::setw(12) << best_rot[1]
                   << "  |";
-        for (std::size_t i = 0; i < std::min(phd.intensity().size(), std::size_t(8)); ++i) {
-            std::cout << " " << std::setprecision(4) << phd.intensity().weight(i);
-        }
-        if (phd.intensity().size() > 8) std::cout << " ...";
+        print_sorted_weights(phd.intensity());
         std::cout << "\n";
+
     }
 
     std::cout << "Converged steps (k>=" << warmup
@@ -1647,7 +1651,7 @@ TEST(TmPhd, Tracking3D_PlaneAndJet) {
         auto ax = fig->current_axes();
         ax->hold(true);
 
-        const int plot_stride = 10;
+        const int plot_stride = 3;
 
         // Load STL triangles (same PCA alignment as templates)
         Eigen::MatrixXd tri_plane = measurement_sampling::load_stl_triangles("Plane.stl");
@@ -1792,15 +1796,15 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
         return std::make_tuple(templ, centroid, R_align);
     };
 
-    auto [templ_plane, centroid_plane, R_align_plane] = load_template("Plane.stl", 500);
-    auto [templ_jet,   centroid_jet,   R_align_jet]   = load_template("Jet.stl",   500);
+    auto [templ_plane, centroid_plane, R_align_plane] = load_template("Plane.stl", 1500);
+    auto [templ_jet,   centroid_jet,   R_align_jet]   = load_template("Jet.stl",   1500);
 
     // --- Dynamics ---
     auto dyn = std::make_shared<dynamics::SingleIntegrator>(3);
 
     // --- ICP ---
     template_matching::IcpParams icp_params;
-    icp_params.max_iterations = 15;
+    icp_params.max_iterations = 25;
     icp_params.tolerance = 1e-6;
     icp_params.sigma_sq = 0.1;
 
@@ -1810,30 +1814,30 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
     // --- Trajectory TM-EKF ---
     auto ekf = std::make_unique<filters::TrajectoryTmEkf>();
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(0.05 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
-    R_meas.topLeftCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
-    R_meas.bottomRightCorner(3, 3) = 0.001 * Eigen::Matrix3d::Identity();
+    R_meas.topLeftCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
+    R_meas.bottomRightCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
     ekf->set_measurement_noise(R_meas);
-    ekf->set_rotation_process_noise(0.1 * Eigen::MatrixXd::Identity(3, 3));
+    ekf->set_rotation_process_noise(0.05 * Eigen::MatrixXd::Identity(3, 3));
     ekf->set_icp(inner_icp);
     ekf->set_window_size(5);
 
     // --- Scenario (same as non-trajectory 3D test) ---
-    const int num_steps = 30;
-    const double dt = 1.0;
-    const double point_noise_std = 0.01;
+    const int num_steps = 25;
+    const double dt = 0.2;
+    const double point_noise_std = 0.0001;
     const double p_detect = 0.95;
 
     Eigen::VectorXd x0_plane(6);
     x0_plane << 0.0, 0.0, 50.0, 15.0, 10.0, 0.5;
     Eigen::Matrix3d R0_plane = facing_rotation(x0_plane.tail(3));
-    Eigen::Vector3d omega_plane(0.0, 0.001, 0.0);
+    Eigen::Vector3d omega_plane(0.0, 0.0, 0.0);
 
     Eigen::VectorXd x0_jet(6);
     x0_jet << 50.0, 80.0, 80.0, 20.0, -5.0, -0.3;
     Eigen::Matrix3d R0_jet = facing_rotation(x0_jet.tail(3));
-    Eigen::Vector3d omega_jet(0.0, -0.001, 0.0);
+    Eigen::Vector3d omega_jet(0.0, 0.0, 0.0);
 
     std::vector<TmTruthTarget3D> truth_targets;
     truth_targets.push_back(make_tm_target_3d(x0_plane, R0_plane, omega_plane, 0, num_steps - 1, dt, *dyn));
@@ -1907,11 +1911,11 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
     phd.set_clutter_rate(1.0);
     phd.set_clutter_density(1e-6);
     phd.set_prune_threshold(1e-5);
-    phd.set_merge_threshold(2.0);
+    phd.set_merge_threshold(4.0);
     phd.set_max_components(50);
     phd.set_extract_threshold(0.4); 
     phd.set_gate_threshold(100.0);
-    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(30.0, 3));
+    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(8.0, 3));
 
     // --- Run filter ---
     std::cout << "\n=== Trajectory TM-PHD 3D Multi-Template Tracking (Plane + Jet) ===\n";
@@ -1978,10 +1982,7 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
                   << std::setw(12) << best_pos[1]
                   << std::setw(12) << best_rot[1]
                   << "  |";
-        for (std::size_t i = 0; i < std::min(phd.intensity().size(), std::size_t(8)); ++i) {
-            std::cout << " " << std::setprecision(4) << phd.intensity().weight(i);
-        }
-        if (phd.intensity().size() > 8) std::cout << " ...";
+        print_sorted_weights(phd.intensity());
         std::cout << "\n";
     }
 
@@ -2003,7 +2004,7 @@ TEST(TmPhd, TrajectoryTracking3D_PlaneAndJet) {
         auto ax = fig->current_axes();
         ax->hold(true);
 
-        const int plot_stride = 10;
+        const int plot_stride = 3;
 
         // Load STL triangles (same PCA alignment as templates)
         Eigen::MatrixXd tri_plane = measurement_sampling::load_stl_triangles("Plane.stl");

@@ -1,10 +1,10 @@
 #include <gtest/gtest.h>
-#include "brew/serialization/rfs_json.hpp"
+#include "brew/serialization/rfs_yaml.hpp"
 #include "brew/filters/ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
-using json = nlohmann::json;
+
 
 TEST(Serialization, GaussianRoundTrip) {
     Eigen::VectorXd mean(4);
@@ -12,8 +12,8 @@ TEST(Serialization, GaussianRoundTrip) {
     Eigen::MatrixXd cov = 2.0 * Eigen::MatrixXd::Identity(4, 4);
 
     models::Gaussian g(mean, cov);
-    auto j = serialization::to_json(g);
-    auto g2 = serialization::gaussian_from_json(j);
+    auto j = serialization::to_yaml(g);
+    auto g2 = serialization::gaussian_from_yaml(j);
 
     EXPECT_TRUE(g2.mean().isApprox(mean, 1e-12));
     EXPECT_TRUE(g2.covariance().isApprox(cov, 1e-12));
@@ -26,8 +26,8 @@ TEST(Serialization, GGIWRoundTrip) {
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
     models::GGIW g(mean, cov, 10.0, 1.0, 7.0, V);
-    auto j = serialization::to_json(g);
-    auto g2 = serialization::ggiw_from_json(j);
+    auto j = serialization::to_yaml(g);
+    auto g2 = serialization::ggiw_from_yaml(j);
 
     EXPECT_TRUE(g2.mean().isApprox(mean, 1e-12));
     EXPECT_TRUE(g2.covariance().isApprox(cov, 1e-12));
@@ -47,8 +47,8 @@ TEST(Serialization, MixtureGaussianRoundTrip) {
     mix.add_component(std::make_unique<models::Gaussian>(m1, cov), 0.6);
     mix.add_component(std::make_unique<models::Gaussian>(m2, 2.0 * cov), 0.4);
 
-    auto j = serialization::mixture_to_json(mix);
-    auto mix2 = serialization::mixture_from_json<models::Gaussian>(j);
+    auto j = serialization::mixture_to_yaml(mix);
+    auto mix2 = serialization::mixture_from_yaml<models::Gaussian>(j);
 
     ASSERT_EQ(mix2->size(), 2u);
     EXPECT_NEAR(mix2->weight(0), 0.6, 1e-12);
@@ -65,8 +65,8 @@ TEST(Serialization, BernoulliGaussianRoundTrip) {
     models::Bernoulli<models::Gaussian> b(
         0.8, std::make_unique<models::Gaussian>(mean, cov), 42);
 
-    auto j = serialization::bernoulli_to_json(b);
-    auto b2 = serialization::bernoulli_from_json<models::Gaussian>(j);
+    auto j = serialization::bernoulli_to_yaml(b);
+    auto b2 = serialization::bernoulli_from_yaml<models::Gaussian>(j);
 
     EXPECT_NEAR(b2->existence_probability(), 0.8, 1e-12);
     EXPECT_EQ(b2->id(), 42);
@@ -105,14 +105,14 @@ TEST(Serialization, GLMBGaussianSerialize) {
     glmb.correct(meas);
     glmb.cleanup();
 
-    auto j = serialization::glmb_to_json(glmb);
+    auto j = serialization::glmb_to_yaml(glmb);
 
     // Verify JSON structure
-    EXPECT_EQ(j["filter_type"].get<std::string>(), "GLMB");
-    EXPECT_NEAR(j["prob_detection"].get<double>(), 0.9, 1e-12);
-    EXPECT_TRUE(j.contains("cardinality_pmf"));
-    EXPECT_TRUE(j.contains("global_hypotheses"));
-    EXPECT_TRUE(j.contains("extracted_mixtures"));
+    EXPECT_EQ(j["filter_type"].as<std::string>(), "GLMB");
+    EXPECT_NEAR(j["prob_detection"].as<double>(), 0.9, 1e-12);
+    EXPECT_TRUE(j["cardinality_pmf"].IsDefined());
+    EXPECT_TRUE(j["global_hypotheses"].IsDefined());
+    EXPECT_TRUE(j["extracted_mixtures"].IsDefined());
 }
 
 TEST(Serialization, PMBMGaussianSerialize) {
@@ -148,26 +148,26 @@ TEST(Serialization, PMBMGaussianSerialize) {
     pmbm.correct(meas);
     pmbm.cleanup();
 
-    auto j = serialization::pmbm_to_json(pmbm);
+    auto j = serialization::pmbm_to_yaml(pmbm);
 
-    EXPECT_EQ(j["filter_type"].get<std::string>(), "PMBM");
-    EXPECT_TRUE(j.contains("poisson_intensity"));
-    EXPECT_TRUE(j.contains("cardinality_pmf"));
-    EXPECT_TRUE(j.contains("global_hypotheses"));
+    EXPECT_EQ(j["filter_type"].as<std::string>(), "PMBM");
+    EXPECT_TRUE(j["poisson_intensity"].IsDefined());
+    EXPECT_TRUE(j["cardinality_pmf"].IsDefined());
+    EXPECT_TRUE(j["global_hypotheses"].IsDefined());
 }
 
 TEST(Serialization, EigenVectorRoundTrip) {
     Eigen::VectorXd v(5);
     v << 1.1, 2.2, 3.3, 4.4, 5.5;
-    auto j = serialization::vector_to_json(v);
-    auto v2 = serialization::vector_from_json(j);
+    auto j = serialization::vector_to_yaml(v);
+    auto v2 = serialization::vector_from_yaml(j);
     EXPECT_TRUE(v2.isApprox(v, 1e-12));
 }
 
 TEST(Serialization, EigenMatrixRoundTrip) {
     Eigen::MatrixXd m(3, 2);
     m << 1.0, 2.0, 3.0, 4.0, 5.0, 6.0;
-    auto j = serialization::matrix_to_json(m);
-    auto m2 = serialization::matrix_from_json(j);
+    auto j = serialization::matrix_to_yaml(m);
+    auto m2 = serialization::matrix_from_yaml(j);
     EXPECT_TRUE(m2.isApprox(m, 1e-12));
 }

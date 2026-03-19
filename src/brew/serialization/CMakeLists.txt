@@ -3,6 +3,6 @@ target_include_directories(brew_serialization INTERFACE ${CMAKE_CURRENT_SOURCE_D
 target_link_libraries(brew_serialization INTERFACE
     brew_models
     brew_multi_target
-    nlohmann_json::nlohmann_json
+    yaml-cpp::yaml-cpp
     Eigen3::Eigen
 )
