@@ -6,9 +6,20 @@ namespace brew::filters {
 // ---- Lie group helpers (same as tm_ekf.cpp) ----
 
 static Eigen::Vector3d Log_SO3(const Eigen::Matrix3d& R) {
-    const double cos_angle = (R.trace() - 1.0) / 2.0;
-    const double angle = std::acos(std::clamp(cos_angle, -1.0, 1.0));
+    const double cos_angle = std::clamp((R.trace() - 1.0) / 2.0, -1.0, 1.0);
+    const double angle = std::acos(cos_angle);
     if (angle < 1e-10) return Eigen::Vector3d::Zero();
+    if (angle > M_PI - 1e-6) {
+        // Near π: sin(angle) ≈ 0, extract axis from R + I
+        Eigen::Matrix3d M = R + Eigen::Matrix3d::Identity();
+        Eigen::Vector3d axis = M.col(0);
+        for (int i = 1; i < 3; ++i) {
+            if (M.col(i).squaredNorm() > axis.squaredNorm())
+                axis = M.col(i);
+        }
+        axis.normalize();
+        return axis * M_PI;
+    }
     Eigen::Vector3d axis;
     axis << R(2, 1) - R(1, 2), R(0, 2) - R(2, 0), R(1, 0) - R(0, 1);
     axis *= angle / (2.0 * std::sin(angle));
@@ -155,16 +166,18 @@ TrajectoryTmEkf::CorrectionResult TrajectoryTmEkf::correct(
     Eigen::MatrixXd meas_mat = Eigen::Map<const Eigen::MatrixXd>(measurement.data(), d, M);
     template_matching::PointCloud meas_cloud(meas_mat);
 
-    // Use measurement centroid as ICP initial translation
+    // Use measurement centroid as ICP initial translation.
+    const bool cold_start = !pred_tp.has_rotation();
     Eigen::VectorXd t_init = meas_mat.rowwise().mean();
 
     // Run ICP. Use PCA-ICP only for cold start (no rotation yet).
+    // PCA-ICP already bootstraps from the measurement centroid internally.
     template_matching::IcpResult icp_result;
     Eigen::VectorXd t_icp(d);
     Eigen::MatrixXd R_icp(d, d);
-
-    const auto& icp_to_use = pred_tp.has_rotation()
-        ? *icp_ : get_icp(&pred_tp.get_template());
+    const auto& icp_to_use = cold_start
+        ? get_icp(&pred_tp.get_template())
+        : *icp_;
 
     if (d == 2) {
         Eigen::Matrix3d R_pred_3d = Eigen::Matrix3d::Identity();

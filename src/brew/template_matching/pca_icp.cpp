@@ -64,7 +64,7 @@ IcpResult PcaIcp::align(
     auto candidates = pca_candidates(src_axes_, tgt_axes);
 
     // Score each candidate with a cheap RMSE on a subset of source points
-    const int step = std::max(1, source.num_points() / 50);
+    const int step = std::max(1, source.num_points() / 100);
     std::array<double, 8> costs{};
     for (int c = 0; c < 8; ++c) {
         Eigen::Vector3d t_cand = tgt_centroid - candidates[c] * src_centroid_;
@@ -81,19 +81,32 @@ IcpResult PcaIcp::align(
         costs[c] = cost;
     }
 
-    // Pick the candidate with the lowest RMSE cost.
-    // PCA-ICP is only used for cold start (birth), so R_init is unreliable
-    // and we rely purely on geometric fit.
-    double min_cost = *std::min_element(costs.begin(), costs.end());
-    Eigen::Matrix3d best_R = candidates[0];
-    for (int c = 0; c < 8; ++c) {
-        if (costs[c] <= min_cost) {
-            best_R = candidates[c];
+    // Sort candidates by cost and try the top few with full ICP,
+    // keeping the result with the lowest RMSE. This resolves 180° ambiguities
+    // that PCA scoring alone can't distinguish with partial measurements.
+    std::array<int, 8> order = {0, 1, 2, 3, 4, 5, 6, 7};
+    std::sort(order.begin(), order.end(),
+        [&](int a, int b) { return costs[a] < costs[b]; });
+
+    auto saved_params = inner_->params();
+    auto cold_params = saved_params;
+    cold_params.trim_fraction = 1.0;
+    inner_->set_params(cold_params);
+
+    const int n_tries = 3;  // try top 3 to resolve 180° ambiguity with partial views
+    IcpResult best_result;
+    best_result.rmse = std::numeric_limits<double>::max();
+    for (int i = 0; i < n_tries; ++i) {
+        Eigen::Matrix3d R_cand = candidates[order[i]];
+        Eigen::Vector3d t_cand = tgt_centroid - R_cand * src_centroid_;
+        auto result = inner_->align(source, target, R_cand, t_cand);
+        if (result.rmse < best_result.rmse) {
+            best_result = result;
         }
     }
 
-    Eigen::Vector3d best_t = tgt_centroid - best_R * src_centroid_;
-    return inner_->align(source, target, best_R, best_t);
+    inner_->set_params(saved_params);
+    return best_result;
 }
 
 double PcaIcp::log_likelihood(

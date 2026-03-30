@@ -27,6 +27,8 @@ struct IcpParams {
     double max_correspondence_dist = std::numeric_limits<double>::max();
     double sigma_sq = 1.0;
     double trim_fraction = 1.0; ///< Fraction of best correspondences to keep (0, 1]
+    bool use_target_centroid_init = false; ///< Override t_init with target centroid
+    bool reverse_correspondences = true;  ///< true: target→source (better tracking with partial overlap)
 };
 
 /// Abstract base for ICP variants.

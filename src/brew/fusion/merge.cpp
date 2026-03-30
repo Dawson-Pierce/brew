@@ -494,9 +494,19 @@ void merge(models::Mixture<models::TemplatePose>& mix, double threshold) {
             Eigen::VectorXd d_aug = Eigen::VectorXd::Zero(n_aug);
             d_aug.head(n_trans) = d;
             const Eigen::VectorXd y = llt.matrixL().solve(d_aug);
-            if (y.squaredNorm() <= threshold) {
-                grp.push_back(i);
+            if (y.squaredNorm() > threshold) continue;
+
+            // Also gate on rotation: don't merge components with very different rotations
+            if (mix.component(i).has_rotation() && mix.component(ref).has_rotation()) {
+                const auto& Ri = mix.component(i).rotation();
+                const auto& Rr = mix.component(ref).rotation();
+                Eigen::MatrixXd R_err = Ri.transpose() * Rr;
+                double cos_angle = std::clamp((R_err.trace() - 1.0) / 2.0, -1.0, 1.0);
+                double rot_dist = std::acos(cos_angle);  // angle in [0, π]
+                if (rot_dist > M_PI / 2.0) continue;  // reject if > 90° apart
             }
+
+            grp.push_back(i);
         }
 
         double w_sum = 0.0;
@@ -588,6 +598,15 @@ void merge(models::Mixture<models::Trajectory<models::TemplatePose>>& mix, doubl
                 // Same-template constraint
                 if (mix.component(i).current().template_ptr() !=
                     mix.component(j).current().template_ptr()) continue;
+
+                // Rotation distance gate: skip if rotations are > 90° apart
+                const auto& Ri = mix.component(i).current().rotation();
+                const auto& Rj = mix.component(j).current().rotation();
+                if (Ri.size() > 0 && Rj.size() > 0) {
+                    Eigen::MatrixXd R_err = Ri.transpose() * Rj;
+                    double cos_a = std::clamp((R_err.trace() - 1.0) / 2.0, -1.0, 1.0);
+                    if (std::acos(cos_a) > M_PI / 2.0) continue;
+                }
 
                 const double d2 = trajectory_mahal_dist(
                     mix.component(i).mean(), mix.component(i).covariance(),

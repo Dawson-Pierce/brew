@@ -6,11 +6,25 @@ namespace brew::filters {
 // ---- Lie group helpers ----
 
 static Eigen::Vector3d Log_SO3(const Eigen::Matrix3d& R) {
-    const double cos_angle = (R.trace() - 1.0) / 2.0;
-    const double angle = std::acos(std::clamp(cos_angle, -1.0, 1.0));
+    const double cos_angle = std::clamp((R.trace() - 1.0) / 2.0, -1.0, 1.0);
+    const double angle = std::acos(cos_angle);
 
     if (angle < 1e-10) {
         return Eigen::Vector3d::Zero();
+    }
+
+    if (angle > M_PI - 1e-6) {
+        // Near π: sin(angle) ≈ 0, so the skew-symmetric extraction fails.
+        // Instead, find the rotation axis from R + I (eigenvector with eigenvalue +1).
+        Eigen::Matrix3d M = R + Eigen::Matrix3d::Identity();
+        // Pick the column of M with the largest norm as the axis
+        Eigen::Vector3d axis = M.col(0);
+        for (int i = 1; i < 3; ++i) {
+            if (M.col(i).squaredNorm() > axis.squaredNorm())
+                axis = M.col(i);
+        }
+        axis.normalize();
+        return axis * M_PI;
     }
 
     Eigen::Vector3d axis;
@@ -123,8 +137,8 @@ TmEkf::CorrectionResult TmEkf::correct(
     Eigen::MatrixXd meas_mat = Eigen::Map<const Eigen::MatrixXd>(measurement.data(), d, M);
     template_matching::PointCloud meas_cloud(meas_mat);
 
-    // Use measurement centroid as ICP initial translation — guarantees overlap
-    // even when the predicted position is far from the measurement cloud.
+    // Use measurement centroid as ICP initial translation.
+    const bool cold_start = !predicted.has_rotation();
     Eigen::VectorXd t_init = meas_mat.rowwise().mean();
 
     // Run ICP. Use PCA-ICP only for cold start (no rotation yet);
@@ -134,9 +148,10 @@ TmEkf::CorrectionResult TmEkf::correct(
     Eigen::VectorXd t_icp(d);
     Eigen::MatrixXd R_icp(d, d);
 
-    // Pick ICP variant: PCA for cold start, base ICP for tracking
-    const auto& icp_to_use = predicted.has_rotation()
-        ? *icp_ : get_icp(&predicted.get_template());
+    // Pick ICP variant: PCA for cold start, base ICP for tracking.
+    const auto& icp_to_use = cold_start
+        ? get_icp(&predicted.get_template())
+        : *icp_;
 
     if (d == 2) {
         // Embed 2D → 3D

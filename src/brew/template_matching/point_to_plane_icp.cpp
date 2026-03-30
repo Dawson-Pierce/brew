@@ -56,12 +56,14 @@ IcpResult PointToPlaneIcp::align(
     const Eigen::Matrix3d& R_init,
     const Eigen::Vector3d& t_init) const {
 
-    // Estimate normals from the source (template) — known dense geometry
+    // Estimate normals from the source (template) — dense and stable
     const int k = std::min(10, source.num_points());
     Eigen::MatrixXd src_normals = estimate_normals(source, k);
 
     Eigen::Matrix3d R = R_init;
-    Eigen::Vector3d t = t_init;
+    Eigen::Vector3d t = params_.use_target_centroid_init
+        ? Eigen::Vector3d(target.points().rowwise().mean())
+        : t_init;
 
     IcpResult result;
     result.rotation = R;
@@ -73,23 +75,31 @@ IcpResult PointToPlaneIcp::align(
         src_transformed.colwise() += t;
         Eigen::MatrixXd normals_transformed = R * src_normals;
 
-        // Find correspondences: each source point → nearest target point
-        auto correspondences = find_correspondences(
-            src_transformed, target.points(), params_.max_correspondence_dist);
+        // Find correspondences
+        std::vector<std::pair<int,int>> corr;
+        if (params_.reverse_correspondences) {
+            for (auto [ti, si] : find_correspondences(
+                    target.points(), src_transformed, params_.max_correspondence_dist))
+                corr.emplace_back(si, ti);
+        } else {
+            corr = find_correspondences(
+                src_transformed, target.points(), params_.max_correspondence_dist);
+        }
 
-        if (correspondences.empty()) break;
+        if (corr.empty()) break;
 
-        const int N = static_cast<int>(correspondences.size());
+        const int N = static_cast<int>(corr.size());
 
         // Build 6×6 linear system for point-to-plane
         // Minimize Σ (n_i · (p_i - q_i))² where n_i is the source normal
+        // at the matched template point, rotated to the current frame.
         // Linearize R ≈ I + [α]× for small angles
         // Variables: x = [α, β, γ, tx, ty, tz]
         Eigen::MatrixXd A(N, 6);
         Eigen::VectorXd b(N);
 
         for (int idx = 0; idx < N; ++idx) {
-            const auto& [si, ti] = correspondences[idx];
+            const auto& [si, ti] = corr[idx];
             const Eigen::Vector3d& p = src_transformed.col(si);
             const Eigen::Vector3d& q = target.points().col(ti);
             const Eigen::Vector3d& n = normals_transformed.col(si);
@@ -124,12 +134,12 @@ IcpResult PointToPlaneIcp::align(
         R = delta_R * R;
         t = delta_R * t + delta_t;
 
-        // Compute RMSE (point-to-plane using source normals)
+        // Compute RMSE (point-to-plane)
         double sum_sq = 0.0;
         Eigen::MatrixXd src_new = R * source.points();
         src_new.colwise() += t;
         Eigen::MatrixXd normals_new = R * src_normals;
-        for (const auto& [si, ti] : correspondences) {
+        for (const auto& [si, ti] : corr) {
             double d = normals_new.col(si).dot(src_new.col(si) - target.points().col(ti));
             sum_sq += d * d;
         }

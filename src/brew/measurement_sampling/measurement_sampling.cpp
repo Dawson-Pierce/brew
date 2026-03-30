@@ -164,6 +164,42 @@ Eigen::MatrixXd load_stl_triangles(const std::string& filepath) {
     return result;
 }
 
+// ---- OpenVSP coordinate fix ----
+// OpenVSP exports with +X aft. Negate X and swap v1/v2 to preserve winding.
+
+static std::vector<Triangle> fix_vsp_triangles(std::vector<Triangle> triangles) {
+    for (auto& tri : triangles) {
+        tri.v0.x() = -tri.v0.x();
+        tri.v1.x() = -tri.v1.x();
+        tri.v2.x() = -tri.v2.x();
+        std::swap(tri.v1, tri.v2);
+    }
+    return triangles;
+}
+
+PointCloud load_stl_vsp(const std::string& filepath) {
+    auto triangles = fix_vsp_triangles(parse_stl(filepath));
+    if (triangles.empty()) {
+        throw std::runtime_error("No triangles found in STL file: " + filepath);
+    }
+    Eigen::MatrixXd points = extract_unique_vertices(triangles);
+    return PointCloud(std::move(points));
+}
+
+Eigen::MatrixXd load_stl_triangles_vsp(const std::string& filepath) {
+    auto triangles = fix_vsp_triangles(parse_stl(filepath));
+    if (triangles.empty()) {
+        throw std::runtime_error("No triangles found in STL file: " + filepath);
+    }
+    Eigen::MatrixXd result(3, 3 * static_cast<int>(triangles.size()));
+    for (std::size_t i = 0; i < triangles.size(); ++i) {
+        result.col(3 * i + 0) = triangles[i].v0;
+        result.col(3 * i + 1) = triangles[i].v1;
+        result.col(3 * i + 2) = triangles[i].v2;
+    }
+    return result;
+}
+
 // ---- STL surface sampling ----
 
 static void sample_stl_impl(const std::string& filepath, int num_points,
@@ -213,6 +249,61 @@ PointCloud sample_stl(const std::string& filepath, int num_points,
                       Eigen::MatrixXd& normals_out) {
     Eigen::MatrixXd points;
     sample_stl_impl(filepath, num_points, points, &normals_out);
+    return PointCloud(std::move(points));
+}
+
+// ---- OpenVSP surface sampling ----
+
+static void sample_triangles_impl(const std::vector<Triangle>& triangles, int num_points,
+                                   Eigen::MatrixXd& points_out, Eigen::MatrixXd* normals_out) {
+    std::vector<double> cumulative_area(triangles.size());
+    cumulative_area[0] = triangles[0].area();
+    for (std::size_t i = 1; i < triangles.size(); ++i) {
+        cumulative_area[i] = cumulative_area[i - 1] + triangles[i].area();
+    }
+    double total_area = cumulative_area.back();
+
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    points_out.resize(3, num_points);
+    if (normals_out) normals_out->resize(3, num_points);
+
+    for (int i = 0; i < num_points; ++i) {
+        double r = dist(rng) * total_area;
+        auto it = std::lower_bound(cumulative_area.begin(), cumulative_area.end(), r);
+        int tri_idx = static_cast<int>(std::distance(cumulative_area.begin(), it));
+        tri_idx = std::min(tri_idx, static_cast<int>(triangles.size()) - 1);
+
+        points_out.col(i) = sample_triangle_bary(triangles[tri_idx], dist(rng), dist(rng));
+
+        if (normals_out) {
+            const auto& tri = triangles[tri_idx];
+            Eigen::Vector3d n = (tri.v1 - tri.v0).cross(tri.v2 - tri.v0);
+            double len = n.norm();
+            (*normals_out).col(i) = (len > 1e-15) ? (n / len).eval() : Eigen::Vector3d::UnitZ();
+        }
+    }
+}
+
+PointCloud sample_stl_vsp(const std::string& filepath, int num_points) {
+    auto triangles = fix_vsp_triangles(parse_stl(filepath));
+    if (triangles.empty()) {
+        throw std::runtime_error("No triangles found in STL file: " + filepath);
+    }
+    Eigen::MatrixXd points;
+    sample_triangles_impl(triangles, num_points, points, nullptr);
+    return PointCloud(std::move(points));
+}
+
+PointCloud sample_stl_vsp(const std::string& filepath, int num_points,
+                          Eigen::MatrixXd& normals_out) {
+    auto triangles = fix_vsp_triangles(parse_stl(filepath));
+    if (triangles.empty()) {
+        throw std::runtime_error("No triangles found in STL file: " + filepath);
+    }
+    Eigen::MatrixXd points;
+    sample_triangles_impl(triangles, num_points, points, &normals_out);
     return PointCloud(std::move(points));
 }
 

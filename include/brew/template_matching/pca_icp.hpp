@@ -32,6 +32,12 @@ public:
     /// Compute PCA axes (columns = eigenvectors sorted by descending eigenvalue).
     [[nodiscard]] static Eigen::Matrix3d pca_axes(const Eigen::MatrixXd& points);
 
+    /// Override the precomputed PCA axes and centroid.
+    void set_pca(const Eigen::Matrix3d& axes, const Eigen::Vector3d& centroid) {
+        src_axes_ = axes;
+        src_centroid_ = centroid;
+    }
+
 private:
     std::unique_ptr<IcpBase> inner_;
     Eigen::Matrix3d src_axes_;       // precomputed template PCA axes

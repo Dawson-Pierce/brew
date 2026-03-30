@@ -16,7 +16,9 @@ IcpResult PointToPointIcp::align(
     const Eigen::Vector3d& t_init) const {
 
     Eigen::Matrix3d R = R_init;
-    Eigen::Vector3d t = t_init;
+    Eigen::Vector3d t = params_.use_target_centroid_init
+        ? Eigen::Vector3d(target.points().rowwise().mean())
+        : t_init;
 
     IcpResult result;
     result.rotation = R;
@@ -28,17 +30,24 @@ IcpResult PointToPointIcp::align(
         src_transformed.colwise() += t;
 
         // Find correspondences
-        auto correspondences = find_correspondences(
-            src_transformed, target.points(), params_.max_correspondence_dist);
+        std::vector<std::pair<int,int>> corr;
+        if (params_.reverse_correspondences) {
+            for (auto [ti, si] : find_correspondences(
+                    target.points(), src_transformed, params_.max_correspondence_dist))
+                corr.emplace_back(si, ti);
+        } else {
+            corr = find_correspondences(
+                src_transformed, target.points(), params_.max_correspondence_dist);
+        }
 
-        if (correspondences.empty()) break;
+        if (corr.empty()) break;
 
-        const int N = static_cast<int>(correspondences.size());
+        const int N = static_cast<int>(corr.size());
 
         // Compute centroids of matched points
         Eigen::Vector3d centroid_src = Eigen::Vector3d::Zero();
         Eigen::Vector3d centroid_tgt = Eigen::Vector3d::Zero();
-        for (const auto& [si, ti] : correspondences) {
+        for (const auto& [si, ti] : corr) {
             centroid_src += src_transformed.col(si);
             centroid_tgt += target.points().col(ti);
         }
@@ -47,7 +56,7 @@ IcpResult PointToPointIcp::align(
 
         // Build cross-covariance matrix
         Eigen::Matrix3d W = Eigen::Matrix3d::Zero();
-        for (const auto& [si, ti] : correspondences) {
+        for (const auto& [si, ti] : corr) {
             W += (src_transformed.col(si) - centroid_src) *
                  (target.points().col(ti) - centroid_tgt).transpose();
         }
@@ -72,7 +81,7 @@ IcpResult PointToPointIcp::align(
         double sum_sq = 0.0;
         Eigen::MatrixXd src_new = R * source.points();
         src_new.colwise() += t;
-        for (const auto& [si, ti] : correspondences) {
+        for (const auto& [si, ti] : corr) {
             sum_sq += (src_new.col(si) - target.points().col(ti)).squaredNorm();
         }
         double rmse = std::sqrt(sum_sq / N);

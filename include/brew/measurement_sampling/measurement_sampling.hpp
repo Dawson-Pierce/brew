@@ -17,6 +17,15 @@ using template_matching::PointCloud;
 /// Returns a 3×(3*num_triangles) matrix: columns [v0,v1,v2, v0,v1,v2, ...].
 [[nodiscard]] Eigen::MatrixXd load_stl_triangles(const std::string& filepath);
 
+// ---- OpenVSP STL loading ----
+// OpenVSP uses +X aft; these variants negate the X-axis so +X points forward.
+
+/// Load unique vertices from an OpenVSP STL file with corrected X-axis.
+[[nodiscard]] PointCloud load_stl_vsp(const std::string& filepath);
+
+/// Load triangles from an OpenVSP STL file with corrected X-axis.
+[[nodiscard]] Eigen::MatrixXd load_stl_triangles_vsp(const std::string& filepath);
+
 // ---- STL surface sampling ----
 
 /// Sample N points uniformly on the surface of an STL mesh.
@@ -27,6 +36,13 @@ using template_matching::PointCloud;
 /// normals_out is resized to 3×N, each column is the unit face normal for that point.
 [[nodiscard]] PointCloud sample_stl(const std::string& filepath, int num_points,
                                     Eigen::MatrixXd& normals_out);
+
+/// Sample N points from an OpenVSP STL file with corrected X-axis.
+[[nodiscard]] PointCloud sample_stl_vsp(const std::string& filepath, int num_points);
+
+/// Sample N points with normals from an OpenVSP STL file with corrected X-axis.
+[[nodiscard]] PointCloud sample_stl_vsp(const std::string& filepath, int num_points,
+                                        Eigen::MatrixXd& normals_out);
 
 // ---- Point cloud resampling ----
 

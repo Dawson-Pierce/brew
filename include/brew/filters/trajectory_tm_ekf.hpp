@@ -44,6 +44,13 @@ public:
         icp_map_.clear();
     }
 
+    /// Register precomputed PCA axes and centroid for cold-start rotation initialization.
+    void set_pca_prior(const template_matching::PointCloud* templ,
+                       const Eigen::Matrix3d& axes, const Eigen::Vector3d& centroid) {
+        pca_prior_map_[templ] = {axes, centroid};
+        icp_map_.erase(templ);
+    }
+
     void set_window_size(int L) { l_window_ = L; }
 
 private:
@@ -56,6 +63,10 @@ private:
         if (templ->dim() == 3) {
             auto pca = std::make_shared<template_matching::PcaIcp>(
                 icp_->clone(), *templ);
+            auto pit = pca_prior_map_.find(templ);
+            if (pit != pca_prior_map_.end()) {
+                pca->set_pca(pit->second.first, pit->second.second);
+            }
             icp_map_[templ] = pca;
             return *pca;
         }
@@ -66,6 +77,8 @@ private:
     std::shared_ptr<template_matching::IcpBase> icp_;
     mutable std::unordered_map<const template_matching::PointCloud*,
                                std::shared_ptr<template_matching::IcpBase>> icp_map_;
+    std::unordered_map<const template_matching::PointCloud*,
+                       std::pair<Eigen::Matrix3d, Eigen::Vector3d>> pca_prior_map_;
     int l_window_ = 50;
 };
 
