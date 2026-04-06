@@ -23,6 +23,9 @@ namespace brew::multi_target {
 /// Single-hypothesis unlabeled filter using Hungarian (single best) assignment.
 /// No persistent track identity — Bernoullis are a flat set without labels.
 /// Template parameter T is the single distribution type (e.g., Gaussian, GGIW).
+// @mex rfs
+// @mex_name MB
+// @mex_params prune_threshold_bernoulli:double:1e-3, extract_threshold:double:0.5, gate_threshold:double:9.0
 template <typename T>
 class MB : public RFSBase {
 public:

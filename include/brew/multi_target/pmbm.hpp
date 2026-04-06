@@ -28,6 +28,11 @@ namespace brew::multi_target {
 /// Bernoulli tracks. This is the theoretically optimal conjugate prior for the
 /// multi-target tracking problem.
 /// Template parameter T is the single distribution type (e.g., Gaussian, GGIW).
+// @mex rfs
+// @mex_name PMBM
+// @mex_params prune_poisson_threshold:double:1e-4, merge_poisson_threshold:double:4.0, max_poisson_components:int:100, prune_threshold_hypothesis:double:1e-3, prune_threshold_bernoulli:double:1e-3, recycle_threshold:double:0.1, max_hypotheses:int:100, extract_threshold:double:0.5, gate_threshold:double:9.0, k_best:int:5
+// @mex_init set_poisson_intensity
+// @mex_has cardinality, track_histories
 template <typename T>
 class PMBM : public RFSBase {
     /// Internal global hypothesis type

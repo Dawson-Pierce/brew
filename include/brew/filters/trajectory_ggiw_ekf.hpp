@@ -7,6 +7,10 @@
 namespace brew::filters {
 
 /// EKF for GGIW trajectory distributions.
+// @mex filter
+// @mex_name TrajectoryGGIWEKF
+// @mex_dist TrajectoryGGIW
+// @mex_setters window_size:int, temporal_decay:scalar, forgetting_factor:scalar, scaling_parameter:scalar
 
 class TrajectoryGGIWEKF : public Filter<models::Trajectory<models::GGIW>> {
 public:

@@ -12,6 +12,10 @@ namespace brew::models {
 /// After each correction the IW shape matrix V is decomposed via eigendecomposition;
 /// the rotation basis (eigenvectors) and eigenvalues are stored so that subsequent
 /// corrections can align the new eigenvectors to the previous ones.
+// @mex model
+// @mex_name GGIWOrientation
+// @mex_fields mean:vec, covariance:mat, alpha:scalar, beta:scalar, v:scalar, V:mat
+// @mex_extract_extra basis:mat
 class GGIWOrientation : public GGIW {
 public:
     GGIWOrientation() = default;

@@ -3,6 +3,18 @@
 // Generic trajectory wrapper — windowed stacked state + full history of inner models.
 // Replaces TrajectoryBaseModel, TrajectoryGaussian, TrajectoryGGIW, TrajectoryGGIWOrientation
 // with a single template, following the same pattern as Mixture<T>.
+//
+// @mex model
+// @mex_name TrajectoryGaussian
+// @mex_trajectory Gaussian
+//
+// @mex model
+// @mex_name TrajectoryGGIW
+// @mex_trajectory GGIW
+//
+// @mex model
+// @mex_name TrajectoryGGIWOrientation
+// @mex_trajectory GGIWOrientation
 
 #include <Eigen/Dense>
 #include <memory>

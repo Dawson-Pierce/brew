@@ -10,6 +10,9 @@ namespace brew::models {
 
 /// Gaussian distribution with mean and covariance.
 /// Pure parameter holder — merge/filter operations live elsewhere.
+// @mex model
+// @mex_name Gaussian
+// @mex_fields mean:vec, covariance:mat
 class Gaussian : public BaseSingleModel {
 public:
     Gaussian() = default;

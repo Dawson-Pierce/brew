@@ -6,6 +6,8 @@
 namespace brew::dynamics {
 
 /// 2D constant turn-rate model: state = [x, y, v, theta, omega].
+// @mex dynamics
+// @mex_name ConstantTurn2D
 class ConstantTurn2D : public DynamicsBase {
 public:
     [[nodiscard]] std::unique_ptr<DynamicsBase> clone() const override {

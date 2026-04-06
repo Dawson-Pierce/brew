@@ -35,6 +35,10 @@ struct GlobalHypothesis {
 /// multi-Bernoulli components. Uses Murty's K-best algorithm for
 /// hypothesis generation.
 /// Template parameter T is the single distribution type (e.g., Gaussian, GGIW).
+// @mex rfs
+// @mex_name MBM
+// @mex_params prune_threshold_hypothesis:double:1e-3, prune_threshold_bernoulli:double:1e-3, max_hypotheses:int:100, extract_threshold:double:0.5, gate_threshold:double:9.0, k_best:int:5
+// @mex_has track_histories
 template <typename T>
 class MBM : public RFSBase {
 public:

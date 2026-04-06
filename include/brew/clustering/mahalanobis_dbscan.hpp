@@ -6,6 +6,9 @@
 namespace brew::clustering {
 
 /// DBSCAN clustering using Mahalanobis distance.
+// @mex clustering
+// @mex_name MahalanobisDBSCAN
+// @mex_args epsilon:double, min_pts:int
 
 class MahalanobisDBSCAN {
 public:

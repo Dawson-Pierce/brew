@@ -6,6 +6,10 @@
 namespace brew::filters {
 
 /// Extended Kalman Filter for GGIW distributions.
+// @mex filter
+// @mex_name GGIWEKF
+// @mex_dist GGIW
+// @mex_setters temporal_decay:scalar, forgetting_factor:scalar, scaling_parameter:scalar
 
 class GGIWEKF : public Filter<models::GGIW> {
 public:

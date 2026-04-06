@@ -22,6 +22,10 @@ namespace brew::multi_target {
 /// Labeled Multi-Bernoulli (LMB) filter.
 /// Uses delta-GLMB update internally, then marginalizes back to a single
 /// labeled Bernoulli set. Template parameter T is the distribution type.
+// @mex rfs
+// @mex_name LMB
+// @mex_params prune_threshold_bernoulli:double:1e-3, extract_threshold:double:0.5, gate_threshold:double:9.0, k_best:int:5
+// @mex_has track_histories
 template <typename T>
 class LMB : public RFSBase {
 public:

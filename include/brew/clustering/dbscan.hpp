@@ -6,6 +6,9 @@
 namespace brew::clustering {
 
 /// DBSCAN clustering algorithm.
+// @mex clustering
+// @mex_name DBSCAN
+// @mex_args epsilon:double, min_pts:int
 
 class DBSCAN {
 public:

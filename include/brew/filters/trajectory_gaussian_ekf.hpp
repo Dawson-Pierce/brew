@@ -7,6 +7,10 @@
 namespace brew::filters {
 
 /// EKF for Gaussian trajectory distributions.
+// @mex filter
+// @mex_name TrajectoryGaussianEKF
+// @mex_dist TrajectoryGaussian
+// @mex_setters window_size:int
 
 class TrajectoryGaussianEKF : public Filter<models::Trajectory<models::Gaussian>> {
 public:

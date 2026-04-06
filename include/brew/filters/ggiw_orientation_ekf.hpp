@@ -8,6 +8,10 @@ namespace brew::filters {
 /// EKF for GGIWOrientation distributions.
 /// Same predict/gate math as GGIWEKF; correct adds eigenvector basis tracking
 /// that aligns new eigenvectors to the previous basis after each update.
+// @mex filter
+// @mex_name GGIWOrientationEKF
+// @mex_dist GGIWOrientation
+// @mex_setters temporal_decay:scalar, forgetting_factor:scalar, scaling_parameter:scalar
 class GGIWOrientationEKF : public Filter<models::GGIWOrientation> {
 public:
     GGIWOrientationEKF() = default;

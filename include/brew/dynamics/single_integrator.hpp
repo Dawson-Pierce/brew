@@ -8,6 +8,9 @@ namespace brew::dynamics {
 /// Constant-velocity integrator for 1, 2, or 3 spatial dimensions.
 /// State ordering: [pos..., vel...].
 /// Input is a velocity increment applied each step.
+// @mex dynamics
+// @mex_name SingleIntegrator
+// @mex_args dims:int
 class SingleIntegrator : public LinearDynamics {
 public:
     explicit SingleIntegrator(int dims) : dims_(dims) {

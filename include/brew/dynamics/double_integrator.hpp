@@ -8,6 +8,9 @@ namespace brew::dynamics {
 /// Constant-acceleration (double) integrator for 1, 2, or 3 spatial dimensions.
 /// State ordering: [pos..., vel..., acc...].
 /// Input is an acceleration increment applied each step.
+// @mex dynamics
+// @mex_name DoubleIntegrator
+// @mex_args dims:int
 class DoubleIntegrator : public LinearDynamics {
 public:
     explicit DoubleIntegrator(int dims) : dims_(dims) {

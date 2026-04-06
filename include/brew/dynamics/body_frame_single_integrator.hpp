@@ -6,6 +6,9 @@
 
 namespace brew::dynamics {
 
+// @mex dynamics
+// @mex_name BodyFrameSingleIntegrator
+// @mex_args dims:int
 /// Constant body-frame velocity integrator for 2D or 3D.
 /// State ordering: [pos..., vel_body...].
 /// Body-frame velocities are rotated into the world frame for position update:

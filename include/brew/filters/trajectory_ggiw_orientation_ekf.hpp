@@ -10,6 +10,10 @@ namespace brew::filters {
 /// Same trajectory predict/gate math as TrajectoryGGIWEKF; correct adds
 /// eigenvector basis tracking that aligns new eigenvectors to the previous
 /// basis after each update.
+// @mex filter
+// @mex_name TrajectoryGGIWOrientationEKF
+// @mex_dist TrajectoryGGIWOrientation
+// @mex_setters window_size:int, temporal_decay:scalar, forgetting_factor:scalar, scaling_parameter:scalar
 class TrajectoryGGIWOrientationEKF : public Filter<models::Trajectory<models::GGIWOrientation>> {
 public:
     using TrajectoryType = models::Trajectory<models::GGIWOrientation>;

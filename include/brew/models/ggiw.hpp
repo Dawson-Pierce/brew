@@ -10,6 +10,9 @@ namespace brew::models {
 
 /// Gamma-Gaussian-Inverse-Wishart distribution.
 /// Pure parameter holder for kinematic state + measurement rate + extent.
+// @mex model
+// @mex_name GGIW
+// @mex_fields mean:vec, covariance:mat, alpha:scalar, beta:scalar, v:scalar, V:mat
 class GGIW : public BaseSingleModel {
 public:
     GGIW() = default;

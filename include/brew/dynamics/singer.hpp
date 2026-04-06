@@ -6,6 +6,9 @@
 
 namespace brew::dynamics {
 
+// @mex dynamics
+// @mex_name Singer
+// @mex_args dims:int, beta:double, q:double
 /// Singer auto-regressive acceleration model for 1, 2, or 3 spatial dimensions.
 ///
 /// State ordering: [pos..., vel..., acc...] — identical to DoubleIntegrator.

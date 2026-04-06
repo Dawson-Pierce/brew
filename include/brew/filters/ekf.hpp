@@ -6,6 +6,9 @@
 namespace brew::filters {
 
 /// Extended Kalman Filter for Gaussian distributions.
+// @mex filter
+// @mex_name EKF
+// @mex_dist Gaussian
 
 class EKF : public Filter<models::Gaussian> {
 public:

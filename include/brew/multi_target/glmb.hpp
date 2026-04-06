@@ -26,6 +26,10 @@ namespace brew::multi_target {
 /// Structurally similar to MBM but with label-set-aware component management
 /// and cardinality distribution computation.
 /// Template parameter T is the single distribution type (e.g., Gaussian, GGIW).
+// @mex rfs
+// @mex_name GLMB
+// @mex_params prune_threshold_hypothesis:double:1e-3, prune_threshold_bernoulli:double:1e-3, max_hypotheses:int:100, extract_threshold:double:0.5, gate_threshold:double:9.0, k_best:int:5
+// @mex_has cardinality, track_histories
 template <typename T>
 class GLMB : public RFSBase {
 public:
