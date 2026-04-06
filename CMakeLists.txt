@@ -103,6 +103,12 @@ if(BREW_ENABLE_PLOTTING)
     target_compile_definitions(brew INTERFACE BREW_ENABLE_PLOTTING)
 endif()
 
+# Examples
+option(BREW_BUILD_EXAMPLES "Build examples" ON)
+if(BREW_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
 # Testing
 option(BREW_BUILD_TESTS "Build tests" ON)
 if(BREW_BUILD_TESTS)
