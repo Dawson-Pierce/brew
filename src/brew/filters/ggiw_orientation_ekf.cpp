@@ -50,8 +50,9 @@ models::GGIWOrientation GGIWOrientationEKF::predict(
 
     // Preserve basis through prediction
     models::GGIWOrientation result(
+        next_alpha, next_beta,
         std::move(next_mean), std::move(next_cov),
-        next_alpha, next_beta, next_v, std::move(next_V));
+        next_v, std::move(next_V));
     result.basis() = prev.basis();
     result.eigenvalues() = prev.eigenvalues();
     return result;
@@ -192,8 +193,9 @@ GGIWOrientationEKF::CorrectionResult GGIWOrientationEKF::correct(
 
     // Build result with updated basis
     models::GGIWOrientation result(
+        next_alpha, next_beta,
         std::move(next_mean), std::move(next_cov),
-        next_alpha, next_beta, next_v, std::move(next_V));
+        next_v, std::move(next_V));
     result.basis() = U_aligned;
     result.eigenvalues() = S_aligned.asDiagonal();
 

@@ -10,6 +10,11 @@ namespace brew::filters {
 
 /// Template Matching Extended Kalman Filter.
 /// Invariant EKF for pose estimation using ICP-based template matching.
+// @mex filter
+// @mex_name TmEkf
+// @mex_dist TemplatePose
+// @mex_setters rotation_process_noise:mat
+// @mex_handle_setters icp:IcpBase
 
 class TmEkf : public Filter<models::TemplatePose> {
 public:

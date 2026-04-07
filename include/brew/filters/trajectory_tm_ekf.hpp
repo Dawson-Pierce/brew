@@ -12,6 +12,11 @@ namespace brew::filters {
 /// Trajectory EKF for template-matching pose tracking.
 /// Stacks translational kinematic state across time (like TrajectoryGaussianEKF),
 /// while rotation lives on SO(d) and is tracked only on the current step.
+// @mex filter
+// @mex_name TrajectoryTmEkf
+// @mex_dist TrajectoryTemplatePose
+// @mex_setters window_size:int, rotation_process_noise:mat
+// @mex_handle_setters icp:IcpBase
 
 class TrajectoryTmEkf : public Filter<models::Trajectory<models::TemplatePose>> {
 public:

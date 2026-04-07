@@ -112,10 +112,10 @@ inline json to_json(const models::GGIW& g) {
 
 inline models::GGIW ggiw_from_json(const json& j) {
     return models::GGIW(
-        vector_from_json(j["mean"]),
-        matrix_from_json(j["covariance"]),
         j["alpha"].get<double>(),
         j["beta"].get<double>(),
+        vector_from_json(j["mean"]),
+        matrix_from_json(j["covariance"]),
         j["v"].get<double>(),
         matrix_from_json(j["V"])
     );
@@ -202,10 +202,10 @@ inline models::Trajectory<models::GGIW> trajectory_ggiw_from_json(const json& j)
     return models::Trajectory<models::GGIW>(
         j["state_dim"].get<int>(),
         models::GGIW(
-            vector_from_json(j["mean"]),
-            matrix_from_json(j["covariance"]),
             j["alpha"].get<double>(),
             j["beta"].get<double>(),
+            vector_from_json(j["mean"]),
+            matrix_from_json(j["covariance"]),
             j["v"].get<double>(),
             matrix_from_json(j["V"])
         )
@@ -239,10 +239,10 @@ inline models::Trajectory<models::GGIWOrientation> trajectory_ggiw_orientation_f
     models::Trajectory<models::GGIWOrientation> result(
         j["state_dim"].get<int>(),
         models::GGIWOrientation(
-            vector_from_json(j["mean"]),
-            matrix_from_json(j["covariance"]),
             j["alpha"].get<double>(),
             j["beta"].get<double>(),
+            vector_from_json(j["mean"]),
+            matrix_from_json(j["covariance"]),
             j["v"].get<double>(),
             matrix_from_json(j["V"])
         )

@@ -12,13 +12,13 @@ namespace brew::models {
 /// Pure parameter holder for kinematic state + measurement rate + extent.
 // @mex model
 // @mex_name GGIW
-// @mex_fields mean:vec, covariance:mat, alpha:scalar, beta:scalar, v:scalar, V:mat
+// @mex_fields alpha:scalar, beta:scalar, mean:vec, covariance:mat, v:scalar, V:mat
 class GGIW : public BaseSingleModel {
 public:
     GGIW() = default;
 
-    inline GGIW(Eigen::VectorXd mean, Eigen::MatrixXd covariance,
-                double alpha, double beta,
+    inline GGIW(double alpha, double beta,
+                Eigen::VectorXd mean, Eigen::MatrixXd covariance,
                 double v, Eigen::MatrixXd V)
         : mean_(std::move(mean)),
           covariance_(std::move(covariance)),
@@ -26,13 +26,13 @@ public:
           v_(v), V_(std::move(V)) {}
 
     [[nodiscard]] inline std::unique_ptr<BaseSingleModel> clone() const override {
-        return std::make_unique<GGIW>(mean_, covariance_, alpha_, beta_, v_, V_);
+        return std::make_unique<GGIW>(alpha_, beta_, mean_, covariance_, v_, V_);
     }
 
     [[nodiscard]] bool is_extended() const override { return true; }
 
     [[nodiscard]] inline std::unique_ptr<GGIW> clone_typed() const {
-        return std::make_unique<GGIW>(mean_, covariance_, alpha_, beta_, v_, V_);
+        return std::make_unique<GGIW>(alpha_, beta_, mean_, covariance_, v_, V_);
     }
 
     // ---- Kinematic state ----

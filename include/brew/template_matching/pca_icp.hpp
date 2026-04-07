@@ -10,6 +10,11 @@ namespace brew::template_matching {
 /// PCA, generates 8 sign-flip candidates, picks the one closest to R_init
 /// (the filter's predicted rotation), and runs ICP once from that.
 /// Overhead vs plain ICP: one 3x3 eigendecomposition on the measurement cloud.
+// @mex icp
+// @mex_name PcaIcp
+// @mex_namespace template_matching
+// @mex_args inner_icp:clone:IcpBase, source_template:mat_pc
+// @mex_params max_iterations:int:50, tolerance:double:1e-6, max_correspondence_dist:double:1e10, sigma_sq:double:1.0, trim_fraction:double:1.0
 class PcaIcp : public IcpBase {
 public:
     /// Construct with inner ICP and the source template for PCA precomputation.

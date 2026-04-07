@@ -15,6 +15,10 @@
 // @mex model
 // @mex_name TrajectoryGGIWOrientation
 // @mex_trajectory GGIWOrientation
+//
+// @mex model
+// @mex_name TrajectoryTemplatePose
+// @mex_trajectory TemplatePose
 
 #include <Eigen/Dense>
 #include <memory>

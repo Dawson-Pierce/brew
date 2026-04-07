@@ -45,8 +45,8 @@ TEST(MergeGGIW, TwoClose) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<models::GGIW>(m1, cov, 10.0, 5.0, 10.0, V), 0.6);
-    mix.add_component(std::make_unique<models::GGIW>(m2, cov, 12.0, 6.0, 11.0, V), 0.4);
+    mix.add_component(std::make_unique<models::GGIW>(10.0, 5.0, m1, cov, 10.0, V), 0.6);
+    mix.add_component(std::make_unique<models::GGIW>(12.0, 6.0, m2, cov, 11.0, V), 0.4);
 
     fusion::merge(mix, 4.0);
 
@@ -78,8 +78,8 @@ TEST(MergeTrajectoryGGIW, SameSize) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<models::Trajectory<models::GGIW>>(4, models::GGIW(m1, cov, 10.0, 5.0, 10.0, V)), 0.5);
-    mix.add_component(std::make_unique<models::Trajectory<models::GGIW>>(4, models::GGIW(m2, cov, 12.0, 6.0, 11.0, V)), 0.3);
+    mix.add_component(std::make_unique<models::Trajectory<models::GGIW>>(4, models::GGIW(10.0, 5.0, m1, cov, 10.0, V)), 0.5);
+    mix.add_component(std::make_unique<models::Trajectory<models::GGIW>>(4, models::GGIW(12.0, 6.0, m2, cov, 11.0, V)), 0.3);
 
     fusion::merge(mix, 4.0);
 

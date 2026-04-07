@@ -5,6 +5,10 @@
 namespace brew::template_matching {
 
 /// Linearized point-to-plane ICP.
+// @mex icp
+// @mex_name PointToPlaneIcp
+// @mex_namespace template_matching
+// @mex_params max_iterations:int:50, tolerance:double:1e-6, max_correspondence_dist:double:1e10, sigma_sq:double:1.0, trim_fraction:double:1.0
 class PointToPlaneIcp : public IcpBase {
 public:
     PointToPlaneIcp() = default;

@@ -14,16 +14,16 @@ namespace brew::models {
 /// corrections can align the new eigenvectors to the previous ones.
 // @mex model
 // @mex_name GGIWOrientation
-// @mex_fields mean:vec, covariance:mat, alpha:scalar, beta:scalar, v:scalar, V:mat
+// @mex_fields alpha:scalar, beta:scalar, mean:vec, covariance:mat, v:scalar, V:mat
 // @mex_extract_extra basis:mat
 class GGIWOrientation : public GGIW {
 public:
     GGIWOrientation() = default;
 
-    inline GGIWOrientation(Eigen::VectorXd mean, Eigen::MatrixXd covariance,
-                           double alpha, double beta,
+    inline GGIWOrientation(double alpha, double beta,
+                           Eigen::VectorXd mean, Eigen::MatrixXd covariance,
                            double v, Eigen::MatrixXd V)
-        : GGIW(std::move(mean), std::move(covariance), alpha, beta, v, std::move(V))
+        : GGIW(alpha, beta, std::move(mean), std::move(covariance), v, std::move(V))
     {
         // Decompose V to initialize basis and eigenvalues
         if (this->V().size() > 0) {
@@ -36,7 +36,7 @@ public:
     }
 
     [[nodiscard]] inline std::unique_ptr<BaseSingleModel> clone() const override {
-        auto c = std::make_unique<GGIWOrientation>(mean(), covariance(), alpha(), beta(), v(), V());
+        auto c = std::make_unique<GGIWOrientation>(alpha(), beta(), mean(), covariance(), v(), V());
         c->basis_ = basis_;
         c->eigenvalues_ = eigenvalues_;
         c->has_eigenvalues_ = has_eigenvalues_;
@@ -44,7 +44,7 @@ public:
     }
 
     [[nodiscard]] inline std::unique_ptr<GGIWOrientation> clone_typed() const {
-        auto c = std::make_unique<GGIWOrientation>(mean(), covariance(), alpha(), beta(), v(), V());
+        auto c = std::make_unique<GGIWOrientation>(alpha(), beta(), mean(), covariance(), v(), V());
         c->basis_ = basis_;
         c->eigenvalues_ = eigenvalues_;
         c->has_eigenvalues_ = has_eigenvalues_;

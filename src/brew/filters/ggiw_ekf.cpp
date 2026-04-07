@@ -49,8 +49,9 @@ models::GGIW GGIWEKF::predict(
     Eigen::MatrixXd next_V = scale * dyn_obj_->propagate_extent(dt, prev.mean(), prev.V());
 
     return models::GGIW(
+        next_alpha, next_beta,
         std::move(next_mean), std::move(next_cov),
-        next_alpha, next_beta, next_v, std::move(next_V));
+        next_v, std::move(next_V));
 }
 
 GGIWEKF::CorrectionResult GGIWEKF::correct(
@@ -149,8 +150,9 @@ GGIWEKF::CorrectionResult GGIWEKF::correct(
       - (W * std::log(M_PI) + std::log(static_cast<double>(W))) * d / 2.0;
 
     return {
-        models::GGIW(std::move(next_mean), std::move(next_cov),
-                             next_alpha, next_beta, next_v, std::move(next_V)),
+        models::GGIW(next_alpha, next_beta,
+                     std::move(next_mean), std::move(next_cov),
+                     next_v, std::move(next_V)),
         std::exp(log_likelihood)
     };
 }

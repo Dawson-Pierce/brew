@@ -17,7 +17,7 @@ TEST(TrajectoryGGIWOrientationModel, ConstructAndAccessors) {
     V << 10.0, 2.0,
           2.0, 5.0;
 
-    models::Trajectory<models::GGIWOrientation> g(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
+    models::Trajectory<models::GGIWOrientation> g(4, models::GGIWOrientation(10.0, 5.0, mean, cov, 10.0, V));
 
     EXPECT_EQ(g.current().extent_dim(), 2);
     EXPECT_TRUE(g.is_extended());
@@ -44,7 +44,7 @@ TEST(TrajectoryGGIWOrientationModel, Clone) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::Trajectory<models::GGIWOrientation> g(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
+    models::Trajectory<models::GGIWOrientation> g(4, models::GGIWOrientation(10.0, 5.0, mean, cov, 10.0, V));
 
     auto typed_clone = g.clone_typed();
     ASSERT_NE(typed_clone, nullptr);
@@ -85,7 +85,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, PredictGrowsTrajectory) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
+    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(10.0, 5.0, mean, cov, 10.0, V));
 
     auto pred = filter.predict(1.0, tg);
 
@@ -109,7 +109,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, CorrectPopulatesBasis) {
     V << 50.0, 10.0,
          10.0, 30.0;
 
-    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
+    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(10.0, 5.0, mean, cov, 10.0, V));
 
     // Predict then correct
     auto pred = filter.predict(1.0, tg);
@@ -142,7 +142,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, MultipleStepsBasisAlignment) {
     V << 80.0, 5.0,
           5.0, 20.0;
 
-    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
+    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(10.0, 5.0, mean, cov, 10.0, V));
 
     // Step 1: predict + correct
     auto pred1 = filter.predict(1.0, tg);
@@ -177,7 +177,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, Gate) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
+    models::Trajectory<models::GGIWOrientation> tg(4, models::GGIWOrientation(10.0, 5.0, mean, cov, 10.0, V));
 
     Eigen::VectorXd meas_close(2);
     meas_close << 0.1, 0.1;
@@ -202,7 +202,7 @@ TEST(TrajectoryGGIWOrientationSerialization, RoundTrip) {
     V << 10.0, 2.0,
           2.0, 5.0;
 
-    models::Trajectory<models::GGIWOrientation> original(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
+    models::Trajectory<models::GGIWOrientation> original(4, models::GGIWOrientation(10.0, 5.0, mean, cov, 10.0, V));
 
     auto j = serialization::to_yaml(original);
     EXPECT_EQ(j["type"].as<std::string>(), "TrajectoryGGIWOrientation");
@@ -229,7 +229,7 @@ TEST(TrajectoryGGIWOrientationSerialization, DistributionSerializer) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::Trajectory<models::GGIWOrientation> original(4, models::GGIWOrientation(mean, cov, 10.0, 5.0, 10.0, V));
+    models::Trajectory<models::GGIWOrientation> original(4, models::GGIWOrientation(10.0, 5.0, mean, cov, 10.0, V));
 
     auto j = serialization::DistributionSerializer<models::Trajectory<models::GGIWOrientation>>::serialize(original);
     auto restored = serialization::DistributionSerializer<models::Trajectory<models::GGIWOrientation>>::deserialize(j);

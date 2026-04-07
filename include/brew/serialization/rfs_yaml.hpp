@@ -110,10 +110,10 @@ inline YAML::Node to_yaml(const models::GGIW& g) {
 
 inline models::GGIW ggiw_from_yaml(const YAML::Node& j) {
     return models::GGIW(
-        vector_from_yaml(j["mean"]),
-        matrix_from_yaml(j["covariance"]),
         j["alpha"].as<double>(),
         j["beta"].as<double>(),
+        vector_from_yaml(j["mean"]),
+        matrix_from_yaml(j["covariance"]),
         j["v"].as<double>(),
         matrix_from_yaml(j["V"])
     );
@@ -200,10 +200,10 @@ inline models::Trajectory<models::GGIW> trajectory_ggiw_from_yaml(const YAML::No
     return models::Trajectory<models::GGIW>(
         j["state_dim"].as<int>(),
         models::GGIW(
-            vector_from_yaml(j["mean"]),
-            matrix_from_yaml(j["covariance"]),
             j["alpha"].as<double>(),
             j["beta"].as<double>(),
+            vector_from_yaml(j["mean"]),
+            matrix_from_yaml(j["covariance"]),
             j["v"].as<double>(),
             matrix_from_yaml(j["V"])
         )
@@ -237,10 +237,10 @@ inline models::Trajectory<models::GGIWOrientation> trajectory_ggiw_orientation_f
     models::Trajectory<models::GGIWOrientation> result(
         j["state_dim"].as<int>(),
         models::GGIWOrientation(
-            vector_from_yaml(j["mean"]),
-            matrix_from_yaml(j["covariance"]),
             j["alpha"].as<double>(),
             j["beta"].as<double>(),
+            vector_from_yaml(j["mean"]),
+            matrix_from_yaml(j["covariance"]),
             j["v"].as<double>(),
             matrix_from_yaml(j["V"])
         )

@@ -13,6 +13,11 @@ namespace brew::models {
 /// Template-based pose distribution.
 /// Holds a translational kinematic state (from dynamics), a rotation matrix on SO(d),
 /// and a reference point cloud template. Pure parameter holder.
+// @mex model
+// @mex_name TemplatePose
+// @mex_fields mean:vec, covariance:mat, rotation:mat
+// @mex_create_mat_fields template_points:PointCloud
+// @mex_create_int_vec_fields pos_indices
 class TemplatePose : public BaseSingleModel {
 public:
     TemplatePose() = default;

@@ -93,8 +93,9 @@ TrajectoryType TrajectoryGGIWEKF::predict(
     // Copy history, append new GGIW marginal
     result.history() = prev.history();
     result.history().push_back(models::GGIW(
+        next_alpha, next_beta,
         next_state, new_cov.bottomRightCorner(sd, sd),
-        next_alpha, next_beta, next_v, next_V));
+        next_v, next_V));
 
     return result;
 }

@@ -635,9 +635,9 @@ make_ggiw_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::GGIW>(b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+        std::make_unique<models::GGIW>(10.0, 1.0, b1, b_cov, 10.0, b_V), weight);
     birth->add_component(
-        std::make_unique<models::GGIW>(b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+        std::make_unique<models::GGIW>(10.0, 1.0, b2, b_cov, 10.0, b_V), weight);
 
     return birth;
 }
@@ -653,9 +653,9 @@ make_ggiw_orientation_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::GGIWOrientation>(b1, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+        std::make_unique<models::GGIWOrientation>(10.0, 1.0, b1, b_cov, 10.0, b_V), weight);
     birth->add_component(
-        std::make_unique<models::GGIWOrientation>(b2, b_cov, 10.0, 1.0, 10.0, b_V), weight);
+        std::make_unique<models::GGIWOrientation>(10.0, 1.0, b2, b_cov, 10.0, b_V), weight);
 
     return birth;
 }
@@ -691,10 +691,10 @@ make_trajectory_ggiw_birth(double weight = 0.1)
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
         std::make_unique<models::Trajectory<models::GGIW>>(
-            4, models::GGIW(b1, b_cov, 10.0, 1.0, 10.0, b_V)), weight);
+            4, models::GGIW(10.0, 1.0, b1, b_cov, 10.0, b_V)), weight);
     birth->add_component(
         std::make_unique<models::Trajectory<models::GGIW>>(
-            4, models::GGIW(b2, b_cov, 10.0, 1.0, 10.0, b_V)), weight);
+            4, models::GGIW(10.0, 1.0, b2, b_cov, 10.0, b_V)), weight);
 
     return birth;
 }
@@ -732,10 +732,10 @@ make_trajectory_ggiw_orientation_birth(double weight = 0.1)
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
         std::make_unique<models::Trajectory<models::GGIWOrientation>>(
-            4, models::GGIWOrientation(b1, b_cov, 10.0, 1.0, 10.0, b_V)), weight);
+            4, models::GGIWOrientation(10.0, 1.0, b1, b_cov, 10.0, b_V)), weight);
     birth->add_component(
         std::make_unique<models::Trajectory<models::GGIWOrientation>>(
-            4, models::GGIWOrientation(b2, b_cov, 10.0, 1.0, 10.0, b_V)), weight);
+            4, models::GGIWOrientation(10.0, 1.0, b2, b_cov, 10.0, b_V)), weight);
 
     return birth;
 }

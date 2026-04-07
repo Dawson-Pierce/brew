@@ -93,8 +93,9 @@ TrajectoryType TrajectoryGGIWOrientationEKF::predict(
     // Copy history, append new GGIWOrientation with preserved basis
     result.history() = prev.history();
     models::GGIWOrientation new_ggiw(
+        next_alpha, next_beta,
         next_state, new_cov.bottomRightCorner(sd, sd),
-        next_alpha, next_beta, next_v, next_V);
+        next_v, next_V);
     // Preserve basis through prediction
     new_ggiw.basis() = prev_ggiw.basis();
     new_ggiw.eigenvalues() = prev_ggiw.eigenvalues();

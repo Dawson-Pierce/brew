@@ -140,7 +140,7 @@ void merge(models::Mixture<models::GGIW>& mix, double threshold) {
         V_new = 0.5 * (V_new + V_new.transpose());
 
         result.add_component(
-            std::make_unique<models::GGIW>(m_new, P_new, a_new, b_new, v_new, V_new),
+            std::make_unique<models::GGIW>(a_new, b_new, m_new, P_new, v_new, V_new),
             w_sum);
 
         for (auto idx : grp) remaining[idx] = false;
@@ -229,7 +229,7 @@ void merge(models::Mixture<models::GGIWOrientation>& mix, double threshold) {
 
         // Basis/eigenvalues left at defaults — filter recomputes on next correction
         result.add_component(
-            std::make_unique<models::GGIWOrientation>(m_new, P_new, a_new, b_new, v_new, V_new),
+            std::make_unique<models::GGIWOrientation>(a_new, b_new, m_new, P_new, v_new, V_new),
             w_sum);
 
         for (auto idx : grp) remaining[idx] = false;

@@ -5,6 +5,10 @@
 namespace brew::template_matching {
 
 /// SVD-based point-to-point ICP (Arun et al. 1987).
+// @mex icp
+// @mex_name PointToPointIcp
+// @mex_namespace template_matching
+// @mex_params max_iterations:int:50, tolerance:double:1e-6, max_correspondence_dist:double:1e10, sigma_sq:double:1.0, trim_fraction:double:1.0
 class PointToPointIcp : public IcpBase {
 public:
     PointToPointIcp() = default;
