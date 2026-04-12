@@ -28,7 +28,7 @@ namespace brew::multi_target {
 // @mex_name CPHD
 // @mex_params prune_threshold:double:1e-4, merge_threshold:double:4.0, max_components:int:100, extract_threshold:double:0.5, gate_threshold:double:9.0, max_cardinality:int:100
 // @mex_init set_intensity
-// @mex_has cardinality
+// @mex_has cardinality, cluster_object
 // @mex_optional_params poisson_cardinality:double, poisson_birth_cardinality:double
 template <typename T>
 class CPHD : public RFSBase {

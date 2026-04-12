@@ -26,6 +26,7 @@ namespace brew::multi_target {
 // @mex rfs
 // @mex_name MB
 // @mex_params prune_threshold_bernoulli:double:1e-3, extract_threshold:double:0.5, gate_threshold:double:9.0
+// @mex_has cluster_object
 template <typename T>
 class MB : public RFSBase {
 public:

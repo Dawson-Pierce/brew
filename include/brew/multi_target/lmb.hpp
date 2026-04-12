@@ -25,7 +25,7 @@ namespace brew::multi_target {
 // @mex rfs
 // @mex_name LMB
 // @mex_params prune_threshold_bernoulli:double:1e-3, extract_threshold:double:0.5, gate_threshold:double:9.0, k_best:int:5
-// @mex_has track_histories
+// @mex_has track_histories, cluster_object
 template <typename T>
 class LMB : public RFSBase {
 public:

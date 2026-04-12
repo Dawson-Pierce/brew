@@ -29,7 +29,7 @@ namespace brew::multi_target {
 // @mex rfs
 // @mex_name JGLMB
 // @mex_params prune_threshold_hypothesis:double:1e-3, prune_threshold_bernoulli:double:1e-3, max_hypotheses:int:100, extract_threshold:double:0.5, gate_threshold:double:9.0, k_best:int:5
-// @mex_has cardinality, track_histories
+// @mex_has cardinality, track_histories, cluster_object
 template <typename T>
 class JGLMB : public RFSBase {
 public:
