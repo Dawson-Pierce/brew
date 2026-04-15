@@ -1,14 +1,14 @@
 #include <gtest/gtest.h>
-#include "brew/multi_target/phd.hpp"
-#include "brew/filters/ekf.hpp"
-#include "brew/dynamics/single_integrator.hpp"
+#include "brew/advanced/multi_target/phd.hpp"
+#include "brew/core/filters/ekf.hpp"
+#include "brew/core/dynamics/single_integrator.hpp"
 
 using namespace brew;
 
 TEST(PHD, GaussianPredictCorrectCleanup) {
     // Setup filter
-    auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
+    auto ekf = std::make_unique<filters::EKF<>>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
     ekf->set_dynamics(dyn);
 
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
@@ -19,17 +19,17 @@ TEST(PHD, GaussianPredictCorrectCleanup) {
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
     // Birth model: one component at origin
-    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
     Eigen::VectorXd birth_mean(4);
     birth_mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd birth_cov = 10.0 * Eigen::MatrixXd::Identity(4, 4);
-    birth->add_component(std::make_unique<models::Gaussian>(birth_mean, birth_cov), 0.1);
+    birth->add_component(std::make_unique<models::Gaussian<>>(birth_mean, birth_cov), 0.1);
 
     // Initial intensity = copy of birth
     auto intensity = birth->clone();
 
     // PHD setup
-    multi_target::PHD<models::Gaussian> phd;
+    multi_target::PHD<models::Gaussian<>> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::move(intensity));
@@ -60,8 +60,8 @@ TEST(PHD, GaussianPredictCorrectCleanup) {
 }
 
 TEST(PHD, Clone) {
-    auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
+    auto ekf = std::make_unique<filters::EKF<>>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(Eigen::MatrixXd::Identity(2, 2));
     ekf->set_measurement_noise(Eigen::MatrixXd::Identity(2, 2));
@@ -69,15 +69,15 @@ TEST(PHD, Clone) {
     H(0, 0) = 1.0; H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
     Eigen::VectorXd m(4);
     m.setZero();
-    birth->add_component(std::make_unique<models::Gaussian>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
+    birth->add_component(std::make_unique<models::Gaussian<>>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
 
-    multi_target::PHD<models::Gaussian> phd;
+    multi_target::PHD<models::Gaussian<>> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<models::Mixture<models::Gaussian>>());
+    phd.set_intensity(std::make_unique<models::Mixture<models::Gaussian<>>>());
 
     auto cloned = phd.clone();
     ASSERT_NE(cloned, nullptr);

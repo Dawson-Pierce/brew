@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "brew/filters/ggiw_orientation_ekf.hpp"
-#include "brew/dynamics/single_integrator.hpp"
-#include "brew/serialization/rfs_yaml.hpp"
+#include "brew/core/filters/ggiw_orientation_ekf.hpp"
+#include "brew/core/dynamics/single_integrator.hpp"
+#include "brew/desktop/serialization/rfs_yaml.hpp"
 
 using namespace brew;
 
@@ -19,7 +19,7 @@ TEST(GGIWOrientationModel, ConstructAndAccessors) {
     V << 10.0, 2.0,
           2.0, 5.0;
 
-    models::GGIWOrientation g(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIWOrientation<> g(10.0, 5.0, mean, cov, 10.0, V);
 
     EXPECT_EQ(g.extent_dim(), 2);
     EXPECT_TRUE(g.is_extended());
@@ -48,7 +48,7 @@ TEST(GGIWOrientationModel, Clone) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIWOrientation g(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIWOrientation<> g(10.0, 5.0, mean, cov, 10.0, V);
 
     // Polymorphic clone
     auto base_clone = g.clone();
@@ -68,7 +68,7 @@ TEST(GGIWOrientationModel, SetBasis) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIWOrientation g(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIWOrientation<> g(10.0, 5.0, mean, cov, 10.0, V);
 
     // Override basis
     Eigen::MatrixXd new_basis(2, 2);
@@ -87,7 +87,7 @@ TEST(GGIWOrientationModel, SetBasis) {
 class GGIWOrientationEKFTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
+        auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
         filter.set_dynamics(dyn);
 
         Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
@@ -99,7 +99,7 @@ protected:
         filter.set_measurement_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
     }
 
-    filters::GGIWOrientationEKF filter;
+    filters::GGIWOrientationEKF<> filter;
 };
 
 TEST_F(GGIWOrientationEKFTest, PredictPreservesBasis) {
@@ -108,7 +108,7 @@ TEST_F(GGIWOrientationEKFTest, PredictPreservesBasis) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIWOrientation ggiw(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
     filter.set_temporal_decay(1.0);
     filter.set_forgetting_factor(1.0);
 
@@ -132,7 +132,7 @@ TEST_F(GGIWOrientationEKFTest, FirstCorrectionPopulatesBasis) {
     V << 50.0, 10.0,
          10.0, 30.0;
 
-    models::GGIWOrientation ggiw(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     Eigen::VectorXd meas(2);
     meas << 0.1, 0.1;
@@ -163,7 +163,7 @@ TEST_F(GGIWOrientationEKFTest, SecondCorrectionAlignsBasis) {
     V << 80.0, 5.0,
           5.0, 20.0;
 
-    models::GGIWOrientation ggiw(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
     filter.set_temporal_decay(1.0);
     filter.set_forgetting_factor(1.0);
 
@@ -200,7 +200,7 @@ TEST_F(GGIWOrientationEKFTest, Gate) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIWOrientation ggiw(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     Eigen::VectorXd meas_close(2);
     meas_close << 0.1, 0.1;
@@ -225,7 +225,7 @@ TEST(GGIWOrientationSerialization, RoundTrip) {
     V << 10.0, 2.0,
           2.0, 5.0;
 
-    models::GGIWOrientation original(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIWOrientation<> original(10.0, 5.0, mean, cov, 10.0, V);
 
     // Serialize
     auto j = serialization::to_yaml(original);
@@ -261,10 +261,10 @@ TEST(GGIWOrientationSerialization, DistributionSerializerRoundTrip) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIWOrientation original(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIWOrientation<> original(10.0, 5.0, mean, cov, 10.0, V);
 
-    auto j = serialization::DistributionSerializer<models::GGIWOrientation>::serialize(original);
-    auto restored = serialization::DistributionSerializer<models::GGIWOrientation>::deserialize(j);
+    auto j = serialization::DistributionSerializer<models::GGIWOrientation<>>::serialize(original);
+    auto restored = serialization::DistributionSerializer<models::GGIWOrientation<>>::deserialize(j);
 
     EXPECT_DOUBLE_EQ(restored.alpha(), 10.0);
     EXPECT_DOUBLE_EQ(restored.beta(), 5.0);

@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/clustering/dbscan.hpp"
+#include "brew/advanced/clustering/dbscan.hpp"
 
 using namespace brew::clustering;
 

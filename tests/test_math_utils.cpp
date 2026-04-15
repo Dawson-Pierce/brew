@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/plot_utils/math_utils.hpp"
+#include "brew/desktop/plot_utils/math_utils.hpp"
 #include <numbers>
 #include <cmath>
 

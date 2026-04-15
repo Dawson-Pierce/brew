@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "brew/serialization/rfs_yaml.hpp"
-#include "brew/filters/ekf.hpp"
-#include "brew/dynamics/single_integrator.hpp"
+#include "brew/desktop/serialization/rfs_yaml.hpp"
+#include "brew/core/filters/ekf.hpp"
+#include "brew/core/dynamics/single_integrator.hpp"
 
 using namespace brew;
 
@@ -11,7 +11,7 @@ TEST(Serialization, GaussianRoundTrip) {
     mean << 1.0, 2.0, 3.0, 4.0;
     Eigen::MatrixXd cov = 2.0 * Eigen::MatrixXd::Identity(4, 4);
 
-    models::Gaussian g(mean, cov);
+    models::Gaussian<> g(mean, cov);
     auto j = serialization::to_yaml(g);
     auto g2 = serialization::gaussian_from_yaml(j);
 
@@ -25,7 +25,7 @@ TEST(Serialization, GGIWRoundTrip) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIW g(mean, cov, 10.0, 1.0, 7.0, V);
+    models::GGIW<> g(10.0, 1.0, mean, cov, 7.0, V);
     auto j = serialization::to_yaml(g);
     auto g2 = serialization::ggiw_from_yaml(j);
 
@@ -38,17 +38,17 @@ TEST(Serialization, GGIWRoundTrip) {
 }
 
 TEST(Serialization, MixtureGaussianRoundTrip) {
-    models::Mixture<models::Gaussian> mix;
+    models::Mixture<models::Gaussian<>> mix;
     Eigen::VectorXd m1(2), m2(2);
     m1 << 1.0, 2.0;
     m2 << 3.0, 4.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<models::Gaussian>(m1, cov), 0.6);
-    mix.add_component(std::make_unique<models::Gaussian>(m2, 2.0 * cov), 0.4);
+    mix.add_component(std::make_unique<models::Gaussian<>>(m1, cov), 0.6);
+    mix.add_component(std::make_unique<models::Gaussian<>>(m2, 2.0 * cov), 0.4);
 
     auto j = serialization::mixture_to_yaml(mix);
-    auto mix2 = serialization::mixture_from_yaml<models::Gaussian>(j);
+    auto mix2 = serialization::mixture_from_yaml<models::Gaussian<>>(j);
 
     ASSERT_EQ(mix2->size(), 2u);
     EXPECT_NEAR(mix2->weight(0), 0.6, 1e-12);
@@ -62,11 +62,11 @@ TEST(Serialization, BernoulliGaussianRoundTrip) {
     mean << 5.0, 6.0;
     Eigen::MatrixXd cov = 3.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::Bernoulli<models::Gaussian> b(
-        0.8, std::make_unique<models::Gaussian>(mean, cov), 42);
+    models::Bernoulli<models::Gaussian<>> b(
+        0.8, std::make_unique<models::Gaussian<>>(mean, cov), 42);
 
     auto j = serialization::bernoulli_to_yaml(b);
-    auto b2 = serialization::bernoulli_from_yaml<models::Gaussian>(j);
+    auto b2 = serialization::bernoulli_from_yaml<models::Gaussian<>>(j);
 
     EXPECT_NEAR(b2->existence_probability(), 0.8, 1e-12);
     EXPECT_EQ(b2->id(), 42);
@@ -76,8 +76,8 @@ TEST(Serialization, BernoulliGaussianRoundTrip) {
 
 TEST(Serialization, GLMBGaussianSerialize) {
     // Set up a minimal GLMB and run one predict/correct/cleanup cycle
-    auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
+    auto ekf = std::make_unique<filters::EKF<>>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
     ekf->set_dynamics(dyn);
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;
@@ -85,13 +85,13 @@ TEST(Serialization, GLMBGaussianSerialize) {
     ekf->set_process_noise(0.1 * Eigen::MatrixXd::Identity(2, 2));
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
     Eigen::VectorXd bm(4);
     bm.setZero();
     birth->add_component(
-        std::make_unique<models::Gaussian>(bm, 10.0 * Eigen::MatrixXd::Identity(4, 4)), 0.1);
+        std::make_unique<models::Gaussian<>>(bm, 10.0 * Eigen::MatrixXd::Identity(4, 4)), 0.1);
 
-    multi_target::GLMB<models::Gaussian> glmb;
+    multi_target::GLMB<models::Gaussian<>> glmb;
     glmb.set_filter(std::move(ekf));
     glmb.set_birth_model(std::move(birth));
     glmb.set_prob_detection(0.9);
@@ -116,8 +116,8 @@ TEST(Serialization, GLMBGaussianSerialize) {
 }
 
 TEST(Serialization, PMBMGaussianSerialize) {
-    auto ekf = std::make_unique<filters::EKF>();
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
+    auto ekf = std::make_unique<filters::EKF<>>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
     ekf->set_dynamics(dyn);
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;
@@ -125,15 +125,15 @@ TEST(Serialization, PMBMGaussianSerialize) {
     ekf->set_process_noise(0.1 * Eigen::MatrixXd::Identity(2, 2));
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
     Eigen::VectorXd bm(4);
     bm.setZero();
     birth->add_component(
-        std::make_unique<models::Gaussian>(bm, 10.0 * Eigen::MatrixXd::Identity(4, 4)), 0.1);
+        std::make_unique<models::Gaussian<>>(bm, 10.0 * Eigen::MatrixXd::Identity(4, 4)), 0.1);
 
-    auto poisson = std::make_unique<models::Mixture<models::Gaussian>>();
+    auto poisson = std::make_unique<models::Mixture<models::Gaussian<>>>();
 
-    multi_target::PMBM<models::Gaussian> pmbm;
+    multi_target::PMBM<models::Gaussian<>> pmbm;
     pmbm.set_filter(std::move(ekf));
     pmbm.set_birth_model(std::move(birth));
     pmbm.set_poisson_intensity(std::move(poisson));

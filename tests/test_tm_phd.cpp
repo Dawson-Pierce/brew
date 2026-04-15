@@ -1,19 +1,19 @@
 #include <gtest/gtest.h>
-#include "brew/dynamics/single_integrator.hpp"
-#include "brew/models/template_pose.hpp"
-#include "brew/models/trajectory.hpp"
-#include "brew/models/mixture.hpp"
-#include "brew/filters/tm_ekf.hpp"
-#include "brew/filters/trajectory_tm_ekf.hpp"
-#include "brew/multi_target/phd.hpp"
-#include "brew/fusion/prune.hpp"
-#include "brew/fusion/merge.hpp"
-#include "brew/clustering/dbscan.hpp"
-#include "brew/template_matching/point_cloud.hpp"
-#include "brew/template_matching/point_cloud_io.hpp"
-#include "brew/template_matching/point_to_point_icp.hpp"
-#include "brew/template_matching/point_to_plane_icp.hpp"
-#include "brew/measurement_sampling/measurement_sampling.hpp"
+#include "brew/core/dynamics/single_integrator.hpp"
+#include "brew/core/models/template_pose.hpp"
+#include "brew/core/models/trajectory.hpp"
+#include "brew/core/models/mixture.hpp"
+#include "brew/core/filters/tm_ekf.hpp"
+#include "brew/core/filters/trajectory_tm_ekf.hpp"
+#include "brew/advanced/multi_target/phd.hpp"
+#include "brew/core/fusion/prune.hpp"
+#include "brew/core/fusion/merge.hpp"
+#include "brew/advanced/clustering/dbscan.hpp"
+#include "brew/core/template_matching/point_cloud.hpp"
+#include "brew/core/template_matching/point_cloud_io.hpp"
+#include "brew/core/template_matching/point_to_point_icp.hpp"
+#include "brew/core/template_matching/point_to_plane_icp.hpp"
+#include "brew/desktop/measurement_sampling/measurement_sampling.hpp"
 
 #include <Eigen/Dense>
 #include <random>
@@ -25,9 +25,9 @@
 
 #ifdef BREW_ENABLE_PLOTTING
 #include <matplot/matplot.h>
-#include <brew/plot_utils/plot_options.hpp>
-#include <brew/plot_utils/color_palette.hpp>
-#include <brew/plot_utils/plot_point_cloud.hpp>
+#include <brew/desktop/plot_utils/plot_options.hpp>
+#include <brew/desktop/plot_utils/color_palette.hpp>
+#include <brew/desktop/plot_utils/plot_point_cloud.hpp>
 #include <filesystem>
 #endif
 
@@ -58,7 +58,7 @@ struct TmTruthTarget {
 TmTruthTarget make_tm_target(
     const Eigen::VectorXd& x0, double angle0, double angular_vel,
     int birth, int death, double dt,
-    dynamics::DynamicsBase& dyn)
+    dynamics::DynamicsBase<>& dyn)
 {
     TmTruthTarget t;
     t.birth_time = birth;
@@ -126,11 +126,11 @@ double rotation_error(const Eigen::MatrixXd& R_est, double truth_angle) {
 }
 
 // Create a TmEkf filter
-std::unique_ptr<filters::TmEkf> make_tm_ekf(
-    std::shared_ptr<dynamics::DynamicsBase> dyn,
+std::unique_ptr<filters::TmEkf<>> make_tm_ekf(
+    std::shared_ptr<dynamics::DynamicsBase<>> dyn,
     std::shared_ptr<template_matching::IcpBase> icp)
 {
-    auto ekf = std::make_unique<filters::TmEkf>();
+    auto ekf = std::make_unique<filters::TmEkf<>>();
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(3, 3);
@@ -144,12 +144,12 @@ std::unique_ptr<filters::TmEkf> make_tm_ekf(
 }
 
 // Create a TrajectoryTmEkf filter
-std::unique_ptr<filters::TrajectoryTmEkf> make_trajectory_tm_ekf(
-    std::shared_ptr<dynamics::DynamicsBase> dyn,
+std::unique_ptr<filters::TrajectoryTmEkf<>> make_trajectory_tm_ekf(
+    std::shared_ptr<dynamics::DynamicsBase<>> dyn,
     std::shared_ptr<template_matching::IcpBase> icp,
     int window = 10)
 {
-    auto ekf = std::make_unique<filters::TrajectoryTmEkf>();
+    auto ekf = std::make_unique<filters::TrajectoryTmEkf<>>();
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(3, 3);
@@ -164,12 +164,12 @@ std::unique_ptr<filters::TrajectoryTmEkf> make_trajectory_tm_ekf(
 }
 
 // Create TemplatePose birth model — one component per template, centered in scene
-std::unique_ptr<models::Mixture<models::TemplatePose>> make_tm_birth(
+std::unique_ptr<models::Mixture<models::TemplatePose<>>> make_tm_birth(
     std::shared_ptr<template_matching::PointCloud> templ_rect,
     std::shared_ptr<template_matching::PointCloud> templ_tri,
     double weight = 0.05)
 {
-    auto birth = std::make_unique<models::Mixture<models::TemplatePose>>();
+    auto birth = std::make_unique<models::Mixture<models::TemplatePose<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(5, 5);
     birth_cov(0, 0) = 2500.0;  // high location covariance — centered in middle
     birth_cov(1, 1) = 2500.0;
@@ -183,20 +183,20 @@ std::unique_ptr<models::Mixture<models::TemplatePose>> make_tm_birth(
     Eigen::VectorXd b0(4);
     b0 << 25.0, 15.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TemplatePose>(b0, birth_cov, R_empty, templ_rect, pos_indices), weight);
+        std::make_unique<models::TemplatePose<>>(b0, birth_cov, R_empty, templ_rect, pos_indices), weight);
     birth->add_component(
-        std::make_unique<models::TemplatePose>(b0, birth_cov, R_empty, templ_tri, pos_indices), weight);
+        std::make_unique<models::TemplatePose<>>(b0, birth_cov, R_empty, templ_tri, pos_indices), weight);
     return birth;
 }
 
-// Create Trajectory<TemplatePose> birth model — one component per template, centered in scene
-std::unique_ptr<models::Mixture<models::Trajectory<models::TemplatePose>>>
+// Create Trajectory<TemplatePose<>> birth model — one component per template, centered in scene
+std::unique_ptr<models::Mixture<models::Trajectory<models::TemplatePose<>>>>
 make_trajectory_tm_birth(
     std::shared_ptr<template_matching::PointCloud> templ_rect,
     std::shared_ptr<template_matching::PointCloud> templ_tri,
     double weight = 0.05)
 {
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose>>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose<>>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(5, 5);
     birth_cov(0, 0) = 2500.0;  // high location covariance — centered in middle
     birth_cov(1, 1) = 2500.0;
@@ -209,17 +209,17 @@ make_trajectory_tm_birth(
     Eigen::VectorXd b0(4);
     b0 << 25.0, 15.0, 0.0, 0.0;
 
-    auto tp1 = models::TemplatePose(b0, birth_cov, R_empty, templ_rect, pos_indices);
-    auto tp2 = models::TemplatePose(b0, birth_cov, R_empty, templ_tri, pos_indices);
+    auto tp1 = models::TemplatePose<>(b0, birth_cov, R_empty, templ_rect, pos_indices);
+    auto tp2 = models::TemplatePose<>(b0, birth_cov, R_empty, templ_tri, pos_indices);
 
     // Build Trajectory manually: stacked state = translational mean, stacked cov = translational cov
-    auto traj1 = std::make_unique<models::Trajectory<models::TemplatePose>>();
+    auto traj1 = std::make_unique<models::Trajectory<models::TemplatePose<>>>();
     traj1->state_dim = tp1.trans_dim();
     traj1->mean() = tp1.mean();
     traj1->covariance() = tp1.covariance().topLeftCorner(tp1.trans_dim(), tp1.trans_dim());
     traj1->history().push_back(std::move(tp1));
 
-    auto traj2 = std::make_unique<models::Trajectory<models::TemplatePose>>();
+    auto traj2 = std::make_unique<models::Trajectory<models::TemplatePose<>>>();
     traj2->state_dim = tp2.trans_dim();
     traj2->mean() = tp2.mean();
     traj2->covariance() = tp2.covariance().topLeftCorner(tp2.trans_dim(), tp2.trans_dim());
@@ -282,7 +282,7 @@ struct TmScenario {
     std::shared_ptr<template_matching::PointCloud> templ_rect;  // rectangle
     std::shared_ptr<template_matching::PointCloud> templ_tri;     // L-shape
     std::vector<std::shared_ptr<template_matching::PointCloud>> target_templates;  // per-target
-    std::shared_ptr<dynamics::SingleIntegrator> dyn;
+    std::shared_ptr<dynamics::SingleIntegrator<>> dyn;
     std::shared_ptr<template_matching::PointToPointIcp> icp;
     std::vector<TmTruthTarget> truth_targets;
     std::vector<Eigen::MatrixXd> measurements;
@@ -292,7 +292,7 @@ struct TmScenario {
             measurement_sampling::sample_rectangle(3.0, 1.5, 20).points());
         templ_tri = std::make_shared<template_matching::PointCloud>(
             measurement_sampling::sample_triangle(3.0, 2.5, 20).points());
-        dyn = std::make_shared<dynamics::SingleIntegrator>(2);
+        dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
 
         icp = std::make_shared<template_matching::PointToPointIcp>();
         template_matching::IcpParams icp_params;
@@ -361,10 +361,10 @@ TEST(TmPhd, Tracking2D) {
     auto tm_ekf = make_tm_ekf(sc.dyn, sc.icp);
     auto birth = make_tm_birth(sc.templ_rect, sc.templ_tri);
 
-    multi_target::PHD<models::TemplatePose> phd;
+    multi_target::PHD<models::TemplatePose<>> phd;
     phd.set_filter(std::move(tm_ekf));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose>>());
+    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose<>>>());
     phd.set_prob_detection(sc.p_detect);
     phd.set_prob_survive(0.99);
     phd.set_clutter_rate(1.0);
@@ -615,11 +615,11 @@ TEST(TmPhd, TrajectoryTracking2D) {
     auto tm_ekf = make_trajectory_tm_ekf(sc.dyn, sc.icp, 10);
     auto birth = make_trajectory_tm_birth(sc.templ_rect, sc.templ_tri);
 
-    multi_target::PHD<models::Trajectory<models::TemplatePose>> phd;
+    multi_target::PHD<models::Trajectory<models::TemplatePose<>>> phd;
     phd.set_filter(std::move(tm_ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(
-        std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose>>>());
+        std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose<>>>>());
     phd.set_prob_detection(sc.p_detect);
     phd.set_prob_survive(0.99);
     phd.set_clutter_rate(1.0);
@@ -670,7 +670,7 @@ TEST(TmPhd, TrajectoryTracking2D) {
                 double best_pos = std::numeric_limits<double>::infinity();
                 double best_rot = std::numeric_limits<double>::infinity();
                 for (std::size_t i = 0; i < latest.size(); ++i) {
-                    // For Trajectory<TemplatePose>, current() gives the latest TemplatePose
+                    // For Trajectory<TemplatePose<>>, current() gives the latest TemplatePose
                     const auto& tp = latest.component(i).current();
                     double pe = (tp.mean().head(2) - truth_pos).norm();
                     if (pe < best_pos) {
@@ -920,7 +920,7 @@ TmTruthTarget3D make_tm_target_3d(
     const Eigen::Matrix3d& R0,
     const Eigen::Vector3d& angular_vel,  // axis-angle rate per dt
     int birth, int death, double dt,
-    dynamics::DynamicsBase& dyn)
+    dynamics::DynamicsBase<>& dyn)
 {
     TmTruthTarget3D t;
     t.birth_time = birth;
@@ -1146,7 +1146,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     auto [templ_B, centroid_B] = load_template("A.stl", 5000);
 
     // --- Dynamics ---
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(3);
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(3);
 
     // --- ICP ---
     template_matching::IcpParams icp_params;
@@ -1158,7 +1158,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
 
-    auto ekf = std::make_unique<filters::TmEkf>();
+    auto ekf = std::make_unique<filters::TmEkf<>>();
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(0.50 * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
@@ -1199,7 +1199,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     }
 
     // --- Birth model ---
-    auto birth = std::make_unique<models::Mixture<models::TemplatePose>>();
+    auto birth = std::make_unique<models::Mixture<models::TemplatePose<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
     birth_cov.topLeftCorner(3, 3) = 1500.0 * Eigen::Matrix3d::Identity();
     birth_cov.block(3, 3, 3, 3) = 500.0 * Eigen::Matrix3d::Identity();
@@ -1210,13 +1210,13 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     Eigen::VectorXd b_mean(6);
     b_mean << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TemplatePose>(b_mean, birth_cov, R_birth, templ_B, pos_indices), 0.01);
+        std::make_unique<models::TemplatePose<>>(b_mean, birth_cov, R_birth, templ_B, pos_indices), 0.01);
 
     // --- PHD filter --- 
-    multi_target::PHD<models::TemplatePose> phd;
+    multi_target::PHD<models::TemplatePose<>> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose>>());
+    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose<>>>());
     phd.set_prob_detection(1.0);
     phd.set_prob_survive(0.99);
     phd.set_clutter_rate(1.0);
@@ -1452,7 +1452,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
               << "] Z[" << templ_B->points().row(2).minCoeff() << ", " << templ_B->points().row(2).maxCoeff() << "]\n";
 
     // --- Dynamics ---
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(3);
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(3);
 
     // --- ICP (shared params, per-template PCA) ---
     template_matching::IcpParams icp_params;
@@ -1465,7 +1465,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
     inner_icp->set_params(icp_params);
 
     // PCA wrapping is automatic per template — just set the inner ICP
-    auto ekf = std::make_unique<filters::TmEkf>();
+    auto ekf = std::make_unique<filters::TmEkf<>>();
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
@@ -1529,7 +1529,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
     }
 
     // --- Birth model: one component per template ---
-    auto birth = std::make_unique<models::Mixture<models::TemplatePose>>();
+    auto birth = std::make_unique<models::Mixture<models::TemplatePose<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
     birth_cov.topLeftCorner(3, 3) = 1500.0 * Eigen::Matrix3d::Identity();
     birth_cov.block(3, 3, 3, 3) = 500.0 * Eigen::Matrix3d::Identity();
@@ -1542,15 +1542,15 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
     b_mean << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     double w_b = 0.001;
     birth->add_component(
-        std::make_unique<models::TemplatePose>(b_mean, birth_cov, R_birth, templ_A, pos_indices), w_b);
+        std::make_unique<models::TemplatePose<>>(b_mean, birth_cov, R_birth, templ_A, pos_indices), w_b);
     birth->add_component(
-        std::make_unique<models::TemplatePose>(b_mean, birth_cov, R_birth, templ_B, pos_indices), w_b);
+        std::make_unique<models::TemplatePose<>>(b_mean, birth_cov, R_birth, templ_B, pos_indices), w_b);
 
     // --- PHD filter ---
-    multi_target::PHD<models::TemplatePose> phd;
+    multi_target::PHD<models::TemplatePose<>> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose>>());
+    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose<>>>());
     phd.set_prob_detection(p_detect);
     phd.set_prob_survive(0.99);
     phd.set_clutter_rate(1.0);
@@ -1733,7 +1733,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
 
         const int n_tri_B = static_cast<int>(tri_B.cols()) / 3;
 
-        auto get_tri_data = [&](const models::TemplatePose& est)
+        auto get_tri_data = [&](const models::TemplatePose<>& est)
             -> std::pair<const Eigen::MatrixXd*, int> {
             if (&est.get_template() == templ_A.get())
                 return {&tri_A, n_tri_A};
@@ -1873,7 +1873,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     auto& templ_B = td_B.templ; auto& centroid_B = td_B.centroid;
 
     // --- Dynamics ---
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(3);
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(3);
 
     // --- ICP ---
     template_matching::IcpParams icp_params;
@@ -1886,7 +1886,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     inner_icp->set_params(icp_params);
 
     // --- Trajectory TM-EKF ---
-    auto ekf = std::make_unique<filters::TrajectoryTmEkf>();
+    auto ekf = std::make_unique<filters::TrajectoryTmEkf<>>();
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
@@ -1949,7 +1949,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     }
 
     // --- Birth model ---
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose>>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose<>>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
     birth_cov.topLeftCorner(3, 3) = 1500.0 * Eigen::Matrix3d::Identity();
     birth_cov.block(3, 3, 3, 3) = 500.0 * Eigen::Matrix3d::Identity();
@@ -1962,8 +1962,8 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     b_mean << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
 
     auto make_traj_birth = [&](std::shared_ptr<template_matching::PointCloud> templ) {
-        auto tp = models::TemplatePose(b_mean, birth_cov, R_birth, templ, pos_indices);
-        auto traj = std::make_unique<models::Trajectory<models::TemplatePose>>();
+        auto tp = models::TemplatePose<>(b_mean, birth_cov, R_birth, templ, pos_indices);
+        auto traj = std::make_unique<models::Trajectory<models::TemplatePose<>>>();
         traj->state_dim = sd;
         traj->mean() = tp.mean();
         traj->covariance() = tp.covariance().topLeftCorner(sd, sd);
@@ -1977,11 +1977,11 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     birth->add_component(make_traj_birth(templ_B), w_b);
 
     // --- PHD filter ---
-    multi_target::PHD<models::Trajectory<models::TemplatePose>> phd;
+    multi_target::PHD<models::Trajectory<models::TemplatePose<>>> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(
-        std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose>>>());
+        std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose<>>>>());
     phd.set_prob_detection(p_detect);
     phd.set_prob_survive(0.99);
     phd.set_clutter_rate(1.0);
@@ -2093,7 +2093,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
 
         const int n_tri_B = static_cast<int>(tri_B.cols()) / 3;
 
-        auto get_tri_data = [&](const models::TemplatePose& est)
+        auto get_tri_data = [&](const models::TemplatePose<>& est)
             -> std::pair<const Eigen::MatrixXd*, int> {
             if (&est.get_template() == templ_A.get())
                 return {&tri_A, n_tri_A};

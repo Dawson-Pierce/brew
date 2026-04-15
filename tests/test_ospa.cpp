@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/metrics/ospa.hpp"
+#include "brew/advanced/metrics/ospa.hpp"
 
 using namespace brew::metrics;
 

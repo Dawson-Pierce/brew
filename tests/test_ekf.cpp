@@ -1,14 +1,14 @@
 #include <gtest/gtest.h>
-#include "brew/filters/ekf.hpp"
-#include "brew/dynamics/single_integrator.hpp"
+#include "brew/core/filters/ekf.hpp"
+#include "brew/core/dynamics/single_integrator.hpp"
 
 using namespace brew::filters;
 using namespace brew::models;
 using namespace brew::dynamics;
 
-TEST(EKF, PredictStep) {
-    auto dyn = std::make_shared<SingleIntegrator>(2);
-    EKF ekf;
+TEST(EKFTest, PredictStep) {
+    auto dyn = std::make_shared<SingleIntegrator<>>(2);
+    EKF<> ekf;
     ekf.set_dynamics(dyn);
 
     Eigen::MatrixXd Q = Eigen::MatrixXd::Identity(2, 2) * 0.01;
@@ -29,9 +29,9 @@ TEST(EKF, PredictStep) {
     EXPECT_GT(predicted.covariance()(0, 0), cov(0, 0));
 }
 
-TEST(EKF, CorrectStep) {
-    auto dyn = std::make_shared<SingleIntegrator>(2);
-    EKF ekf;
+TEST(EKFTest, CorrectStep) {
+    auto dyn = std::make_shared<SingleIntegrator<>>(2);
+    EKF<> ekf;
     ekf.set_dynamics(dyn);
 
     // Position-only measurement: H = [I2 02]

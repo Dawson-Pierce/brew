@@ -1,12 +1,12 @@
 #include <gtest/gtest.h>
-#include "brew/dynamics/single_integrator.hpp"
-#include "brew/dynamics/double_integrator.hpp"
-#include "brew/dynamics/constant_turn_2d.hpp"
+#include "brew/core/dynamics/single_integrator.hpp"
+#include "brew/core/dynamics/double_integrator.hpp"
+#include "brew/core/dynamics/constant_turn_2d.hpp"
 
 using namespace brew::dynamics;
 
 TEST(SingleIntegrator2D, StateMatrix) {
-    SingleIntegrator dyn(2);
+    SingleIntegrator<> dyn(2);
     double dt = 0.1;
     auto F = dyn.get_state_mat(dt);
 
@@ -17,7 +17,7 @@ TEST(SingleIntegrator2D, StateMatrix) {
 }
 
 TEST(SingleIntegrator2D, Propagation) {
-    SingleIntegrator dyn(2);
+    SingleIntegrator<> dyn(2);
     Eigen::VectorXd state(4);
     state << 0, 0, 1, 1; // at origin, moving diagonally
 
@@ -29,7 +29,7 @@ TEST(SingleIntegrator2D, Propagation) {
 }
 
 TEST(SingleIntegrator1D, Propagation) {
-    SingleIntegrator dyn(1);
+    SingleIntegrator<> dyn(1);
     Eigen::VectorXd state(2);
     state << 5.0, 2.0;
 
@@ -39,15 +39,15 @@ TEST(SingleIntegrator1D, Propagation) {
 }
 
 TEST(DoubleIntegrator2D, StateNames) {
-    DoubleIntegrator dyn(2);
+    DoubleIntegrator<> dyn(2);
     auto names = dyn.state_names();
     EXPECT_EQ(names.size(), 6u);
     EXPECT_EQ(names[0], "x");
     EXPECT_EQ(names[4], "ax");
 }
 
-TEST(ConstantTurn2D, StraightLine) {
-    ConstantTurn2D dyn;
+TEST(ConstantTurn2DTest, StraightLine) {
+    ConstantTurn2D<> dyn;
     Eigen::VectorXd state(5);
     state << 0, 0, 10, 0, 0; // v=10, theta=0, omega=0
 

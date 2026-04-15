@@ -1,26 +1,26 @@
 #pragma once
 
-#include "brew/dynamics/single_integrator.hpp"
-#include "brew/models/mixture.hpp"
-#include "brew/models/gaussian.hpp"
-#include "brew/models/ggiw.hpp"
-#include "brew/models/trajectory.hpp"
-#include "brew/models/ggiw_orientation.hpp"
-#include "brew/filters/ekf.hpp"
-#include "brew/filters/ggiw_ekf.hpp"
-#include "brew/filters/ggiw_orientation_ekf.hpp"
-#include "brew/filters/trajectory_gaussian_ekf.hpp"
-#include "brew/filters/trajectory_ggiw_ekf.hpp"
-#include "brew/filters/trajectory_ggiw_orientation_ekf.hpp"
-#include "brew/multi_target/phd.hpp"
-#include "brew/multi_target/cphd.hpp"
-#include "brew/multi_target/mbm.hpp"
-#include "brew/multi_target/pmbm.hpp"
-#include "brew/multi_target/mb.hpp"
-#include "brew/multi_target/lmb.hpp"
-#include "brew/multi_target/glmb.hpp"
-#include "brew/multi_target/jglmb.hpp"
-#include "brew/clustering/dbscan.hpp"
+#include "brew/core/dynamics/single_integrator.hpp"
+#include "brew/core/models/mixture.hpp"
+#include "brew/core/models/gaussian.hpp"
+#include "brew/core/models/ggiw.hpp"
+#include "brew/core/models/trajectory.hpp"
+#include "brew/core/models/ggiw_orientation.hpp"
+#include "brew/core/filters/ekf.hpp"
+#include "brew/core/filters/ggiw_ekf.hpp"
+#include "brew/core/filters/ggiw_orientation_ekf.hpp"
+#include "brew/core/filters/trajectory_gaussian_ekf.hpp"
+#include "brew/core/filters/trajectory_ggiw_ekf.hpp"
+#include "brew/core/filters/trajectory_ggiw_orientation_ekf.hpp"
+#include "brew/advanced/multi_target/phd.hpp"
+#include "brew/advanced/multi_target/cphd.hpp"
+#include "brew/advanced/multi_target/mbm.hpp"
+#include "brew/advanced/multi_target/pmbm.hpp"
+#include "brew/advanced/multi_target/mb.hpp"
+#include "brew/advanced/multi_target/lmb.hpp"
+#include "brew/advanced/multi_target/glmb.hpp"
+#include "brew/advanced/multi_target/jglmb.hpp"
+#include "brew/advanced/clustering/dbscan.hpp"
 #include <Eigen/Dense>
 #include <random>
 #include <vector>
@@ -33,14 +33,14 @@
 
 #ifdef BREW_ENABLE_PLOTTING
 #include <matplot/matplot.h>
-#include <brew/plot_utils/plot_options.hpp>
-#include <brew/plot_utils/color_palette.hpp>
-#include <brew/plot_utils/plot_gaussian.hpp>
-#include <brew/plot_utils/plot_ggiw.hpp>
-#include <brew/plot_utils/plot_trajectory_gaussian.hpp>
-#include <brew/plot_utils/plot_trajectory_ggiw.hpp>
-#include <brew/plot_utils/plot_ggiw_orientation.hpp>
-#include <brew/plot_utils/plot_trajectory_ggiw_orientation.hpp>
+#include <brew/desktop/plot_utils/plot_options.hpp>
+#include <brew/desktop/plot_utils/color_palette.hpp>
+#include <brew/desktop/plot_utils/plot_gaussian.hpp>
+#include <brew/desktop/plot_utils/plot_ggiw.hpp>
+#include <brew/desktop/plot_utils/plot_trajectory_gaussian.hpp>
+#include <brew/desktop/plot_utils/plot_trajectory_ggiw.hpp>
+#include <brew/desktop/plot_utils/plot_ggiw_orientation.hpp>
+#include <brew/desktop/plot_utils/plot_trajectory_ggiw_orientation.hpp>
 #include <filesystem>
 #include <map>
 #endif
@@ -58,7 +58,7 @@ struct TruthTarget {
 inline TruthTarget make_linear_target(
     const Eigen::VectorXd& initial_state,
     int birth_time, int death_time, double dt,
-    dynamics::DynamicsBase& dyn)
+    dynamics::DynamicsBase<>& dyn)
 {
     TruthTarget t;
     t.birth_time = birth_time;
@@ -213,7 +213,7 @@ inline ScenarioData make_two_point_targets_scenario() {
     s.meas_std = 0.3;
     s.p_detect = 0.98;
 
-    auto dyn = dynamics::SingleIntegrator(2);
+    auto dyn = dynamics::SingleIntegrator<>(2);
 
     Eigen::VectorXd x0_a(4), x0_b(4);
     x0_a << 0.0, 0.0, 2.0, 1.0;
@@ -241,7 +241,7 @@ inline ScenarioData make_extended_target_scenario() {
     s.is_extended = true;
     s.extent << 4.0, 1.0, 1.0, 2.0;
 
-    auto dyn = dynamics::SingleIntegrator(2);
+    auto dyn = dynamics::SingleIntegrator<>(2);
 
     Eigen::VectorXd x0(4);
     x0 << 0.0, 0.0, 2.0, 0.5;
@@ -272,7 +272,7 @@ inline ScenarioData make_clutter_scenario() {
     s.surveillance_area = (s.clutter_max.x() - s.clutter_min.x()) *
                           (s.clutter_max.y() - s.clutter_min.y());
 
-    auto dyn = dynamics::SingleIntegrator(2);
+    auto dyn = dynamics::SingleIntegrator<>(2);
 
     Eigen::VectorXd x0_a(4), x0_b(4);
     x0_a << -15.0, -10.0, 2.0, 1.2;
@@ -299,7 +299,7 @@ inline ScenarioData make_variable_targets_scenario() {
     s.meas_std = 0.3;
     s.p_detect = 0.98;
 
-    auto dyn = dynamics::SingleIntegrator(2);
+    auto dyn = dynamics::SingleIntegrator<>(2);
 
     // Target A: born at k=0, dies at k=24
     Eigen::VectorXd x0_a(4);
@@ -335,7 +335,7 @@ inline ScenarioData make_base_scenario() {
     s.meas_std = 0.3;
     s.p_detect = 0.98;
 
-    auto dyn = dynamics::SingleIntegrator(2);
+    auto dyn = dynamics::SingleIntegrator<>(2);
 
     Eigen::VectorXd x0_a(4), x0_b(4);
     x0_a << 0.0, 0.0, 2.0, 0.5;
@@ -512,9 +512,9 @@ inline ScenarioParams make_default_params(const ScenarioData& s) {
 
 // ---- EKF factory functions ----
 
-inline std::unique_ptr<filters::EKF> make_ekf(const ScenarioData& scenario) {
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
-    auto ekf = std::make_unique<filters::EKF>();
+inline std::unique_ptr<filters::EKF<>> make_ekf(const ScenarioData& scenario) {
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    auto ekf = std::make_unique<filters::EKF<>>();
     ekf->set_dynamics(dyn);
 
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
@@ -528,9 +528,9 @@ inline std::unique_ptr<filters::EKF> make_ekf(const ScenarioData& scenario) {
     return ekf;
 }
 
-inline std::unique_ptr<filters::GGIWEKF> make_ggiw_ekf(const ScenarioData& scenario) {
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
-    auto ekf = std::make_unique<filters::GGIWEKF>();
+inline std::unique_ptr<filters::GGIWEKF<>> make_ggiw_ekf(const ScenarioData& scenario) {
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    auto ekf = std::make_unique<filters::GGIWEKF<>>();
     ekf->set_dynamics(dyn);
 
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
@@ -546,9 +546,9 @@ inline std::unique_ptr<filters::GGIWEKF> make_ggiw_ekf(const ScenarioData& scena
     return ekf;
 }
 
-inline std::unique_ptr<filters::GGIWOrientationEKF> make_ggiw_orientation_ekf(const ScenarioData& scenario) {
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
-    auto ekf = std::make_unique<filters::GGIWOrientationEKF>();
+inline std::unique_ptr<filters::GGIWOrientationEKF<>> make_ggiw_orientation_ekf(const ScenarioData& scenario) {
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    auto ekf = std::make_unique<filters::GGIWOrientationEKF<>>();
     ekf->set_dynamics(dyn);
 
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
@@ -564,11 +564,11 @@ inline std::unique_ptr<filters::GGIWOrientationEKF> make_ggiw_orientation_ekf(co
     return ekf;
 }
 
-inline std::unique_ptr<filters::TrajectoryGaussianEKF> make_trajectory_gaussian_ekf(
+inline std::unique_ptr<filters::TrajectoryGaussianEKF<>> make_trajectory_gaussian_ekf(
     const ScenarioData& scenario, int window = 10)
 {
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
-    auto ekf = std::make_unique<filters::TrajectoryGaussianEKF>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    auto ekf = std::make_unique<filters::TrajectoryGaussianEKF<>>();
     ekf->set_dynamics(dyn);
     ekf->set_window_size(window);
 
@@ -582,11 +582,11 @@ inline std::unique_ptr<filters::TrajectoryGaussianEKF> make_trajectory_gaussian_
     return ekf;
 }
 
-inline std::unique_ptr<filters::TrajectoryGGIWEKF> make_trajectory_ggiw_ekf(
+inline std::unique_ptr<filters::TrajectoryGGIWEKF<>> make_trajectory_ggiw_ekf(
     const ScenarioData& scenario, int window = 10)
 {
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
-    auto ekf = std::make_unique<filters::TrajectoryGGIWEKF>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    auto ekf = std::make_unique<filters::TrajectoryGGIWEKF<>>();
     ekf->set_dynamics(dyn);
     ekf->set_window_size(window);
     ekf->set_temporal_decay(1.0);
@@ -605,10 +605,10 @@ inline std::unique_ptr<filters::TrajectoryGGIWEKF> make_trajectory_ggiw_ekf(
 
 // ---- Birth model factory functions ----
 
-inline std::unique_ptr<models::Mixture<models::Gaussian>>
+inline std::unique_ptr<models::Mixture<models::Gaussian<>>>
 make_gm_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Gaussian>>();
+    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
@@ -617,17 +617,17 @@ make_gm_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Gaussian>(b1, birth_cov), weight);
+        std::make_unique<models::Gaussian<>>(b1, birth_cov), weight);
     birth->add_component(
-        std::make_unique<models::Gaussian>(b2, birth_cov), weight);
+        std::make_unique<models::Gaussian<>>(b2, birth_cov), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::GGIW>>
+inline std::unique_ptr<models::Mixture<models::GGIW<>>>
 make_ggiw_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::GGIW>>();
+    auto birth = std::make_unique<models::Mixture<models::GGIW<>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -635,17 +635,17 @@ make_ggiw_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::GGIW>(10.0, 1.0, b1, b_cov, 10.0, b_V), weight);
+        std::make_unique<models::GGIW<>>(10.0, 1.0, b1, b_cov, 10.0, b_V), weight);
     birth->add_component(
-        std::make_unique<models::GGIW>(10.0, 1.0, b2, b_cov, 10.0, b_V), weight);
+        std::make_unique<models::GGIW<>>(10.0, 1.0, b2, b_cov, 10.0, b_V), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::GGIWOrientation>>
+inline std::unique_ptr<models::Mixture<models::GGIWOrientation<>>>
 make_ggiw_orientation_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::GGIWOrientation>>();
+    auto birth = std::make_unique<models::Mixture<models::GGIWOrientation<>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -653,17 +653,17 @@ make_ggiw_orientation_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::GGIWOrientation>(10.0, 1.0, b1, b_cov, 10.0, b_V), weight);
+        std::make_unique<models::GGIWOrientation<>>(10.0, 1.0, b1, b_cov, 10.0, b_V), weight);
     birth->add_component(
-        std::make_unique<models::GGIWOrientation>(10.0, 1.0, b2, b_cov, 10.0, b_V), weight);
+        std::make_unique<models::GGIWOrientation<>>(10.0, 1.0, b2, b_cov, 10.0, b_V), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::Trajectory<models::Gaussian>>>
+inline std::unique_ptr<models::Mixture<models::Trajectory<models::Gaussian<>>>>
 make_trajectory_gaussian_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::Gaussian>>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::Gaussian<>>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
@@ -672,17 +672,17 @@ make_trajectory_gaussian_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Trajectory<models::Gaussian>>(4, models::Gaussian(b1, birth_cov)), weight);
+        std::make_unique<models::Trajectory<models::Gaussian<>>>(4, models::Gaussian<>(b1, birth_cov)), weight);
     birth->add_component(
-        std::make_unique<models::Trajectory<models::Gaussian>>(4, models::Gaussian(b2, birth_cov)), weight);
+        std::make_unique<models::Trajectory<models::Gaussian<>>>(4, models::Gaussian<>(b2, birth_cov)), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIW>>>
+inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIW<>>>>
 make_trajectory_ggiw_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIW>>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIW<>>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -690,20 +690,20 @@ make_trajectory_ggiw_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIW>>(
-            4, models::GGIW(10.0, 1.0, b1, b_cov, 10.0, b_V)), weight);
+        std::make_unique<models::Trajectory<models::GGIW<>>>(
+            4, models::GGIW<>(10.0, 1.0, b1, b_cov, 10.0, b_V)), weight);
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIW>>(
-            4, models::GGIW(10.0, 1.0, b2, b_cov, 10.0, b_V)), weight);
+        std::make_unique<models::Trajectory<models::GGIW<>>>(
+            4, models::GGIW<>(10.0, 1.0, b2, b_cov, 10.0, b_V)), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF> make_trajectory_ggiw_orientation_ekf(
+inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF<>> make_trajectory_ggiw_orientation_ekf(
     const ScenarioData& scenario, int window = 10)
 {
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
-    auto ekf = std::make_unique<filters::TrajectoryGGIWOrientationEKF>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    auto ekf = std::make_unique<filters::TrajectoryGGIWOrientationEKF<>>();
     ekf->set_dynamics(dyn);
     ekf->set_window_size(window);
     ekf->set_temporal_decay(1.0);
@@ -720,10 +720,10 @@ inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF> make_trajectory_gg
     return ekf;
 }
 
-inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIWOrientation>>>
+inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIWOrientation<>>>>
 make_trajectory_ggiw_orientation_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIWOrientation>>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIWOrientation<>>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -731,11 +731,11 @@ make_trajectory_ggiw_orientation_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIWOrientation>>(
-            4, models::GGIWOrientation(10.0, 1.0, b1, b_cov, 10.0, b_V)), weight);
+        std::make_unique<models::Trajectory<models::GGIWOrientation<>>>(
+            4, models::GGIWOrientation<>(10.0, 1.0, b1, b_cov, 10.0, b_V)), weight);
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIWOrientation>>(
-            4, models::GGIWOrientation(10.0, 1.0, b2, b_cov, 10.0, b_V)), weight);
+        std::make_unique<models::Trajectory<models::GGIWOrientation<>>>(
+            4, models::GGIWOrientation<>(10.0, 1.0, b2, b_cov, 10.0, b_V)), weight);
 
     return birth;
 }

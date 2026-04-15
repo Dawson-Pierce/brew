@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "brew/filters/ggiw_ekf.hpp"
-#include "brew/dynamics/single_integrator.hpp"
+#include "brew/core/filters/ggiw_ekf.hpp"
+#include "brew/core/dynamics/single_integrator.hpp"
 
 using namespace brew;
 
@@ -8,7 +8,7 @@ class GGIWEKFTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // 4-state 2D integrator: [x, y, vx, vy]
-        auto dyn = std::make_shared<dynamics::SingleIntegrator>(2);
+        auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
         filter.set_dynamics(dyn);
 
         // Position-only measurement H = [I2 0]
@@ -22,7 +22,7 @@ protected:
         filter.set_measurement_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
     }
 
-    filters::GGIWEKF filter;
+    filters::GGIWEKF<> filter;
 };
 
 TEST_F(GGIWEKFTest, PredictDecay) {
@@ -31,7 +31,7 @@ TEST_F(GGIWEKFTest, PredictDecay) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIW ggiw(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
     filter.set_temporal_decay(1.0);
     filter.set_forgetting_factor(1.0);
 
@@ -55,7 +55,7 @@ TEST_F(GGIWEKFTest, CorrectAndLikelihood) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 50.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIW ggiw(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     // Single measurement at (0.1, 0.1)
     Eigen::VectorXd meas(2);
@@ -87,7 +87,7 @@ TEST_F(GGIWEKFTest, Gate) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIW ggiw(mean, cov, 10.0, 5.0, 10.0, V);
+    models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     // Close measurement should have small gate value
     Eigen::VectorXd meas_close(2);

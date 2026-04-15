@@ -7,18 +7,18 @@
 // can be re-run without recompiling.
 // ============================================================
 
-#include "brew/dynamics/single_integrator.hpp"
-#include "brew/models/template_pose.hpp"
-#include "brew/models/mixture.hpp"
-#include "brew/filters/tm_ekf.hpp"
-#include "brew/multi_target/phd.hpp"
-#include "brew/fusion/prune.hpp"
-#include "brew/fusion/merge.hpp"
-#include "brew/clustering/dbscan.hpp"
-#include "brew/template_matching/point_cloud.hpp"
-#include "brew/template_matching/point_to_plane_icp.hpp"
-#include "brew/template_matching/pca_icp.hpp"
-#include "brew/measurement_sampling/measurement_sampling.hpp"
+#include "brew/core/dynamics/single_integrator.hpp"
+#include "brew/core/models/template_pose.hpp"
+#include "brew/core/models/mixture.hpp"
+#include "brew/core/filters/tm_ekf.hpp"
+#include "brew/advanced/multi_target/phd.hpp"
+#include "brew/core/fusion/prune.hpp"
+#include "brew/core/fusion/merge.hpp"
+#include "brew/advanced/clustering/dbscan.hpp"
+#include "brew/core/template_matching/point_cloud.hpp"
+#include "brew/core/template_matching/point_to_plane_icp.hpp"
+#include "brew/core/template_matching/pca_icp.hpp"
+#include "brew/desktop/measurement_sampling/measurement_sampling.hpp"
 
 #include <yaml-cpp/yaml.h>
 #include <Eigen/Dense>
@@ -33,9 +33,9 @@
 
 #ifdef BREW_ENABLE_PLOTTING
 #include <matplot/matplot.h>
-#include <brew/plot_utils/plot_options.hpp>
-#include <brew/plot_utils/color_palette.hpp>
-#include <brew/plot_utils/plot_point_cloud.hpp>
+#include <brew/desktop/plot_utils/plot_options.hpp>
+#include <brew/desktop/plot_utils/color_palette.hpp>
+#include <brew/desktop/plot_utils/plot_point_cloud.hpp>
 #endif
 
 using namespace brew;
@@ -133,7 +133,7 @@ struct TruthTarget3D {
 static TruthTarget3D make_truth_target(
     const Eigen::VectorXd& x0, const Eigen::Matrix3d& R0,
     const Eigen::Vector3d& omega, int birth, int death, double dt,
-    int template_index, dynamics::DynamicsBase& dyn)
+    int template_index, dynamics::DynamicsBase<>& dyn)
 {
     TruthTarget3D tgt;
     tgt.birth_time = birth;
@@ -350,7 +350,7 @@ int main(int argc, char* argv[]) {
     }
 
     // --- Dynamics ------------------------------------------------------------
-    auto dyn = std::make_shared<dynamics::SingleIntegrator>(3);
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(3);
 
     // --- ICP -----------------------------------------------------------------
     template_matching::IcpParams icp_params;
@@ -362,7 +362,7 @@ int main(int argc, char* argv[]) {
     inner_icp->set_params(icp_params);
 
     // --- TM-EKF --------------------------------------------------------------
-    auto ekf = std::make_unique<filters::TmEkf>();
+    auto ekf = std::make_unique<filters::TmEkf<>>();
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(
         filt_cfg["process_noise"].as<double>() * Eigen::MatrixXd::Identity(3, 3));
@@ -412,7 +412,7 @@ int main(int argc, char* argv[]) {
     }
 
     // --- Birth model ---------------------------------------------------------
-    auto birth = std::make_unique<models::Mixture<models::TemplatePose>>();
+    auto birth = std::make_unique<models::Mixture<models::TemplatePose<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
     birth_cov.topLeftCorner(3, 3)     = birth_cfg["cov_position"].as<double>()
                                         * Eigen::Matrix3d::Identity();
@@ -427,16 +427,16 @@ int main(int argc, char* argv[]) {
 
     for (auto& td : templates) {
         birth->add_component(
-            std::make_unique<models::TemplatePose>(
+            std::make_unique<models::TemplatePose<>>(
                 b_mean, birth_cov, R_birth, td.templ, pos_indices),
             w_b);
     }
 
     // --- PHD filter ----------------------------------------------------------
-    multi_target::PHD<models::TemplatePose> phd;
+    multi_target::PHD<models::TemplatePose<>> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose>>());
+    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose<>>>());
     phd.set_prob_detection(phd_cfg["prob_detection"].as<double>());
     phd.set_prob_survive(phd_cfg["prob_survive"].as<double>());
     phd.set_clutter_rate(phd_cfg["clutter_rate"].as<double>());
