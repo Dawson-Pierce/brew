@@ -38,6 +38,13 @@ if(BREW_TARGET STREQUAL "hardware")
     set(BREW_ENABLE_PLOTTING OFF CACHE BOOL "" FORCE)
     set(BREW_BUILD_EXAMPLES  OFF CACHE BOOL "" FORCE)
     set(BREW_BUILD_TESTS     OFF CACHE BOOL "" FORCE)
+    # Precondition checks use BREW_ASSERT instead of throw, so disable
+    # exception machinery for smaller binaries and predictable control flow.
+    if(MSVC)
+        add_compile_definitions(_HAS_EXCEPTIONS=0)
+    else()
+        add_compile_options(-fno-exceptions)
+    endif()
 endif()
 
 option(BREW_ENABLE_PLOTTING "Enable plotting utilities (matplot++, desktop only)" ON)

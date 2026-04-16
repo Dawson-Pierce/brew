@@ -1,7 +1,7 @@
 #pragma once
 
 #include "brew/core/dynamics/nonlinear_dynamics.hpp"
-#include <stdexcept>
+#include "brew/core/assert.hpp"
 #include <cmath>
 
 namespace brew::dynamics {
@@ -38,12 +38,11 @@ public:
     }
 
     explicit BodyFrameSingleIntegrator(int dims) : dims_(dims) {
-        if (dims < 2 || dims > 3)
-            throw std::invalid_argument("BodyFrameSingleIntegrator: dims must be 2 or 3");
+        BREW_ASSERT(dims >= 2 && dims <= 3,
+            "BodyFrameSingleIntegrator: dims must be 2 or 3");
         if constexpr (Dspatial != Eigen::Dynamic) {
-            if (dims != Dspatial)
-                throw std::invalid_argument(
-                    "BodyFrameSingleIntegrator: runtime dims does not match template Dspatial");
+            BREW_ASSERT(dims == Dspatial,
+                "BodyFrameSingleIntegrator: runtime dims does not match template Dspatial");
         }
     }
 

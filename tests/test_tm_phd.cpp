@@ -10,7 +10,6 @@
 #include "brew/core/fusion/merge.hpp"
 #include "brew/advanced/clustering/dbscan.hpp"
 #include "brew/core/template_matching/point_cloud.hpp"
-#include "brew/core/template_matching/point_cloud_io.hpp"
 #include "brew/core/template_matching/point_to_point_icp.hpp"
 #include "brew/core/template_matching/point_to_plane_icp.hpp"
 #include "brew/desktop/measurement_sampling/measurement_sampling.hpp"

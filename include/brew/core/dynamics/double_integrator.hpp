@@ -1,7 +1,7 @@
 #pragma once
 
 #include "linear_dynamics.hpp"
-#include <stdexcept>
+#include "brew/core/assert.hpp"
 
 namespace brew::dynamics {
 
@@ -31,12 +31,11 @@ public:
     }
 
     explicit DoubleIntegrator(int dims) : dims_(dims) {
-        if (dims < 1 || dims > 3)
-            throw std::invalid_argument("DoubleIntegrator: dims must be 1, 2, or 3");
+        BREW_ASSERT(dims >= 1 && dims <= 3,
+            "DoubleIntegrator: dims must be 1, 2, or 3");
         if constexpr (Dspatial != Eigen::Dynamic) {
-            if (dims != Dspatial)
-                throw std::invalid_argument(
-                    "DoubleIntegrator: runtime dims does not match template Dspatial");
+            BREW_ASSERT(dims == Dspatial,
+                "DoubleIntegrator: runtime dims does not match template Dspatial");
         }
     }
 

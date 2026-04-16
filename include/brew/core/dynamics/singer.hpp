@@ -1,8 +1,8 @@
 #pragma once
 
 #include "continuous_dynamics.hpp"
+#include "brew/core/assert.hpp"
 #include <cmath>
-#include <stdexcept>
 
 namespace brew::dynamics {
 
@@ -41,25 +41,19 @@ public:
             "Specify spatial dim at runtime via Singer(int, Scalar, Scalar)");
         static_assert(Dspatial >= 1 && Dspatial <= 3,
             "Singer: Dspatial must be 1, 2, or 3");
-        if (beta < Scalar(0))
-            throw std::invalid_argument("Singer: beta must be non-negative");
-        if (q < Scalar(0))
-            throw std::invalid_argument("Singer: q must be non-negative");
+        BREW_ASSERT(beta >= Scalar(0), "Singer: beta must be non-negative");
+        BREW_ASSERT(q >= Scalar(0), "Singer: q must be non-negative");
     }
 
     /// Dynamic-Dspatial ctor.
     Singer(int dims, Scalar beta, Scalar q)
         : dims_(dims), beta_(beta), q_(q) {
-        if (dims < 1 || dims > 3)
-            throw std::invalid_argument("Singer: dims must be 1, 2, or 3");
-        if (beta < Scalar(0))
-            throw std::invalid_argument("Singer: beta must be non-negative");
-        if (q < Scalar(0))
-            throw std::invalid_argument("Singer: q must be non-negative");
+        BREW_ASSERT(dims >= 1 && dims <= 3, "Singer: dims must be 1, 2, or 3");
+        BREW_ASSERT(beta >= Scalar(0), "Singer: beta must be non-negative");
+        BREW_ASSERT(q >= Scalar(0), "Singer: q must be non-negative");
         if constexpr (Dspatial != Eigen::Dynamic) {
-            if (dims != Dspatial)
-                throw std::invalid_argument(
-                    "Singer: runtime dims does not match template Dspatial");
+            BREW_ASSERT(dims == Dspatial,
+                "Singer: runtime dims does not match template Dspatial");
         }
     }
 
