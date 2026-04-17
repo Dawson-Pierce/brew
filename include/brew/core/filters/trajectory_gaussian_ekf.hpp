@@ -15,12 +15,12 @@ namespace brew::filters {
 // @mex_dist TrajectoryGaussian
 // @mex_setters window_size:int
 
-template <typename Scalar = double, int D = Eigen::Dynamic, int MaxHistory = Eigen::Dynamic>
+template <typename Scalar = double, int D = Eigen::Dynamic, int MaxWindow = Eigen::Dynamic>
 class TrajectoryGaussianEKF
-    : public Filter<models::Trajectory<models::Gaussian<Scalar, D>, MaxHistory>> {
+    : public Filter<models::Trajectory<models::Gaussian<Scalar, D>, MaxWindow>> {
 public:
     using InnerDist = models::Gaussian<Scalar, D>;
-    using Dist = models::Trajectory<InnerDist, MaxHistory>;
+    using Dist = models::Trajectory<InnerDist, MaxWindow>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;
@@ -29,7 +29,7 @@ public:
     TrajectoryGaussianEKF() = default;
 
     [[nodiscard]] std::unique_ptr<Base> clone() const override {
-        auto c = std::make_unique<TrajectoryGaussianEKF<Scalar, D, MaxHistory>>();
+        auto c = std::make_unique<TrajectoryGaussianEKF<Scalar, D, MaxWindow>>();
         c->dyn_obj_ = this->dyn_obj_;
         c->h_ = this->h_;
         c->H_ = this->H_;
@@ -52,7 +52,7 @@ public:
         Eigen::MatrixXd F = this->dyn_obj_->get_state_mat(dt, prev_last_state);
 
         // Advance ring buffer (slides if at cap); new tail slot is zeroed
-        const int cap_hint = Dist::fixed_history ? MaxHistory : l_window_;
+        const int cap_hint = Dist::fixed_window ? MaxWindow : l_window_;
         result.advance_window(cap_hint);
 
         const int last = result.last_index();
@@ -157,7 +157,7 @@ public:
     [[nodiscard]] int window_size() const { return l_window_; }
 
 private:
-    int l_window_ = 50;  // only used when MaxHistory is Dynamic
+    int l_window_ = 50;  // only used when MaxWindow is Dynamic
 };
 
 } // namespace brew::filters

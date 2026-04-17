@@ -23,12 +23,12 @@ namespace brew::filters {
 // @mex_setters window_size:int, rotation_process_noise:mat
 // @mex_handle_setters icp:IcpBase
 
-template <typename Scalar = double, int D = Eigen::Dynamic, int MaxHistory = Eigen::Dynamic>
+template <typename Scalar = double, int D = Eigen::Dynamic, int MaxWindow = Eigen::Dynamic>
 class TrajectoryTmEkf
-    : public Filter<models::Trajectory<models::TemplatePose<Scalar, D>, MaxHistory>> {
+    : public Filter<models::Trajectory<models::TemplatePose<Scalar, D>, MaxWindow>> {
 public:
     using InnerDist = models::TemplatePose<Scalar, D>;
-    using Dist = models::Trajectory<InnerDist, MaxHistory>;
+    using Dist = models::Trajectory<InnerDist, MaxWindow>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;
@@ -37,7 +37,7 @@ public:
     TrajectoryTmEkf() = default;
 
     [[nodiscard]] std::unique_ptr<Base> clone() const override {
-        auto c = std::make_unique<TrajectoryTmEkf<Scalar, D, MaxHistory>>();
+        auto c = std::make_unique<TrajectoryTmEkf<Scalar, D, MaxWindow>>();
         c->dyn_obj_ = this->dyn_obj_;
         c->h_ = this->h_;
         c->H_ = this->H_;
@@ -73,7 +73,7 @@ public:
             G = this->dyn_obj_->get_input_mat(dt, prev_last_state);
         }
 
-        const int cap_hint = Dist::fixed_history ? MaxHistory : l_window_;
+        const int cap_hint = Dist::fixed_window ? MaxWindow : l_window_;
         result.advance_window(cap_hint);
 
         const int last = result.last_index();

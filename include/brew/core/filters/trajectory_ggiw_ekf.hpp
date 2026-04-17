@@ -17,12 +17,12 @@ namespace brew::filters {
 // @mex_dist TrajectoryGGIW
 // @mex_setters window_size:int, temporal_decay:scalar, forgetting_factor:scalar, scaling_parameter:scalar
 
-template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic, int MaxHistory = Eigen::Dynamic>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic, int MaxWindow = Eigen::Dynamic>
 class TrajectoryGGIWEKF
-    : public Filter<models::Trajectory<models::GGIW<Scalar, D, De>, MaxHistory>> {
+    : public Filter<models::Trajectory<models::GGIW<Scalar, D, De>, MaxWindow>> {
 public:
     using InnerDist = models::GGIW<Scalar, D, De>;
-    using Dist = models::Trajectory<InnerDist, MaxHistory>;
+    using Dist = models::Trajectory<InnerDist, MaxWindow>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;
@@ -31,7 +31,7 @@ public:
     TrajectoryGGIWEKF() = default;
 
     [[nodiscard]] std::unique_ptr<Base> clone() const override {
-        auto c = std::make_unique<TrajectoryGGIWEKF<Scalar, D, De, MaxHistory>>();
+        auto c = std::make_unique<TrajectoryGGIWEKF<Scalar, D, De, MaxWindow>>();
         c->dyn_obj_ = this->dyn_obj_;
         c->h_ = this->h_;
         c->H_ = this->H_;
@@ -73,7 +73,7 @@ public:
         Eigen::MatrixXd next_V = scale * this->dyn_obj_->propagate_extent(dt, prev_last_state, prev_V);
 
         // Advance ring buffer (slides if at cap); new tail slot zeroed
-        const int cap_hint = Dist::fixed_history ? MaxHistory : l_window_;
+        const int cap_hint = Dist::fixed_window ? MaxWindow : l_window_;
         result.advance_window(cap_hint);
 
         const int last = result.last_index();

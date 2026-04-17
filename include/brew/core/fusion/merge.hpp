@@ -276,8 +276,8 @@ inline double trajectory_mahal_dist(const Eigen::VectorXd& mi, const Eigen::Matr
 // ---- Trajectory<Gaussian<>> merge: full-state Mahalanobis, keep longer/heavier ----
 
 /// Merge close Trajectory<Gaussian<>> components (same-size, absorb into longer/heavier).
-template <typename Scalar, int D, int N, int MaxHistory>
-void merge(models::Mixture<models::Trajectory<models::Gaussian<Scalar, D>, MaxHistory>, N>& mix, double threshold) {
+template <typename Scalar, int D, int N, int MaxWindow>
+void merge(models::Mixture<models::Trajectory<models::Gaussian<Scalar, D>, MaxWindow>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -339,8 +339,8 @@ void merge(models::Mixture<models::Trajectory<models::Gaussian<Scalar, D>, MaxHi
 // ---- Trajectory<GGIW<>> merge: same trajectory merge logic ----
 
 /// Merge close Trajectory<GGIW<>> components (same-size, absorb into longer/heavier).
-template <typename Scalar, int D, int De, int N, int MaxHistory>
-void merge(models::Mixture<models::Trajectory<models::GGIW<Scalar, D, De>, MaxHistory>, N>& mix, double threshold) {
+template <typename Scalar, int D, int De, int N, int MaxWindow>
+void merge(models::Mixture<models::Trajectory<models::GGIW<Scalar, D, De>, MaxWindow>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -401,8 +401,8 @@ void merge(models::Mixture<models::Trajectory<models::GGIW<Scalar, D, De>, MaxHi
 // ---- Trajectory<GGIWOrientation<>> merge: same trajectory merge logic, basis left empty ----
 
 /// Merge close Trajectory<GGIWOrientation<>> components (same-size, absorb into longer/heavier; basis left empty).
-template <typename Scalar, int D, int De, int N, int MaxHistory>
-void merge(models::Mixture<models::Trajectory<models::GGIWOrientation<Scalar, D, De>, MaxHistory>, N>& mix, double threshold) {
+template <typename Scalar, int D, int De, int N, int MaxWindow>
+void merge(models::Mixture<models::Trajectory<models::GGIWOrientation<Scalar, D, De>, MaxWindow>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -603,8 +603,8 @@ void merge(models::Mixture<models::TemplatePose<Scalar, D>, N>& mix, double thre
 // ---- Trajectory<TemplatePose<>> merge: same-size, same-template, absorb into longer/heavier ----
 
 /// Merge close Trajectory<TemplatePose<>> components (same-size, same-template, absorb into longer/heavier).
-template <typename Scalar, int D, int N, int MaxHistory>
-void merge(models::Mixture<models::Trajectory<models::TemplatePose<Scalar, D>, MaxHistory>, N>& mix, double threshold) {
+template <typename Scalar, int D, int N, int MaxWindow>
+void merge(models::Mixture<models::Trajectory<models::TemplatePose<Scalar, D>, MaxWindow>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
