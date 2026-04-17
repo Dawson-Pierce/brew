@@ -89,11 +89,11 @@ TEST(Serialization, GLMBGaussianSerialize) {
     Eigen::VectorXd bm(4);
     bm.setZero();
     birth->add_component(
-        std::make_unique<models::Gaussian<>>(bm, 10.0 * Eigen::MatrixXd::Identity(4, 4)), 0.1);
+        std::make_unique<models::Gaussian<>>(bm, 10.0 * Eigen::MatrixXd::Identity(4, 4)), 1.0);
 
     multi_target::GLMB<models::Gaussian<>> glmb;
     glmb.set_filter(std::move(ekf));
-    glmb.set_birth_model(std::move(birth));
+    glmb.set_birth_model(std::move(birth), 0.1);
     glmb.set_prob_detection(0.9);
     glmb.set_prob_survive(0.99);
     glmb.set_clutter_rate(1.0);
@@ -107,12 +107,11 @@ TEST(Serialization, GLMBGaussianSerialize) {
 
     auto j = serialization::glmb_to_yaml(glmb);
 
-    // Verify JSON structure
     EXPECT_EQ(j["filter_type"].as<std::string>(), "GLMB");
     EXPECT_NEAR(j["prob_detection"].as<double>(), 0.9, 1e-12);
     EXPECT_TRUE(j["cardinality_pmf"].IsDefined());
-    EXPECT_TRUE(j["global_hypotheses"].IsDefined());
-    EXPECT_TRUE(j["extracted_mixtures"].IsDefined());
+    EXPECT_TRUE(j["hypotheses"].IsDefined());
+    EXPECT_TRUE(j["extracted_tracks"].IsDefined());
 }
 
 TEST(Serialization, PMBMGaussianSerialize) {
@@ -153,7 +152,8 @@ TEST(Serialization, PMBMGaussianSerialize) {
     EXPECT_EQ(j["filter_type"].as<std::string>(), "PMBM");
     EXPECT_TRUE(j["poisson_intensity"].IsDefined());
     EXPECT_TRUE(j["cardinality_pmf"].IsDefined());
-    EXPECT_TRUE(j["global_hypotheses"].IsDefined());
+    EXPECT_TRUE(j["hypotheses"].IsDefined());
+    EXPECT_TRUE(j["extracted_tracks"].IsDefined());
 }
 
 TEST(Serialization, EigenVectorRoundTrip) {

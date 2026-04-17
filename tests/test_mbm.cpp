@@ -25,7 +25,7 @@ TEST(MBM, GaussianPredictCorrectCleanup) {
 
     multi_target::MBM<models::Gaussian<>> mbm;
     mbm.set_filter(std::move(ekf));
-    mbm.set_birth_model(std::move(birth));
+    mbm.set_birth_model(std::move(birth), 0.1);
     mbm.set_prob_detection(0.9);
     mbm.set_prob_survive(0.99);
     mbm.set_clutter_rate(1.0);
@@ -39,13 +39,13 @@ TEST(MBM, GaussianPredictCorrectCleanup) {
 
     // Predict
     mbm.predict(0, 1.0);
-    EXPECT_GE(mbm.global_hypotheses().size(), 1u);
+    EXPECT_GE(mbm.hypotheses().size(), 1u);
 
     // Correct with one measurement near origin
     Eigen::MatrixXd meas(2, 1);
     meas << 0.5, 0.3;
     mbm.correct(meas);
-    EXPECT_GE(mbm.global_hypotheses().size(), 1u);
+    EXPECT_GE(mbm.hypotheses().size(), 1u);
 
     // Cleanup
     mbm.cleanup();
@@ -69,7 +69,7 @@ TEST(MBM, Clone) {
 
     multi_target::MBM<models::Gaussian<>> mbm;
     mbm.set_filter(std::move(ekf));
-    mbm.set_birth_model(std::move(birth));
+    mbm.set_birth_model(std::move(birth), 0.1);
 
     auto cloned = mbm.clone();
     ASSERT_NE(cloned, nullptr);
@@ -95,7 +95,7 @@ TEST(MBM, MultipleHypothesesGenerated) {
 
     multi_target::MBM<models::Gaussian<>> mbm;
     mbm.set_filter(std::move(ekf));
-    mbm.set_birth_model(std::move(birth));
+    mbm.set_birth_model(std::move(birth), 0.1);
     mbm.set_prob_detection(0.9);
     mbm.set_prob_survive(0.99);
     mbm.set_clutter_rate(1.0);
@@ -114,5 +114,5 @@ TEST(MBM, MultipleHypothesesGenerated) {
     mbm.correct(meas);
 
     // With 2 Bernoullis and 2 measurements, k_best=5 should produce multiple hypotheses
-    EXPECT_GE(mbm.global_hypotheses().size(), 2u);
+    EXPECT_GE(mbm.hypotheses().size(), 2u);
 }

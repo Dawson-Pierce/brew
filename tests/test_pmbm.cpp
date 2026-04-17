@@ -122,7 +122,7 @@ TEST(PMBM, PoissonSpawnsNewTracks) {
     pmbm.set_extract_threshold(0.4);
 
     pmbm.predict(0, 1.0);
-    EXPECT_EQ(pmbm.num_tracks(), 0) << "No Bernoulli tracks before first correction";
+    EXPECT_EQ(static_cast<int>(pmbm.track_tab().size()), 0) << "No Bernoulli tracks before first correction";
 
     // Two measurements near both birth locations
     Eigen::MatrixXd meas(2, 2);
@@ -131,5 +131,5 @@ TEST(PMBM, PoissonSpawnsNewTracks) {
     pmbm.correct(meas);
 
     // Should have spawned new Bernoulli tracks from Poisson
-    EXPECT_GT(pmbm.num_tracks(), 0) << "Measurements should spawn new Bernoulli tracks from Poisson";
+    EXPECT_GT(static_cast<int>(pmbm.track_tab().size()), 0) << "Measurements should spawn new Bernoulli tracks from Poisson";
 }

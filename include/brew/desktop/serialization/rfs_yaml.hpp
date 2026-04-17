@@ -16,8 +16,6 @@
 #include "brew/advanced/multi_target/jglmb.hpp"
 #include "brew/advanced/multi_target/pmbm.hpp"
 #include "brew/advanced/multi_target/mbm.hpp"
-#include "brew/advanced/multi_target/mb.hpp"
-#include "brew/advanced/multi_target/lmb.hpp"
 
 #include <vector>
 #include <map>
@@ -439,6 +437,35 @@ YAML::Node cphd_to_yaml(const multi_target::CPHD<T>& cphd) {
 }
 
 // ============================================================
+// GLMB<T> / JGLMB<T> shared helpers
+// ============================================================
+
+template <typename T>
+YAML::Node glmb_hypothesis_to_yaml(const auto& h) {
+    YAML::Node hyp;
+    hyp["assoc_prob"] = h.assoc_prob;
+    YAML::Node ts(YAML::NodeType::Sequence);
+    for (auto idx : h.track_set) ts.push_back(static_cast<std::size_t>(idx));
+    hyp["track_set"] = ts;
+    return hyp;
+}
+
+template <typename T>
+YAML::Node glmb_extracted_track_to_yaml(const auto& e) {
+    YAML::Node n;
+    YAML::Node label(YAML::NodeType::Sequence);
+    label.push_back(e.label.first);
+    label.push_back(e.label.second);
+    n["label"] = label;
+    n["b_time_index"] = e.b_time_index;
+    n["meas_assoc_hist"] = e.meas_assoc_hist;
+    YAML::Node states(YAML::NodeType::Sequence);
+    for (const auto& s : e.states) states.push_back(to_yaml(*s));
+    n["states"] = states;
+    return n;
+}
+
+// ============================================================
 // GLMB<T>
 // ============================================================
 
@@ -453,22 +480,12 @@ YAML::Node glmb_to_yaml(const multi_target::GLMB<T>& glmb) {
     j["estimated_cardinality"] = glmb.estimated_cardinality();
     j["cardinality_pmf"] = vector_to_yaml(glmb.cardinality());
     j["track_histories"] = track_histories_to_yaml(glmb.track_histories());
-    // Global hypotheses
     YAML::Node hyps(YAML::NodeType::Sequence);
-    for (const auto& h : glmb.global_hypotheses()) {
-        YAML::Node hyp;
-        hyp["log_weight"] = h.log_weight;
-        hyp["bernoulli_indices"] = h.bernoulli_indices;
-        hyps.push_back(hyp);
-    }
-    j["global_hypotheses"] = hyps;
-    if (!glmb.extracted_mixtures().empty()) {
-        YAML::Node extracts(YAML::NodeType::Sequence);
-        for (const auto& mix : glmb.extracted_mixtures()) {
-            extracts.push_back(mixture_to_yaml<T>(*mix));
-        }
-        j["extracted_mixtures"] = extracts;
-    }
+    for (const auto& h : glmb.hypotheses()) hyps.push_back(glmb_hypothesis_to_yaml<T>(h));
+    j["hypotheses"] = hyps;
+    YAML::Node tracks(YAML::NodeType::Sequence);
+    for (const auto& e : glmb.extracted_tracks()) tracks.push_back(glmb_extracted_track_to_yaml<T>(*e));
+    j["extracted_tracks"] = tracks;
     return j;
 }
 
@@ -488,20 +505,61 @@ YAML::Node jglmb_to_yaml(const multi_target::JGLMB<T>& jglmb) {
     j["cardinality_pmf"] = vector_to_yaml(jglmb.cardinality());
     j["track_histories"] = track_histories_to_yaml(jglmb.track_histories());
     YAML::Node hyps(YAML::NodeType::Sequence);
-    for (const auto& h : jglmb.global_hypotheses()) {
-        YAML::Node hyp;
-        hyp["log_weight"] = h.log_weight;
-        hyp["bernoulli_indices"] = h.bernoulli_indices;
-        hyps.push_back(hyp);
-    }
-    j["global_hypotheses"] = hyps;
-    if (!jglmb.extracted_mixtures().empty()) {
-        YAML::Node extracts(YAML::NodeType::Sequence);
-        for (const auto& mix : jglmb.extracted_mixtures()) {
-            extracts.push_back(mixture_to_yaml<T>(*mix));
-        }
-        j["extracted_mixtures"] = extracts;
-    }
+    for (const auto& h : jglmb.hypotheses()) hyps.push_back(glmb_hypothesis_to_yaml<T>(h));
+    j["hypotheses"] = hyps;
+    YAML::Node tracks(YAML::NodeType::Sequence);
+    for (const auto& e : jglmb.extracted_tracks()) tracks.push_back(glmb_extracted_track_to_yaml<T>(*e));
+    j["extracted_tracks"] = tracks;
+    return j;
+}
+
+// ============================================================
+// MBM/PMBM shared helpers (new track-table-based representation)
+// ============================================================
+
+template <typename T>
+YAML::Node mbm_hypothesis_to_yaml(const auto& h) {
+    YAML::Node hyp;
+    hyp["log_weight"] = h.log_weight;
+    YAML::Node ts(YAML::NodeType::Sequence);
+    for (auto idx : h.track_indices) ts.push_back(static_cast<std::size_t>(idx));
+    hyp["track_indices"] = ts;
+    return hyp;
+}
+
+template <typename T>
+YAML::Node mbm_extracted_track_to_yaml(const auto& e) {
+    YAML::Node n;
+    n["id"] = e.id;
+    n["b_time_index"] = e.b_time_index;
+    n["meas_assoc_hist"] = e.meas_assoc_hist;
+    YAML::Node states(YAML::NodeType::Sequence);
+    for (const auto& s : e.states) states.push_back(to_yaml(*s));
+    n["states"] = states;
+    return n;
+}
+
+// ============================================================
+// MBM<T>
+// ============================================================
+
+template <typename T>
+YAML::Node mbm_to_yaml(const multi_target::MBM<T>& mbm) {
+    YAML::Node j;
+    j["filter_type"] = "MBM";
+    j["prob_detection"] = mbm.prob_detection();
+    j["prob_survive"] = mbm.prob_survive();
+    j["clutter_rate"] = mbm.clutter_rate();
+    j["clutter_density"] = mbm.clutter_density();
+    j["estimated_cardinality"] = mbm.estimated_cardinality();
+    j["cardinality_pmf"] = vector_to_yaml(mbm.cardinality());
+    j["track_histories"] = track_histories_to_yaml(mbm.track_histories());
+    YAML::Node hyps(YAML::NodeType::Sequence);
+    for (const auto& h : mbm.hypotheses()) hyps.push_back(mbm_hypothesis_to_yaml<T>(h));
+    j["hypotheses"] = hyps;
+    YAML::Node tracks(YAML::NodeType::Sequence);
+    for (const auto& e : mbm.extracted_tracks()) tracks.push_back(mbm_extracted_track_to_yaml<T>(*e));
+    j["extracted_tracks"] = tracks;
     return j;
 }
 
@@ -522,96 +580,11 @@ YAML::Node pmbm_to_yaml(const multi_target::PMBM<T>& pmbm) {
     j["poisson_intensity"] = mixture_to_yaml<T>(pmbm.poisson_intensity());
     j["track_histories"] = track_histories_to_yaml(pmbm.track_histories());
     YAML::Node hyps(YAML::NodeType::Sequence);
-    for (const auto& h : pmbm.global_hypotheses()) {
-        YAML::Node hyp;
-        hyp["log_weight"] = h.log_weight;
-        hyp["bernoulli_indices"] = h.bernoulli_indices;
-        hyps.push_back(hyp);
-    }
-    j["global_hypotheses"] = hyps;
-    if (!pmbm.extracted_mixtures().empty()) {
-        YAML::Node extracts(YAML::NodeType::Sequence);
-        for (const auto& mix : pmbm.extracted_mixtures()) {
-            extracts.push_back(mixture_to_yaml<T>(*mix));
-        }
-        j["extracted_mixtures"] = extracts;
-    }
-    return j;
-}
-
-// ============================================================
-// MBM<T>
-// ============================================================
-
-template <typename T>
-YAML::Node mbm_to_yaml(const multi_target::MBM<T>& mbm) {
-    YAML::Node j;
-    j["filter_type"] = "MBM";
-    j["prob_detection"] = mbm.prob_detection();
-    j["prob_survive"] = mbm.prob_survive();
-    j["clutter_rate"] = mbm.clutter_rate();
-    j["clutter_density"] = mbm.clutter_density();
-    j["track_histories"] = track_histories_to_yaml(mbm.track_histories());
-    YAML::Node hyps(YAML::NodeType::Sequence);
-    for (const auto& h : mbm.global_hypotheses()) {
-        YAML::Node hyp;
-        hyp["log_weight"] = h.log_weight;
-        hyp["bernoulli_indices"] = h.bernoulli_indices;
-        hyps.push_back(hyp);
-    }
-    j["global_hypotheses"] = hyps;
-    if (!mbm.extracted_mixtures().empty()) {
-        YAML::Node extracts(YAML::NodeType::Sequence);
-        for (const auto& mix : mbm.extracted_mixtures()) {
-            extracts.push_back(mixture_to_yaml<T>(*mix));
-        }
-        j["extracted_mixtures"] = extracts;
-    }
-    return j;
-}
-
-// ============================================================
-// MB<T>
-// ============================================================
-
-template <typename T>
-YAML::Node mb_to_yaml(const multi_target::MB<T>& mb) {
-    YAML::Node j;
-    j["filter_type"] = "MB";
-    j["prob_detection"] = mb.prob_detection();
-    j["prob_survive"] = mb.prob_survive();
-    j["clutter_rate"] = mb.clutter_rate();
-    j["clutter_density"] = mb.clutter_density();
-    if (!mb.extracted_mixtures().empty()) {
-        YAML::Node extracts(YAML::NodeType::Sequence);
-        for (const auto& mix : mb.extracted_mixtures()) {
-            extracts.push_back(mixture_to_yaml<T>(*mix));
-        }
-        j["extracted_mixtures"] = extracts;
-    }
-    return j;
-}
-
-// ============================================================
-// LMB<T>
-// ============================================================
-
-template <typename T>
-YAML::Node lmb_to_yaml(const multi_target::LMB<T>& lmb) {
-    YAML::Node j;
-    j["filter_type"] = "LMB";
-    j["prob_detection"] = lmb.prob_detection();
-    j["prob_survive"] = lmb.prob_survive();
-    j["clutter_rate"] = lmb.clutter_rate();
-    j["clutter_density"] = lmb.clutter_density();
-    j["track_histories"] = track_histories_to_yaml(lmb.track_histories());
-    if (!lmb.extracted_mixtures().empty()) {
-        YAML::Node extracts(YAML::NodeType::Sequence);
-        for (const auto& mix : lmb.extracted_mixtures()) {
-            extracts.push_back(mixture_to_yaml<T>(*mix));
-        }
-        j["extracted_mixtures"] = extracts;
-    }
+    for (const auto& h : pmbm.hypotheses()) hyps.push_back(mbm_hypothesis_to_yaml<T>(h));
+    j["hypotheses"] = hyps;
+    YAML::Node tracks(YAML::NodeType::Sequence);
+    for (const auto& e : pmbm.extracted_tracks()) tracks.push_back(mbm_extracted_track_to_yaml<T>(*e));
+    j["extracted_tracks"] = tracks;
     return j;
 }
 

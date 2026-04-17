@@ -16,8 +16,6 @@
 #include "brew/advanced/multi_target/cphd.hpp"
 #include "brew/advanced/multi_target/mbm.hpp"
 #include "brew/advanced/multi_target/pmbm.hpp"
-#include "brew/advanced/multi_target/mb.hpp"
-#include "brew/advanced/multi_target/lmb.hpp"
 #include "brew/advanced/multi_target/glmb.hpp"
 #include "brew/advanced/multi_target/jglmb.hpp"
 #include "brew/advanced/clustering/dbscan.hpp"
@@ -800,6 +798,22 @@ inline multi_target::CPHD<T> make_cphd(
     return cphd;
 }
 
+/// Convert a legacy-style birth mixture (one component per birth location, weight = p_B)
+/// into a vector of single-component spatial mixtures with explicit birth probabilities.
+template <typename T>
+inline std::vector<std::pair<std::unique_ptr<models::Mixture<T>>, double>>
+legacy_birth_to_terms(std::unique_ptr<models::Mixture<T>> birth)
+{
+    std::vector<std::pair<std::unique_ptr<models::Mixture<T>>, double>> terms;
+    if (!birth) return terms;
+    for (std::size_t i = 0; i < birth->size(); ++i) {
+        auto mix = std::make_unique<models::Mixture<T>>();
+        mix->add_component(birth->component(i).clone_typed(), 1.0);
+        terms.emplace_back(std::move(mix), birth->weight(i));
+    }
+    return terms;
+}
+
 template <typename T>
 inline multi_target::MBM<T> make_mbm(
     std::unique_ptr<filters::Filter<T>> filter,
@@ -808,7 +822,7 @@ inline multi_target::MBM<T> make_mbm(
 {
     multi_target::MBM<T> mbm;
     mbm.set_filter(std::move(filter));
-    mbm.set_birth_model(std::move(birth));
+    mbm.set_birth_terms(legacy_birth_to_terms<T>(std::move(birth)));
     mbm.set_prob_detection(params.p_detect);
     mbm.set_prob_survive(params.p_survive);
     mbm.set_clutter_rate(params.clutter_rate);
@@ -862,57 +876,6 @@ inline multi_target::PMBM<T> make_pmbm(
 }
 
 template <typename T>
-inline multi_target::MB<T> make_mb(
-    std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<models::Mixture<T>> birth,
-    const ScenarioParams& params)
-{
-    multi_target::MB<T> mb;
-    mb.set_filter(std::move(filter));
-    mb.set_birth_model(std::move(birth));
-    mb.set_prob_detection(params.p_detect);
-    mb.set_prob_survive(params.p_survive);
-    mb.set_clutter_rate(params.clutter_rate);
-    mb.set_clutter_density(params.clutter_density);
-    mb.set_prune_threshold_bernoulli(1e-3);
-    mb.set_extract_threshold(0.4);
-    mb.set_gate_threshold(25.0);
-
-    if constexpr (is_extended_distribution_v<T>) {
-        mb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
-            params.dbscan_epsilon, params.dbscan_min_pts));
-    }
-
-    return mb;
-}
-
-template <typename T>
-inline multi_target::LMB<T> make_lmb(
-    std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<models::Mixture<T>> birth,
-    const ScenarioParams& params)
-{
-    multi_target::LMB<T> lmb;
-    lmb.set_filter(std::move(filter));
-    lmb.set_birth_model(std::move(birth));
-    lmb.set_prob_detection(params.p_detect);
-    lmb.set_prob_survive(params.p_survive);
-    lmb.set_clutter_rate(params.clutter_rate);
-    lmb.set_clutter_density(params.clutter_density);
-    lmb.set_prune_threshold_bernoulli(1e-3);
-    lmb.set_extract_threshold(0.4);
-    lmb.set_gate_threshold(25.0);
-    lmb.set_k_best(5);
-
-    if constexpr (is_extended_distribution_v<T>) {
-        lmb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
-            params.dbscan_epsilon, params.dbscan_min_pts));
-    }
-
-    return lmb;
-}
-
-template <typename T>
 inline multi_target::GLMB<T> make_glmb(
     std::unique_ptr<filters::Filter<T>> filter,
     std::unique_ptr<models::Mixture<T>> birth,
@@ -920,17 +883,17 @@ inline multi_target::GLMB<T> make_glmb(
 {
     multi_target::GLMB<T> glmb;
     glmb.set_filter(std::move(filter));
-    glmb.set_birth_model(std::move(birth));
+    glmb.set_birth_terms(legacy_birth_to_terms<T>(std::move(birth)));
     glmb.set_prob_detection(params.p_detect);
     glmb.set_prob_survive(params.p_survive);
     glmb.set_clutter_rate(params.clutter_rate);
     glmb.set_clutter_density(params.clutter_density);
-    glmb.set_prune_threshold_hypothesis(1e-4);
-    glmb.set_prune_threshold_bernoulli(1e-3);
-    glmb.set_max_hypotheses(50);
-    glmb.set_extract_threshold(0.4);
+    glmb.set_prune_threshold(1e-15);
+    glmb.set_max_hypotheses(500);
     glmb.set_gate_threshold(25.0);
-    glmb.set_k_best(5);
+    glmb.set_req_births(5);
+    glmb.set_req_surv(100);
+    glmb.set_req_upd(100);
 
     if constexpr (is_extended_distribution_v<T>) {
         glmb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
@@ -948,15 +911,13 @@ inline multi_target::JGLMB<T> make_jglmb(
 {
     multi_target::JGLMB<T> jglmb;
     jglmb.set_filter(std::move(filter));
-    jglmb.set_birth_model(std::move(birth));
+    jglmb.set_birth_terms(legacy_birth_to_terms<T>(std::move(birth)));
     jglmb.set_prob_detection(params.p_detect);
     jglmb.set_prob_survive(params.p_survive);
     jglmb.set_clutter_rate(params.clutter_rate);
     jglmb.set_clutter_density(params.clutter_density);
-    jglmb.set_prune_threshold_hypothesis(1e-4);
-    jglmb.set_prune_threshold_bernoulli(1e-3);
+    jglmb.set_prune_threshold(1e-4);
     jglmb.set_max_hypotheses(50);
-    jglmb.set_extract_threshold(0.4);
     jglmb.set_gate_threshold(25.0);
     jglmb.set_k_best(5);
 

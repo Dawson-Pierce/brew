@@ -98,8 +98,7 @@ public:
         // Propagate surviving components and scale weights
         for (std::size_t k = 0; k < intensity_->size(); ++k) {
             intensity_->weights()(static_cast<Eigen::Index>(k)) *= prob_survive_;
-            auto predicted = filter_->predict(dt, intensity_->component(k));
-            *intensity_->components()[k] = std::move(predicted);
+            intensity_->component(k) = filter_->predict(dt, intensity_->component(k));
         }
 
         // Add birth components

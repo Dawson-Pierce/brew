@@ -60,7 +60,7 @@ for (const auto& measurements : measurement_sequence) {
 }
 ```
 
-Any RFS filter can be swapped in by changing the type (e.g. `PHD`, `MBM`, `LMB`, `GLMB`) — the predict/update/estimate interface is the same. Swap the distribution type template parameter to switch between point and extended target tracking.
+Any RFS filter can be swapped in by changing the type (e.g. `PHD`, `CPHD`, `MBM`, `PMBM`, `GLMB`, `JGLMB`) — the predict/update/estimate interface is the same. Swap the distribution type template parameter to switch between point and extended target tracking.
 
 ## Testing
 

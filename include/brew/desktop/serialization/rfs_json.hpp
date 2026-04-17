@@ -16,8 +16,6 @@
 #include "brew/advanced/multi_target/jglmb.hpp"
 #include "brew/advanced/multi_target/pmbm.hpp"
 #include "brew/advanced/multi_target/mbm.hpp"
-#include "brew/advanced/multi_target/mb.hpp"
-#include "brew/advanced/multi_target/lmb.hpp"
 
 #include <vector>
 #include <map>
@@ -441,6 +439,32 @@ json cphd_to_json(const multi_target::CPHD<T>& cphd) {
 }
 
 // ============================================================
+// GLMB<T> / JGLMB<T> shared helpers
+// ============================================================
+
+template <typename T>
+json glmb_hypothesis_to_json(const auto& h) {
+    json hyp;
+    hyp["assoc_prob"] = h.assoc_prob;
+    json ts = json::array();
+    for (auto idx : h.track_set) ts.push_back(static_cast<std::size_t>(idx));
+    hyp["track_set"] = std::move(ts);
+    return hyp;
+}
+
+template <typename T>
+json glmb_extracted_track_to_json(const auto& e) {
+    json n;
+    n["label"] = {e.label.first, e.label.second};
+    n["b_time_index"] = e.b_time_index;
+    n["meas_assoc_hist"] = e.meas_assoc_hist;
+    json states = json::array();
+    for (const auto& s : e.states) states.push_back(to_json(*s));
+    n["states"] = std::move(states);
+    return n;
+}
+
+// ============================================================
 // GLMB<T>
 // ============================================================
 
@@ -455,22 +479,12 @@ json glmb_to_json(const multi_target::GLMB<T>& glmb) {
     j["estimated_cardinality"] = glmb.estimated_cardinality();
     j["cardinality_pmf"] = vector_to_json(glmb.cardinality());
     j["track_histories"] = track_histories_to_json(glmb.track_histories());
-    // Global hypotheses
     json hyps = json::array();
-    for (const auto& h : glmb.global_hypotheses()) {
-        json hyp;
-        hyp["log_weight"] = h.log_weight;
-        hyp["bernoulli_indices"] = h.bernoulli_indices;
-        hyps.push_back(std::move(hyp));
-    }
-    j["global_hypotheses"] = std::move(hyps);
-    if (!glmb.extracted_mixtures().empty()) {
-        json extracts = json::array();
-        for (const auto& mix : glmb.extracted_mixtures()) {
-            extracts.push_back(mixture_to_json<T>(*mix));
-        }
-        j["extracted_mixtures"] = std::move(extracts);
-    }
+    for (const auto& h : glmb.hypotheses()) hyps.push_back(glmb_hypothesis_to_json<T>(h));
+    j["hypotheses"] = std::move(hyps);
+    json tracks = json::array();
+    for (const auto& e : glmb.extracted_tracks()) tracks.push_back(glmb_extracted_track_to_json<T>(*e));
+    j["extracted_tracks"] = std::move(tracks);
     return j;
 }
 
@@ -490,20 +504,61 @@ json jglmb_to_json(const multi_target::JGLMB<T>& jglmb) {
     j["cardinality_pmf"] = vector_to_json(jglmb.cardinality());
     j["track_histories"] = track_histories_to_json(jglmb.track_histories());
     json hyps = json::array();
-    for (const auto& h : jglmb.global_hypotheses()) {
-        json hyp;
-        hyp["log_weight"] = h.log_weight;
-        hyp["bernoulli_indices"] = h.bernoulli_indices;
-        hyps.push_back(std::move(hyp));
-    }
-    j["global_hypotheses"] = std::move(hyps);
-    if (!jglmb.extracted_mixtures().empty()) {
-        json extracts = json::array();
-        for (const auto& mix : jglmb.extracted_mixtures()) {
-            extracts.push_back(mixture_to_json<T>(*mix));
-        }
-        j["extracted_mixtures"] = std::move(extracts);
-    }
+    for (const auto& h : jglmb.hypotheses()) hyps.push_back(glmb_hypothesis_to_json<T>(h));
+    j["hypotheses"] = std::move(hyps);
+    json tracks = json::array();
+    for (const auto& e : jglmb.extracted_tracks()) tracks.push_back(glmb_extracted_track_to_json<T>(*e));
+    j["extracted_tracks"] = std::move(tracks);
+    return j;
+}
+
+// ============================================================
+// MBM/PMBM shared helpers
+// ============================================================
+
+template <typename T>
+json mbm_hypothesis_to_json(const auto& h) {
+    json hyp;
+    hyp["log_weight"] = h.log_weight;
+    json ts = json::array();
+    for (auto idx : h.track_indices) ts.push_back(static_cast<std::size_t>(idx));
+    hyp["track_indices"] = std::move(ts);
+    return hyp;
+}
+
+template <typename T>
+json mbm_extracted_track_to_json(const auto& e) {
+    json n;
+    n["id"] = e.id;
+    n["b_time_index"] = e.b_time_index;
+    n["meas_assoc_hist"] = e.meas_assoc_hist;
+    json states = json::array();
+    for (const auto& s : e.states) states.push_back(to_json(*s));
+    n["states"] = std::move(states);
+    return n;
+}
+
+// ============================================================
+// MBM<T>
+// ============================================================
+
+template <typename T>
+json mbm_to_json(const multi_target::MBM<T>& mbm) {
+    json j;
+    j["filter_type"] = "MBM";
+    j["prob_detection"] = mbm.prob_detection();
+    j["prob_survive"] = mbm.prob_survive();
+    j["clutter_rate"] = mbm.clutter_rate();
+    j["clutter_density"] = mbm.clutter_density();
+    j["estimated_cardinality"] = mbm.estimated_cardinality();
+    j["cardinality_pmf"] = vector_to_json(mbm.cardinality());
+    j["track_histories"] = track_histories_to_json(mbm.track_histories());
+    json hyps = json::array();
+    for (const auto& h : mbm.hypotheses()) hyps.push_back(mbm_hypothesis_to_json<T>(h));
+    j["hypotheses"] = std::move(hyps);
+    json tracks = json::array();
+    for (const auto& e : mbm.extracted_tracks()) tracks.push_back(mbm_extracted_track_to_json<T>(*e));
+    j["extracted_tracks"] = std::move(tracks);
     return j;
 }
 
@@ -524,96 +579,11 @@ json pmbm_to_json(const multi_target::PMBM<T>& pmbm) {
     j["poisson_intensity"] = mixture_to_json<T>(pmbm.poisson_intensity());
     j["track_histories"] = track_histories_to_json(pmbm.track_histories());
     json hyps = json::array();
-    for (const auto& h : pmbm.global_hypotheses()) {
-        json hyp;
-        hyp["log_weight"] = h.log_weight;
-        hyp["bernoulli_indices"] = h.bernoulli_indices;
-        hyps.push_back(std::move(hyp));
-    }
-    j["global_hypotheses"] = std::move(hyps);
-    if (!pmbm.extracted_mixtures().empty()) {
-        json extracts = json::array();
-        for (const auto& mix : pmbm.extracted_mixtures()) {
-            extracts.push_back(mixture_to_json<T>(*mix));
-        }
-        j["extracted_mixtures"] = std::move(extracts);
-    }
-    return j;
-}
-
-// ============================================================
-// MBM<T>
-// ============================================================
-
-template <typename T>
-json mbm_to_json(const multi_target::MBM<T>& mbm) {
-    json j;
-    j["filter_type"] = "MBM";
-    j["prob_detection"] = mbm.prob_detection();
-    j["prob_survive"] = mbm.prob_survive();
-    j["clutter_rate"] = mbm.clutter_rate();
-    j["clutter_density"] = mbm.clutter_density();
-    j["track_histories"] = track_histories_to_json(mbm.track_histories());
-    json hyps = json::array();
-    for (const auto& h : mbm.global_hypotheses()) {
-        json hyp;
-        hyp["log_weight"] = h.log_weight;
-        hyp["bernoulli_indices"] = h.bernoulli_indices;
-        hyps.push_back(std::move(hyp));
-    }
-    j["global_hypotheses"] = std::move(hyps);
-    if (!mbm.extracted_mixtures().empty()) {
-        json extracts = json::array();
-        for (const auto& mix : mbm.extracted_mixtures()) {
-            extracts.push_back(mixture_to_json<T>(*mix));
-        }
-        j["extracted_mixtures"] = std::move(extracts);
-    }
-    return j;
-}
-
-// ============================================================
-// MB<T>
-// ============================================================
-
-template <typename T>
-json mb_to_json(const multi_target::MB<T>& mb) {
-    json j;
-    j["filter_type"] = "MB";
-    j["prob_detection"] = mb.prob_detection();
-    j["prob_survive"] = mb.prob_survive();
-    j["clutter_rate"] = mb.clutter_rate();
-    j["clutter_density"] = mb.clutter_density();
-    if (!mb.extracted_mixtures().empty()) {
-        json extracts = json::array();
-        for (const auto& mix : mb.extracted_mixtures()) {
-            extracts.push_back(mixture_to_json<T>(*mix));
-        }
-        j["extracted_mixtures"] = std::move(extracts);
-    }
-    return j;
-}
-
-// ============================================================
-// LMB<T>
-// ============================================================
-
-template <typename T>
-json lmb_to_json(const multi_target::LMB<T>& lmb) {
-    json j;
-    j["filter_type"] = "LMB";
-    j["prob_detection"] = lmb.prob_detection();
-    j["prob_survive"] = lmb.prob_survive();
-    j["clutter_rate"] = lmb.clutter_rate();
-    j["clutter_density"] = lmb.clutter_density();
-    j["track_histories"] = track_histories_to_json(lmb.track_histories());
-    if (!lmb.extracted_mixtures().empty()) {
-        json extracts = json::array();
-        for (const auto& mix : lmb.extracted_mixtures()) {
-            extracts.push_back(mixture_to_json<T>(*mix));
-        }
-        j["extracted_mixtures"] = std::move(extracts);
-    }
+    for (const auto& h : pmbm.hypotheses()) hyps.push_back(mbm_hypothesis_to_json<T>(h));
+    j["hypotheses"] = std::move(hyps);
+    json tracks = json::array();
+    for (const auto& e : pmbm.extracted_tracks()) tracks.push_back(mbm_extracted_track_to_json<T>(*e));
+    j["extracted_tracks"] = std::move(tracks);
     return j;
 }
 

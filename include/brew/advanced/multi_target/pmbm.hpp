@@ -1,116 +1,110 @@
 #pragma once
 
-#include "brew/advanced/multi_target/rfs_base.hpp"
-#include "brew/core/models/mixture.hpp"
-#include "brew/core/models/bernoulli.hpp"
-#include "brew/core/models/trajectory.hpp"
-#include "brew/core/filters/filter.hpp"
+#include "brew/advanced/multi_target/mbm_base.hpp"
+#include "brew/advanced/assignment/murty.hpp"
 #include "brew/core/fusion/prune.hpp"
 #include "brew/core/fusion/merge.hpp"
 #include "brew/core/fusion/cap.hpp"
-#include "brew/advanced/clustering/dbscan.hpp"
-#include "brew/advanced/assignment/murty.hpp"
 
 #include <Eigen/Dense>
-#include <memory>
-#include <vector>
-#include <map>
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 #include <limits>
-#include <type_traits>
+#include <memory>
+#include <utility>
+#include <vector>
 
 namespace brew::multi_target {
 
-/// Poisson Multi-Bernoulli Mixture (PMBM) filter.
-/// Combines a Poisson intensity (for undetected targets) with an MBM component
-/// (for detected targets). On first detection, Poisson components spawn new
-/// Bernoulli tracks. This is the theoretically optimal conjugate prior for the
-/// multi-target tracking problem.
-/// Template parameter T is the single distribution type (e.g., Gaussian<>, GGIW).
+/// Poisson Multi-Bernoulli Mixture (PMBM) filter. Maintains:
+///   - A Poisson intensity for undetected targets (inherits from MBMBase's is_extended etc).
+///   - A set of labeled Bernoulli tracks (from MBMBase::track_tab_) for detected targets.
+/// Birth is implicit: the birth Mixture is added to the Poisson intensity at each predict.
+/// The correct step runs an augmented Murty assignment where existing tracks, Poisson
+/// spawn candidates (one per measurement), and clutter compete jointly.
 // @mex rfs
 // @mex_name PMBM
-// @mex_params prune_poisson_threshold:double:1e-4, merge_poisson_threshold:double:4.0, max_poisson_components:int:100, prune_threshold_hypothesis:double:1e-3, prune_threshold_bernoulli:double:1e-3, recycle_threshold:double:0.1, max_hypotheses:int:100, extract_threshold:double:0.5, gate_threshold:double:9.0, k_best:int:5
+// @mex_params prune_poisson_threshold:double:1e-4, merge_poisson_threshold:double:4.0, max_poisson_components:int:100, prune_threshold_hypothesis:double:1e-3, prune_threshold_bernoulli:double:1e-3, recycle_threshold:double:0.1, max_hypotheses:int:100, extract_threshold:double:0.5, gate_threshold:double:9.0, k_best:int:5, gating_on:bool:false
 // @mex_init set_poisson_intensity
 // @mex_has cardinality, track_histories, cluster_object
 template <typename T, int MaxComponents = Eigen::Dynamic>
-class PMBM : public RFSBase {
-    /// Internal global hypothesis type
-    struct GlobalHypothesis_ {
-        double log_weight = 0.0;
-        std::vector<std::size_t> bernoulli_indices;
-    };
-
+class PMBM : public MBMBase<T, MaxComponents> {
 public:
-    PMBM() = default;
+    using Base = MBMBase<T, MaxComponents>;
+    using TrackEntry = typename Base::TrackEntry;
+    using Hypothesis = typename Base::Hypothesis;
+    using MixturePtr = typename Base::MixturePtr;
+
+    PMBM() : Base() {
+        Hypothesis h0;
+        h0.log_weight = 0.0;
+        this->hypotheses_.push_back(std::move(h0));
+    }
 
     [[nodiscard]] std::unique_ptr<RFSBase> clone() const override {
         auto c = std::make_unique<PMBM<T, MaxComponents>>();
-        c->prob_detection_ = prob_detection_;
-        c->prob_survive_ = prob_survive_;
-        c->clutter_rate_ = clutter_rate_;
-        c->clutter_density_ = clutter_density_;
-        if (filter_) c->filter_ = filter_->clone();
+        c->hypotheses_.clear();
+        c->prob_detection_ = this->prob_detection_;
+        c->prob_survive_ = this->prob_survive_;
+        c->clutter_rate_ = this->clutter_rate_;
+        c->clutter_density_ = this->clutter_density_;
+        if (this->filter_) c->filter_ = this->filter_->clone();
         if (poisson_intensity_) c->poisson_intensity_ = poisson_intensity_->clone();
         if (birth_model_) c->birth_model_ = birth_model_->clone();
-        for (const auto& b : bernoullis_)
-            c->bernoullis_.push_back(b->clone());
-        c->global_hypotheses_ = global_hypotheses_;
+        for (const auto& t : this->track_tab_) c->track_tab_.push_back(t->clone());
+        c->hypotheses_ = this->hypotheses_;
         c->prune_poisson_threshold_ = prune_poisson_threshold_;
         c->merge_poisson_threshold_ = merge_poisson_threshold_;
         c->max_poisson_components_ = max_poisson_components_;
-        c->prune_threshold_hyp_ = prune_threshold_hyp_;
-        c->prune_threshold_bern_ = prune_threshold_bern_;
+        c->prune_threshold_hyp_ = this->prune_threshold_hyp_;
+        c->prune_threshold_bern_ = this->prune_threshold_bern_;
         c->recycle_threshold_ = recycle_threshold_;
-        c->max_hypotheses_ = max_hypotheses_;
-        c->extract_threshold_ = extract_threshold_;
-        c->gate_threshold_ = gate_threshold_;
-        c->k_best_ = k_best_;
-        c->next_track_id_ = next_track_id_;
-        c->is_extended_ = is_extended_;
-        if (cluster_obj_) c->cluster_obj_ = cluster_obj_;
-        c->track_histories_ = track_histories_;
-        c->cardinality_pmf_ = cardinality_pmf_;
-        c->estimated_cardinality_ = estimated_cardinality_;
+        c->max_hypotheses_ = this->max_hypotheses_;
+        c->extract_threshold_ = this->extract_threshold_;
+        c->gate_threshold_ = this->gate_threshold_;
+        c->gating_on_ = this->gating_on_;
+        c->k_best_ = this->k_best_;
+        c->next_track_id_ = this->next_track_id_;
+        c->is_extended_ = this->is_extended_;
+        if (this->cluster_obj_) c->cluster_obj_ = this->cluster_obj_;
+        for (const auto& e : this->extracted_hists_) {
+            auto ne = std::make_unique<typename Base::ExtractedTrack>();
+            ne->id = e->id;
+            ne->b_time_index = e->b_time_index;
+            ne->meas_assoc_hist = e->meas_assoc_hist;
+            ne->states.reserve(e->states.size());
+            for (const auto& s : e->states) ne->states.push_back(s->clone_typed());
+            c->extracted_hists_.push_back(std::move(ne));
+        }
+        for (const auto& m : this->extracted_mixtures_) c->extracted_mixtures_.push_back(m->clone());
+        c->cardinality_pmf_ = this->cardinality_pmf_;
+        c->estimated_cardinality_ = this->estimated_cardinality_;
+        c->time_index_cntr_ = this->time_index_cntr_;
         return c;
     }
 
     // ---- Configuration ----
 
-    void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
-        filter_ = std::move(filter);
-    }
-
-    /// Set the Poisson birth model (added to Poisson intensity each predict step).
-    void set_birth_model(std::unique_ptr<models::Mixture<T, MaxComponents>> birth) {
+    /// Poisson birth intensity added to the Poisson intensity each predict step.
+    void set_birth_model(MixturePtr birth) {
         if (birth && !birth->empty()) {
-            is_extended_ = birth->component(0).is_extended();
-            if (is_extended_ && !cluster_obj_) {
-                cluster_obj_ = std::make_shared<clustering::DBSCAN>();
+            this->is_extended_ = birth->component(0).is_extended();
+            if (this->is_extended_ && !this->cluster_obj_) {
+                this->cluster_obj_ = std::make_shared<clustering::DBSCAN>();
             }
         }
         birth_model_ = std::move(birth);
     }
 
-    /// Set the initial Poisson intensity (undetected targets).
-    void set_poisson_intensity(std::unique_ptr<models::Mixture<T, MaxComponents>> intensity) {
+    /// Initial Poisson intensity (undetected targets).
+    void set_poisson_intensity(MixturePtr intensity) {
         poisson_intensity_ = std::move(intensity);
     }
 
     void set_prune_poisson_threshold(double t) { prune_poisson_threshold_ = t; }
     void set_merge_poisson_threshold(double t) { merge_poisson_threshold_ = t; }
     void set_max_poisson_components(int n) { max_poisson_components_ = n; }
-    void set_prune_threshold_hypothesis(double t) { prune_threshold_hyp_ = t; }
-    void set_prune_threshold_bernoulli(double t) { prune_threshold_bern_ = t; }
     void set_recycle_threshold(double t) { recycle_threshold_ = t; }
-    void set_max_hypotheses(int n) { max_hypotheses_ = n; }
-    void set_extract_threshold(double t) { extract_threshold_ = t; }
-    void set_gate_threshold(double t) { gate_threshold_ = t; }
-    void set_k_best(int k) { k_best_ = k; }
-    void set_extended_target(bool ext) { is_extended_ = ext; }
-    void set_cluster_object(std::shared_ptr<clustering::DBSCAN> obj) {
-        cluster_obj_ = std::move(obj);
-    }
 
     // ---- Accessors ----
 
@@ -118,565 +112,281 @@ public:
         return *poisson_intensity_;
     }
 
-    [[nodiscard]] const std::vector<GlobalHypothesis_>& global_hypotheses() const {
-        return global_hypotheses_;
-    }
-
-    [[nodiscard]] const std::vector<std::unique_ptr<models::Mixture<T, MaxComponents>>>& extracted_mixtures() const {
-        return extracted_mixtures_;
-    }
-
-    [[nodiscard]] int num_tracks() const {
-        return static_cast<int>(bernoullis_.size());
-    }
-
-    /// Per-track state history: maps track ID -> vector of state means over time.
-    [[nodiscard]] const std::map<int, std::vector<Eigen::VectorXd>>& track_histories() const {
-        return track_histories_;
-    }
-
-    /// Estimated cardinality (mean of cardinality PMF).
-    [[nodiscard]] double estimated_cardinality() const {
-        return estimated_cardinality_;
-    }
-
-    /// Cardinality probability mass function.
-    [[nodiscard]] const Eigen::VectorXd& cardinality() const {
-        return cardinality_pmf_;
-    }
-
     // ---- RFS interface ----
 
     void predict(int /*timestep*/, double dt) override {
-        if (!filter_) return;
+        if (!this->filter_) return;
 
-        // --- Poisson intensity prediction (same as PHD) ---
+        // Poisson prediction (weight *= ps, each component predicted).
         if (poisson_intensity_) {
             for (std::size_t k = 0; k < poisson_intensity_->size(); ++k) {
-                poisson_intensity_->weights()(static_cast<Eigen::Index>(k)) *= prob_survive_;
-                auto predicted = filter_->predict(dt, poisson_intensity_->component(k));
-                *poisson_intensity_->components()[k] = std::move(predicted);
+                poisson_intensity_->weights()(static_cast<Eigen::Index>(k)) *= this->prob_survive_;
+                poisson_intensity_->component(k) =
+                    this->filter_->predict(dt, poisson_intensity_->component(k));
             }
-
-            // Add birth to Poisson intensity
+            // Birth adds to Poisson intensity.
             if (birth_model_) {
-                auto birth_copy = birth_model_->clone();
-                poisson_intensity_->add_components(*birth_copy);
-
+                poisson_intensity_->add_components(*birth_model_);
             }
         }
 
-        // --- MBM Bernoulli prediction ---
-        for (auto& bern : bernoullis_) {
-            if (!bern->has_distribution()) continue;
-            bern->set_existence_probability(bern->existence_probability() * prob_survive_);
-            auto predicted = filter_->predict(dt, bern->distribution());
-            bern->set_distribution(predicted.clone_typed());
-        }
-
-        // Initialize a single empty hypothesis if none exist
-        if (global_hypotheses_.empty()) {
-            GlobalHypothesis_ h;
-            h.log_weight = 0.0;
-            global_hypotheses_.push_back(std::move(h));
+        // Existing tracks: predict the latest mixture and append to history.
+        for (auto& trk : this->track_tab_) {
+            trk->existence_probability *= this->prob_survive_;
+            trk->mixture_hist.push_back(
+                this->predict_mixture(trk->current_mixture(), dt));
         }
     }
 
     void correct(const Eigen::MatrixXd& measurements) override {
-        if (!filter_ || !poisson_intensity_) return;
+        if (!this->filter_ || !poisson_intensity_) return;
 
-        // Build measurement groups
-        std::vector<Eigen::MatrixXd> meas_groups;
-        if (is_extended_ && cluster_obj_) {
-            meas_groups = cluster_obj_->cluster(measurements);
-        } else {
-            for (int j = 0; j < measurements.cols(); ++j) {
-                meas_groups.push_back(measurements.col(j));
-            }
-        }
-
+        auto meas_groups = this->group_measurements(measurements);
         const int m = static_cast<int>(meas_groups.size());
-        const double kappa_base = clutter_rate_ * clutter_density_;
+        const double kappa_base = this->clutter_rate_ * this->clutter_density_;
+        auto kappa_vec = Base::compute_kappa_vec(meas_groups, kappa_base);
 
-        // Pre-compute per-cluster clutter term: for a cluster of W measurements,
-        // the clutter likelihood is the product of independent clutter intensities.
-        std::vector<double> kappa_vec(m);
-        for (int j = 0; j < m; ++j) {
-            const int W = static_cast<int>(meas_groups[j].cols());
-            kappa_vec[j] = (W > 1) ? std::pow(kappa_base, W) : kappa_base;
-        }
-
-        // --- Create new Bernoulli tracks from Poisson for each measurement ---
-        // For each measurement, compute the likelihood against all Poisson components
-        // and create a new Bernoulli representing "first detection from undetected pool"
-        struct NewTrack {
-            std::unique_ptr<models::Bernoulli<T>> bernoulli;
-            double log_likelihood = 0.0; // log of total detection weight from Poisson
+        // Per-measurement Poisson spawn: corrected mixture and total likelihood weight.
+        struct SpawnCandidate {
+            MixturePtr mixture;       // normalized spatial mixture after update
+            double total_weight = 0.0; // pd * sum_k w_k * qz_kj
         };
-        std::vector<NewTrack> new_tracks(m);
+        std::vector<SpawnCandidate> spawn(m);
 
         for (int j = 0; j < m; ++j) {
-            const Eigen::MatrixXd& meas = meas_groups[j];
-            Eigen::VectorXd z_gate = (is_extended_ && meas.cols() > 1)
-                ? Eigen::VectorXd(meas.rowwise().mean())
-                : Eigen::VectorXd(meas.col(0));
+            auto meas_flat = Base::flatten_measurement(meas_groups[j]);
+            Eigen::VectorXd z_gate = Base::gate_center(meas_groups[j], this->is_extended_);
 
-            Eigen::VectorXd meas_flat;
-            if (meas.cols() > 1) {
-                meas_flat.resize(meas.size());
-                for (int c = 0; c < meas.cols(); ++c)
-                    meas_flat.segment(c * meas.rows(), meas.rows()) = meas.col(c);
-            } else {
-                meas_flat = meas.col(0);
-            }
-
-            // Accumulate corrected distributions weighted by Poisson weights
-            double total_weight = 0.0;
-            std::unique_ptr<T> best_dist;
-            double best_weight = -1.0;
-
+            auto mix = std::make_unique<models::Mixture<T, MaxComponents>>();
+            std::vector<double> new_w;
+            double total_w = 0.0;
             for (std::size_t k = 0; k < poisson_intensity_->size(); ++k) {
-                double gate_val = filter_->gate(z_gate, poisson_intensity_->component(k));
-                if (gate_val < gate_threshold_) {
-                    auto [dist, qz] = filter_->correct(meas_flat, poisson_intensity_->component(k));
-                    double w = prob_detection_ * poisson_intensity_->weight(k) * qz;
-                    total_weight += w;
-                    if (w > best_weight) {
-                        best_weight = w;
-                        best_dist = dist.clone_typed();
-                    }
+                if (this->gating_on_ &&
+                    this->filter_->gate(z_gate, poisson_intensity_->component(k))
+                        >= this->gate_threshold_) continue;
+                auto [dist, qz] = this->filter_->correct(meas_flat,
+                    poisson_intensity_->component(k));
+                double w = this->prob_detection_ * poisson_intensity_->weight(k) * qz;
+                if (w <= 0.0) continue;
+                mix->add_component(dist.clone_typed(), w);
+                new_w.push_back(w);
+                total_w += w;
+            }
+            if (total_w > 0.0) {
+                for (std::size_t c = 0; c < mix->size(); ++c) {
+                    mix->weights()(static_cast<Eigen::Index>(c)) = new_w[c] / total_w;
                 }
-            }
-
-            const double kappa_j = kappa_vec[j];
-            if (total_weight > 0.0 && best_dist) {
-                // Existence probability for new Bernoulli from Poisson
-                double r_new = total_weight / (kappa_j + total_weight);
-                auto bern = std::make_unique<models::Bernoulli<T>>(
-                    r_new, std::move(best_dist), next_track_id_++);
-                new_tracks[j].bernoulli = std::move(bern);
-                new_tracks[j].log_likelihood = std::log(kappa_j + total_weight);
-            } else {
-                new_tracks[j].log_likelihood = std::log(std::max(kappa_j, 1e-300));
+                spawn[j].mixture = std::move(mix);
+                spawn[j].total_weight = total_w;
             }
         }
 
-        // --- Scale Poisson intensity by (1 - p_D) for undetected ---
-        for (std::size_t k = 0; k < poisson_intensity_->size(); ++k) {
-            poisson_intensity_->weights()(static_cast<Eigen::Index>(k)) *= (1.0 - prob_detection_);
+        // Remaining Poisson becomes undetected contribution.
+        auto undetected = poisson_intensity_->clone();
+        for (std::size_t k = 0; k < undetected->size(); ++k) {
+            undetected->weights()(static_cast<Eigen::Index>(k)) *= (1.0 - this->prob_detection_);
         }
 
-        // --- MBM update: for each hypothesis, build cost matrix including existing
-        //     Bernoullis and new tracks from Poisson ---
-        std::vector<GlobalHypothesis_> new_hypotheses;
+        // ---- Augmented Murty per parent hypothesis ----
+        std::vector<Hypothesis> new_hyps;
 
-        for (const auto& hyp : global_hypotheses_) {
-            const int n_bern = static_cast<int>(hyp.bernoulli_indices.size());
+        for (const auto& hyp : this->hypotheses_) {
+            const int nt = static_cast<int>(hyp.num_tracks());
 
             if (m == 0) {
-                // No measurements: missed detection for all Bernoullis
-                GlobalHypothesis_ new_hyp;
-                new_hyp.log_weight = hyp.log_weight;
-                for (int i = 0; i < n_bern; ++i) {
-                    std::size_t orig_idx = hyp.bernoulli_indices[i];
-                    const auto& orig = *bernoullis_[orig_idx];
-                    double r = orig.existence_probability();
-                    double r_new = r * (1.0 - prob_detection_) / (1.0 - r * prob_detection_);
-                    auto nb = std::make_unique<models::Bernoulli<T>>(
-                        r_new, orig.distribution().clone_typed(), orig.id());
-                    std::size_t new_idx = bernoullis_.size();
-                    bernoullis_.push_back(std::move(nb));
-                    new_hyp.bernoulli_indices.push_back(new_idx);
+                // No measurements: all tracks get missed-detection update.
+                Hypothesis h;
+                h.log_weight = hyp.log_weight;
+                for (int i = 0; i < nt; ++i) {
+                    std::size_t orig_idx = hyp.track_indices[i];
+                    const auto& orig = *this->track_tab_[orig_idx];
+                    double r = orig.existence_probability;
+                    double r_new = r * (1.0 - this->prob_detection_)
+                                 / std::max(1.0 - r * this->prob_detection_,
+                                            std::numeric_limits<double>::min());
+                    auto child = orig.clone();
+                    child->existence_probability = r_new;
+                    child->meas_assoc_hist.push_back(-1);
+                    std::size_t new_idx = this->track_tab_.size();
+                    this->track_tab_.push_back(std::move(child));
+                    h.track_indices.push_back(new_idx);
                 }
-                new_hypotheses.push_back(std::move(new_hyp));
+                new_hyps.push_back(std::move(h));
                 continue;
             }
 
-            // Cost matrix: n_bern rows x (m + n_bern) cols
-            // Rows = existing Bernoullis
-            // Cols 0..m-1 = measurement associations
-            // Cols m..m+n_bern-1 = missed detection (diagonal)
-            const int n_cols = m + n_bern;
-            Eigen::MatrixXd cost = Eigen::MatrixXd::Constant(
-                n_bern, n_cols, std::numeric_limits<double>::infinity());
+            // Cost matrix layout:
+            //   rows [0, nt):     existing tracks
+            //   rows [nt, nt+m):  Poisson-spawn rows, one per measurement
+            //   cols [0, m):      measurement j
+            //   cols [m, m+nt+m): per-row miss diagonal
+            const int n_rows = nt + m;
+            const int n_cols = m + n_rows;
+            Eigen::MatrixXd cost = Eigen::MatrixXd::Constant(n_rows, n_cols,
+                std::numeric_limits<double>::infinity());
 
-            struct CorrectionCache {
-                std::unique_ptr<T> dist;
-                double likelihood = 0.0;
-            };
-            std::vector<std::vector<CorrectionCache>> cache(n_bern);
-            for (int i = 0; i < n_bern; ++i) cache[i].resize(m);
+            struct Cache { MixturePtr mix; double likelihood = 0.0; };
+            std::vector<std::vector<Cache>> cache(nt);
+            for (int i = 0; i < nt; ++i) cache[i].resize(m);
 
-            for (int i = 0; i < n_bern; ++i) {
-                const auto& bern = *bernoullis_[hyp.bernoulli_indices[i]];
-                double r = bern.existence_probability();
-                if (!bern.has_distribution() || r <= 0.0) continue;
+            // Existing track rows
+            for (int i = 0; i < nt; ++i) {
+                const auto& trk = *this->track_tab_[hyp.track_indices[i]];
+                double r = trk.existence_probability;
+                if (trk.mixture_hist.empty() || r <= 0.0) continue;
 
                 for (int j = 0; j < m; ++j) {
-                    const Eigen::MatrixXd& meas = meas_groups[j];
-                    Eigen::VectorXd z_gate = (is_extended_ && meas.cols() > 1)
-                        ? Eigen::VectorXd(meas.rowwise().mean())
-                        : Eigen::VectorXd(meas.col(0));
+                    Eigen::VectorXd z_gate = Base::gate_center(meas_groups[j], this->is_extended_);
+                    if (this->gating_on_ && !this->passes_gate(trk, z_gate)) continue;
+                    auto meas_flat = Base::flatten_measurement(meas_groups[j]);
+                    auto [corrected, qz] = this->correct_mixture(trk.current_mixture(), meas_flat);
+                    cache[i][j].mix = std::move(corrected);
+                    cache[i][j].likelihood = qz;
 
-                    if (filter_->gate(z_gate, bern.distribution()) < gate_threshold_) {
-                        Eigen::VectorXd meas_flat;
-                        if (meas.cols() > 1) {
-                            meas_flat.resize(meas.size());
-                            for (int c = 0; c < meas.cols(); ++c)
-                                meas_flat.segment(c * meas.rows(), meas.rows()) = meas.col(c);
-                        } else {
-                            meas_flat = meas.col(0);
-                        }
-
-                        auto [dist, qz] = filter_->correct(meas_flat, bern.distribution());
-                        cache[i][j].dist = dist.clone_typed();
-                        cache[i][j].likelihood = qz;
-
-                        double det_likelihood = prob_detection_ * r * qz;
-                        if (det_likelihood > 0.0 && kappa_vec[j] > 0.0) {
-                            cost(i, j) = -std::log(det_likelihood / kappa_vec[j]);
-                        }
+                    double det = this->prob_detection_ * r * qz;
+                    if (det > 0.0 && kappa_vec[j] > 0.0) {
+                        cost(i, j) = -std::log(det / kappa_vec[j]);
                     }
                 }
 
-                // Missed detection
-                double miss_factor = 1.0 - prob_detection_ * r;
-                if (miss_factor > 0.0) {
-                    cost(i, m + i) = -std::log(miss_factor);
+                double miss = 1.0 - this->prob_detection_ * r;
+                if (miss > 0.0) cost(i, m + i) = -std::log(miss);
+            }
+
+            // Poisson-spawn rows
+            for (int p = 0; p < m; ++p) {
+                int row = nt + p;
+                if (spawn[p].total_weight > 0.0 && kappa_vec[p] > 0.0) {
+                    cost(row, p) = -std::log(spawn[p].total_weight / kappa_vec[p]);
                 }
-                // else: leave at infinity — missing a certainly-detected target is forbidden
+                // Spawn "miss" (no new track spawned) is free -- clutter baseline covers it.
+                cost(row, m + row) = 0.0;
             }
 
-            // Solve K-best assignments
-            auto solutions = (n_bern > 0) ? assignment::murty(cost, k_best_)
-                                           : std::vector<assignment::AssignmentResult>{};
-
-            // If no Bernoullis, create a single "all missed" solution
-            if (n_bern == 0) {
-                assignment::AssignmentResult empty_sol;
-                empty_sol.total_cost = 0.0;
-                solutions.push_back(empty_sol);
-            }
+            auto solutions = assignment::murty(cost, this->k_best_);
 
             for (const auto& sol : solutions) {
-                GlobalHypothesis_ new_hyp;
+                Hypothesis new_hyp;
                 new_hyp.log_weight = hyp.log_weight - sol.total_cost;
 
-                // Determine Bernoulli-to-measurement mapping
-                std::vector<int> bern_to_meas(n_bern, -1);
-                std::vector<bool> meas_assigned(m, false);
+                std::vector<int> assign(n_rows, -1);
                 for (const auto& [row, col] : sol.assignments) {
-                    if (row < n_bern && col < m) {
-                        bern_to_meas[row] = col;
-                        meas_assigned[col] = true;
-                    }
+                    if (row < n_rows && col < m) assign[row] = col;
                 }
 
-                // Update existing Bernoullis
-                for (int i = 0; i < n_bern; ++i) {
-                    std::size_t orig_idx = hyp.bernoulli_indices[i];
-                    const auto& orig = *bernoullis_[orig_idx];
-                    double r = orig.existence_probability();
-
-                    if (bern_to_meas[i] >= 0) {
-                        int j = bern_to_meas[i];
-                        auto nb = std::make_unique<models::Bernoulli<T>>(
-                            1.0, cache[i][j].dist->clone_typed(), orig.id());
-                        std::size_t new_idx = bernoullis_.size();
-                        bernoullis_.push_back(std::move(nb));
-                        new_hyp.bernoulli_indices.push_back(new_idx);
+                // Existing tracks: detected or missed.
+                for (int i = 0; i < nt; ++i) {
+                    std::size_t orig_idx = hyp.track_indices[i];
+                    const auto& orig = *this->track_tab_[orig_idx];
+                    auto child = orig.clone();
+                    if (assign[i] >= 0) {
+                        int j = assign[i];
+                        child->mixture_hist.back() = cache[i][j].mix->clone();
+                        child->existence_probability = 1.0;
+                        child->meas_assoc_hist.push_back(j);
                     } else {
-                        double r_new = r * (1.0 - prob_detection_) / (1.0 - r * prob_detection_);
-                        auto nb = std::make_unique<models::Bernoulli<T>>(
-                            r_new, orig.distribution().clone_typed(), orig.id());
-                        std::size_t new_idx = bernoullis_.size();
-                        bernoullis_.push_back(std::move(nb));
-                        new_hyp.bernoulli_indices.push_back(new_idx);
+                        double r = orig.existence_probability;
+                        child->existence_probability =
+                            r * (1.0 - this->prob_detection_)
+                            / std::max(1.0 - r * this->prob_detection_,
+                                       std::numeric_limits<double>::min());
+                        child->meas_assoc_hist.push_back(-1);
                     }
+                    std::size_t new_idx = this->track_tab_.size();
+                    this->track_tab_.push_back(std::move(child));
+                    new_hyp.track_indices.push_back(new_idx);
                 }
 
-                // Unassigned measurements: spawn new Bernoulli from Poisson
-                for (int j = 0; j < m; ++j) {
-                    if (!meas_assigned[j] && new_tracks[j].bernoulli) {
-                        auto nb = new_tracks[j].bernoulli->clone();
-                        std::size_t new_idx = bernoullis_.size();
-                        bernoullis_.push_back(std::move(nb));
-                        new_hyp.bernoulli_indices.push_back(new_idx);
-                    }
-                    // Add log-likelihood ratio vs clutter baseline
-                    if (!meas_assigned[j]) {
-                        new_hyp.log_weight += new_tracks[j].log_likelihood
-                                              - std::log(kappa_vec[j]);
-                    }
+                // Poisson-spawn rows that fired: new Bernoulli tracks.
+                for (int p = 0; p < m; ++p) {
+                    int row = nt + p;
+                    if (assign[row] < 0) continue;  // spawn did not fire
+                    if (!spawn[p].mixture) continue;
+
+                    // Existence conditioned on "target vs clutter" for this measurement.
+                    double r_new = spawn[p].total_weight
+                                 / (kappa_vec[p] + spawn[p].total_weight);
+
+                    auto child = std::make_unique<TrackEntry>();
+                    child->id = this->next_track_id_++;
+                    child->birth_time_index = this->time_index_cntr_;
+                    child->existence_probability = r_new;
+                    child->mixture_hist.push_back(spawn[p].mixture->clone());
+                    child->meas_assoc_hist.push_back(p);
+                    std::size_t new_idx = this->track_tab_.size();
+                    this->track_tab_.push_back(std::move(child));
+                    new_hyp.track_indices.push_back(new_idx);
                 }
 
-                new_hypotheses.push_back(std::move(new_hyp));
+                new_hyps.push_back(std::move(new_hyp));
             }
         }
 
-        global_hypotheses_ = std::move(new_hypotheses);
+        this->hypotheses_ = std::move(new_hyps);
+        poisson_intensity_ = std::move(undetected);
     }
 
     void cleanup() override {
-        // --- Poisson cleanup ---
+        // Poisson cleanup.
         if (poisson_intensity_) {
             fusion::prune(*poisson_intensity_, prune_poisson_threshold_);
             fusion::merge(*poisson_intensity_, merge_poisson_threshold_);
-            fusion::cap(*poisson_intensity_, static_cast<std::size_t>(max_poisson_components_));
+            fusion::cap(*poisson_intensity_,
+                        static_cast<std::size_t>(max_poisson_components_));
         }
 
-        // --- Hypothesis cleanup ---
-        normalize_log_weights();
-        prune_hypotheses();
-        cap_hypotheses();
-
-        // Prune low-existence Bernoullis and recycle to Poisson.
-        // Track recycled indices to avoid double-counting across hypotheses.
-        std::vector<bool> recycled(bernoullis_.size(), false);
-        for (auto& hyp : global_hypotheses_) {
-            std::vector<std::size_t> kept;
-            for (auto idx : hyp.bernoulli_indices) {
-                double r = bernoullis_[idx]->existence_probability();
-                if (r >= prune_threshold_bern_) {
-                    if (r < recycle_threshold_ && poisson_intensity_ &&
-                        bernoullis_[idx]->has_distribution()) {
-                        // Recycle: add back to Poisson intensity (only once per Bernoulli)
-                        if (!recycled[idx]) {
-                            recycled[idx] = true;
-                            poisson_intensity_->add_component(
-                                bernoullis_[idx]->distribution().clone_typed(), r);
-                        }
-                    } else {
-                        kept.push_back(idx);
-                    }
-                }
-            }
-            hyp.bernoulli_indices = std::move(kept);
-        }
-
-        // Compact Bernoulli table to reclaim memory from unreferenced entries
-        compact_bernoulli_table();
-
-        normalize_log_weights();
-
-        // Compute cardinality distribution
-        compute_cardinality();
-
-        // Record track state ancestry before extraction
-        record_track_states();
-
-        // Extract and store
-        extracted_mixtures_.push_back(extract());
-    }
-
-    /// Extract state estimates from the best global hypothesis.
-    [[nodiscard]] std::unique_ptr<models::Mixture<T, MaxComponents>> extract() const {
-        auto result = std::make_unique<models::Mixture<T, MaxComponents>>();
-
-        if (global_hypotheses_.empty()) return result;
-
-        int best_idx = 0;
-        for (int i = 1; i < static_cast<int>(global_hypotheses_.size()); ++i) {
-            if (global_hypotheses_[i].log_weight > global_hypotheses_[best_idx].log_weight)
-                best_idx = i;
-        }
-
-        const auto& best = global_hypotheses_[best_idx];
-        for (auto idx : best.bernoulli_indices) {
-            const auto& bern = *bernoullis_[idx];
-            if (bern.existence_probability() >= extract_threshold_ && bern.has_distribution()) {
-                result->add_component(
-                    bern.distribution().clone_typed(),
-                    bern.existence_probability());
-            }
-        }
-
-        return result;
+        this->normalize_log_weights();
+        this->prune_hypotheses();
+        this->cap_hypotheses();
+        recycle_low_existence_to_poisson();
+        this->compact_track_table();
+        this->normalize_log_weights();
+        this->compute_cardinality();
+        this->extract_states();
+        this->push_extracted_snapshot();
+        ++this->time_index_cntr_;
     }
 
 private:
-    /// Compute cardinality PMF from component weights and label set sizes.
-    void compute_cardinality() {
-        if (global_hypotheses_.empty()) {
-            cardinality_pmf_ = Eigen::VectorXd::Zero(1);
-            estimated_cardinality_ = 0.0;
-            return;
-        }
-
-        // Find max cardinality across all hypotheses
-        int max_card = 0;
-        for (const auto& hyp : global_hypotheses_) {
-            int card = 0;
-            for (auto idx : hyp.bernoulli_indices) {
-                if (bernoullis_[idx]->existence_probability() >= extract_threshold_) {
-                    card++;
-                }
-            }
-            max_card = std::max(max_card, card);
-        }
-
-        cardinality_pmf_ = Eigen::VectorXd::Zero(max_card + 1);
-
-        for (const auto& hyp : global_hypotheses_) {
-            double w = std::exp(hyp.log_weight);
-            int card = 0;
-            for (auto idx : hyp.bernoulli_indices) {
-                if (bernoullis_[idx]->existence_probability() >= extract_threshold_) {
-                    card++;
-                }
-            }
-            cardinality_pmf_(card) += w;
-        }
-
-        // Normalize
-        double sum = cardinality_pmf_.sum();
-        if (sum > 0.0) cardinality_pmf_ /= sum;
-
-        // Compute mean
-        estimated_cardinality_ = 0.0;
-        for (int n = 0; n < cardinality_pmf_.size(); ++n) {
-            estimated_cardinality_ += n * cardinality_pmf_(n);
-        }
-    }
-
-    /// Remove unreferenced Bernoulli entries and remap hypothesis indices.
-    void compact_bernoulli_table() {
-        std::vector<bool> referenced(bernoullis_.size(), false);
-        for (const auto& hyp : global_hypotheses_) {
-            for (auto idx : hyp.bernoulli_indices) {
-                referenced[idx] = true;
-            }
-        }
-
-        std::vector<std::size_t> new_index(bernoullis_.size(), 0);
-        std::vector<std::unique_ptr<models::Bernoulli<T>>> compacted;
-        for (std::size_t i = 0; i < bernoullis_.size(); ++i) {
-            if (referenced[i]) {
-                new_index[i] = compacted.size();
-                compacted.push_back(std::move(bernoullis_[i]));
-            }
-        }
-
-        for (auto& hyp : global_hypotheses_) {
-            for (auto& idx : hyp.bernoulli_indices) {
-                idx = new_index[idx];
-            }
-        }
-
-        bernoullis_ = std::move(compacted);
-    }
-
-    void normalize_log_weights() {
-        if (global_hypotheses_.empty()) return;
-        double max_lw = global_hypotheses_[0].log_weight;
-        for (const auto& h : global_hypotheses_)
-            max_lw = std::max(max_lw, h.log_weight);
-        double sum_exp = 0.0;
-        for (auto& h : global_hypotheses_)
-            sum_exp += std::exp(h.log_weight - max_lw);
-        double log_norm = max_lw + std::log(sum_exp);
-        for (auto& h : global_hypotheses_)
-            h.log_weight -= log_norm;
-    }
-
-    void prune_hypotheses() {
-        double log_thresh = std::log(prune_threshold_hyp_);
-        std::vector<GlobalHypothesis_> kept;
-        for (auto& h : global_hypotheses_) {
-            if (h.log_weight >= log_thresh)
-                kept.push_back(std::move(h));
-        }
-        if (kept.empty() && !global_hypotheses_.empty()) {
-            auto best = std::max_element(global_hypotheses_.begin(), global_hypotheses_.end(),
-                [](const auto& a, const auto& b) { return a.log_weight < b.log_weight; });
-            kept.push_back(std::move(*best));
-        }
-        global_hypotheses_ = std::move(kept);
-    }
-
-    void cap_hypotheses() {
-        if (static_cast<int>(global_hypotheses_.size()) <= max_hypotheses_) return;
-        std::sort(global_hypotheses_.begin(), global_hypotheses_.end(),
-            [](const auto& a, const auto& b) { return a.log_weight > b.log_weight; });
-        global_hypotheses_.resize(max_hypotheses_);
-    }
-
-    // SFINAE trait for trajectory-type distributions
-    template <typename U, typename = void>
-    struct has_get_last_state_ : std::false_type {};
-
-    template <typename U>
-    struct has_get_last_state_<U,
-        std::void_t<decltype(std::declval<const U&>().get_last_state())>
-    > : std::true_type {};
-
-    template <typename U>
-    static Eigen::VectorXd get_track_state(const U& dist) {
-        if constexpr (has_get_last_state_<U>::value) {
-            return dist.get_last_state();
-        } else {
-            return dist.mean();
-        }
-    }
-
-    /// Record MMSE state of each track into history.
-    void record_track_states() {
-        if (global_hypotheses_.empty()) return;
-
-        std::map<int, std::pair<Eigen::VectorXd, double>> accum;
-        for (const auto& hyp : global_hypotheses_) {
-            double w = std::exp(hyp.log_weight);
-            for (auto idx : hyp.bernoulli_indices) {
-                const auto& bern = *bernoullis_[idx];
-                if (bern.existence_probability() >= extract_threshold_ && bern.has_distribution()) {
-                    Eigen::VectorXd state = get_track_state(bern.distribution());
-                    auto it = accum.find(bern.id());
-                    if (it == accum.end()) {
-                        accum[bern.id()] = {w * state, w};
-                    } else {
-                        it->second.first += w * state;
-                        it->second.second += w;
+    /// Recycle tracks whose existence is between prune_threshold and recycle_threshold
+    /// back into the Poisson intensity. Above recycle_threshold: keep as Bernoulli.
+    /// Below prune_threshold: drop entirely.
+    void recycle_low_existence_to_poisson() {
+        std::vector<bool> recycled(this->track_tab_.size(), false);
+        for (auto& hyp : this->hypotheses_) {
+            std::vector<std::size_t> kept;
+            kept.reserve(hyp.track_indices.size());
+            for (auto idx : hyp.track_indices) {
+                double r = this->track_tab_[idx]->existence_probability;
+                if (r < this->prune_threshold_bern_) continue;
+                if (r < recycle_threshold_ && poisson_intensity_
+                    && !recycled[idx]
+                    && !this->track_tab_[idx]->mixture_hist.empty())
+                {
+                    recycled[idx] = true;
+                    const auto& last_mix = this->track_tab_[idx]->current_mixture();
+                    for (std::size_t c = 0; c < last_mix.size(); ++c) {
+                        poisson_intensity_->add_component(
+                            last_mix.component(c).clone_typed(),
+                            r * last_mix.weight(c));
                     }
+                    continue;
                 }
+                kept.push_back(idx);
             }
-        }
-
-        for (const auto& [tid, ws] : accum) {
-            track_histories_[tid].push_back(ws.first / ws.second);
+            hyp.track_indices = std::move(kept);
         }
     }
 
-    std::unique_ptr<filters::Filter<T>> filter_;
+    // ---- Members ----
 
-    // Poisson component (undetected targets)
     std::unique_ptr<models::Mixture<T, MaxComponents>> poisson_intensity_;
     std::unique_ptr<models::Mixture<T, MaxComponents>> birth_model_;
 
-    // MBM component (detected targets)
-    std::vector<std::unique_ptr<models::Bernoulli<T>>> bernoullis_;
-    std::vector<GlobalHypothesis_> global_hypotheses_;
-
-    // Poisson parameters
     double prune_poisson_threshold_ = 1e-4;
     double merge_poisson_threshold_ = 4.0;
     int max_poisson_components_ = 100;
-
-    // MBM parameters
-    double prune_threshold_hyp_ = 1e-3;
-    double prune_threshold_bern_ = 1e-3;
     double recycle_threshold_ = 0.1;
-    int max_hypotheses_ = 100;
-    double extract_threshold_ = 0.5;
-    double gate_threshold_ = 9.0;
-    int k_best_ = 5;
-    int next_track_id_ = 0;
-
-    bool is_extended_ = false;
-    std::shared_ptr<clustering::DBSCAN> cluster_obj_;
-    std::vector<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
-    std::map<int, std::vector<Eigen::VectorXd>> track_histories_;
-    Eigen::VectorXd cardinality_pmf_;
-    double estimated_cardinality_ = 0.0;
 };
 
-} // namespace brew::multi_target
+}  // namespace brew::multi_target

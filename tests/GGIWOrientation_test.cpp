@@ -48,22 +48,6 @@ TEST_F(GGIWOrientationTracking, Comparison) {
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "GGIWOrientation PMBM should track both extended targets";
 
-    // MB
-    auto mb = test::make_mb<models::GGIWOrientation<>>(
-        test::make_ggiw_orientation_ekf(scenario), test::make_ggiw_orientation_birth(0.1), params);
-    auto mb_result = test::run_tracking<decltype(mb), models::GGIWOrientation<>>(
-        mb, scenario, "GGIWOrientation MB Tracking", 10.0, 5);
-    EXPECT_GE(mb_result.converged_steps, 10)
-        << "GGIWOrientation MB should track both extended targets";
-
-    // LMB
-    auto lmb = test::make_lmb<models::GGIWOrientation<>>(
-        test::make_ggiw_orientation_ekf(scenario), test::make_ggiw_orientation_birth(0.1), params);
-    auto lmb_result = test::run_tracking<decltype(lmb), models::GGIWOrientation<>>(
-        lmb, scenario, "GGIWOrientation LMB Tracking", 10.0, 5);
-    EXPECT_GE(lmb_result.converged_steps, 10)
-        << "GGIWOrientation LMB should track both extended targets";
-
     // GLMB
     auto glmb = test::make_glmb<models::GGIWOrientation<>>(
         test::make_ggiw_orientation_ekf(scenario), test::make_ggiw_orientation_birth(0.1), params);
@@ -81,32 +65,26 @@ TEST_F(GGIWOrientationTracking, Comparison) {
         << "GGIWOrientation JGLMB should track both extended targets";
 
 #ifdef BREW_ENABLE_PLOTTING
-    // 2x4 comparison figure
+    // 2x3 comparison figure
     auto fig = test::create_comparison_figure();
 
-    auto ax1 = test::comparison_subplot(fig, 2, 4, 0);
+    auto ax1 = test::comparison_subplot(fig, 2, 3, 0);
     test::populate_estimator_axes(ax1, phd, phd_result.plot_data, "PHD");
 
-    auto ax2 = test::comparison_subplot(fig, 2, 4, 1);
+    auto ax2 = test::comparison_subplot(fig, 2, 3, 1);
     test::populate_estimator_axes(ax2, cphd, cphd_result.plot_data, "CPHD");
 
-    auto ax3 = test::comparison_subplot(fig, 2, 4, 2);
+    auto ax3 = test::comparison_subplot(fig, 2, 3, 2);
     test::populate_estimator_axes(ax3, mbm, mbm_result.plot_data, "MBM");
 
-    auto ax4 = test::comparison_subplot(fig, 2, 4, 3);
+    auto ax4 = test::comparison_subplot(fig, 2, 3, 3);
     test::populate_estimator_axes(ax4, pmbm, pmbm_result.plot_data, "PMBM");
 
-    auto ax5 = test::comparison_subplot(fig, 2, 4, 4);
-    test::populate_estimator_axes(ax5, mb, mb_result.plot_data, "MB");
+    auto ax5 = test::comparison_subplot(fig, 2, 3, 4);
+    test::populate_estimator_axes(ax5, glmb, glmb_result.plot_data, "GLMB");
 
-    auto ax6 = test::comparison_subplot(fig, 2, 4, 5);
-    test::populate_estimator_axes(ax6, lmb, lmb_result.plot_data, "LMB");
-
-    auto ax7 = test::comparison_subplot(fig, 2, 4, 6);
-    test::populate_estimator_axes(ax7, glmb, glmb_result.plot_data, "GLMB");
-
-    auto ax8 = test::comparison_subplot(fig, 2, 4, 7);
-    test::populate_estimator_axes(ax8, jglmb, jglmb_result.plot_data, "JGLMB");
+    auto ax6 = test::comparison_subplot(fig, 2, 3, 5);
+    test::populate_estimator_axes(ax6, jglmb, jglmb_result.plot_data, "JGLMB");
 
     brew::plot_utils::save_figure(fig, test::output_dir() + "/ggiw_orientation_comparison.png");
 
