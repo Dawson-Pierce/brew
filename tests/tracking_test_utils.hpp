@@ -518,8 +518,9 @@ inline std::unique_ptr<filters::EKF<>> make_ekf(const ScenarioData& scenario) {
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
-    // EKF uses G * Q * G^T where G is 4x2 for SingleIntegrator(2), so Q must be 2x2
-    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
+    Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+    Eigen::MatrixXd Q_in = 0.5 * Eigen::MatrixXd::Identity(G.cols(), G.cols());
+    ekf->set_process_noise(G * Q_in * G.transpose());
     ekf->set_measurement_noise(
         scenario.meas_std * scenario.meas_std * Eigen::MatrixXd::Identity(2, 2));
 

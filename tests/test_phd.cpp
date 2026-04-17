@@ -15,7 +15,10 @@ TEST(PHD, GaussianPredictCorrectCleanup) {
     H(0, 0) = 1.0;
     H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
-    ekf->set_process_noise(0.1 * Eigen::MatrixXd::Identity(2, 2));
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * (0.1 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
     // Birth model: one component at origin
@@ -63,7 +66,10 @@ TEST(PHD, Clone) {
     auto ekf = std::make_unique<filters::EKF<>>();
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(Eigen::MatrixXd::Identity(2, 2));
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * Eigen::MatrixXd::Identity(G.cols(), G.cols()) * G.transpose());
+    }
     ekf->set_measurement_noise(Eigen::MatrixXd::Identity(2, 2));
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;

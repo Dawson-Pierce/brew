@@ -131,7 +131,10 @@ std::unique_ptr<filters::TmEkf<>> make_tm_ekf(
 {
     auto ekf = std::make_unique<filters::TmEkf<>>();
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * (0.5 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    }
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(3, 3);
     R_meas(0, 0) = 0.5;
     R_meas(1, 1) = 0.5;
@@ -150,7 +153,10 @@ std::unique_ptr<filters::TrajectoryTmEkf<>> make_trajectory_tm_ekf(
 {
     auto ekf = std::make_unique<filters::TrajectoryTmEkf<>>();
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * (0.5 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    }
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(3, 3);
     R_meas(0, 0) = 0.5;
     R_meas(1, 1) = 0.5;
@@ -1159,7 +1165,10 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
 
     auto ekf = std::make_unique<filters::TmEkf<>>();
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(0.50 * Eigen::MatrixXd::Identity(3, 3));
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * (0.50 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    }
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
     R_meas.topLeftCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
     R_meas.bottomRightCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
@@ -1466,7 +1475,10 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
     // PCA wrapping is automatic per template — just set the inner ICP
     auto ekf = std::make_unique<filters::TmEkf<>>();
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(3, 3));
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * (0.5 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    }
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
     R_meas.topLeftCorner(3, 3) = 0.1 * Eigen::Matrix3d::Identity();
     R_meas.bottomRightCorner(3, 3) = 0.1 * Eigen::Matrix3d::Identity();
@@ -1887,7 +1899,10 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     // --- Trajectory TM-EKF ---
     auto ekf = std::make_unique<filters::TrajectoryTmEkf<>>();
     ekf->set_dynamics(dyn);
-    ekf->set_process_noise(0.5 * Eigen::MatrixXd::Identity(3, 3));
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * (0.5 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    }
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
     R_meas.topLeftCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();
     R_meas.bottomRightCorner(3, 3) = 0.01 * Eigen::Matrix3d::Identity();

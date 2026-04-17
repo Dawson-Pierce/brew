@@ -82,7 +82,10 @@ TEST(Serialization, GLMBGaussianSerialize) {
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
-    ekf->set_process_noise(0.1 * Eigen::MatrixXd::Identity(2, 2));
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * (0.1 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
     auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
@@ -121,7 +124,10 @@ TEST(Serialization, PMBMGaussianSerialize) {
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
-    ekf->set_process_noise(0.1 * Eigen::MatrixXd::Identity(2, 2));
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * (0.1 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
     auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();

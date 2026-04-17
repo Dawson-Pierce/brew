@@ -38,11 +38,11 @@ public:
         const Dist& prev) const override {
 
         const auto F = this->dyn_obj_->get_state_mat(dt, prev.mean());
-        const auto G = this->dyn_obj_->get_input_mat(dt, prev.mean());
+        // const auto G = this->dyn_obj_->get_input_mat(dt, prev.mean());
 
         Eigen::VectorXd predicted_mean = this->dyn_obj_->propagate_state(dt, prev.mean());
         Eigen::MatrixXd predicted_cov = F * prev.covariance() * F.transpose()
-                                        + G * this->process_noise_ * G.transpose();
+                                        + this->process_noise_;
 
         return Dist(std::move(predicted_mean), std::move(predicted_cov));
     }

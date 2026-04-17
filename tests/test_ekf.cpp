@@ -11,8 +11,9 @@ TEST(EKFTest, PredictStep) {
     EKF<> ekf;
     ekf.set_dynamics(dyn);
 
-    Eigen::MatrixXd Q = Eigen::MatrixXd::Identity(2, 2) * 0.01;
-    ekf.set_process_noise(Q);
+    Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+    Eigen::MatrixXd Q_in = 0.01 * Eigen::MatrixXd::Identity(G.cols(), G.cols());
+    ekf.set_process_noise(G * Q_in * G.transpose());
 
     Eigen::VectorXd mean(4);
     mean << 0, 0, 1, 1;

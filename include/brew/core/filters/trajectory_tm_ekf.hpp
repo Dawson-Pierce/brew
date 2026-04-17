@@ -66,11 +66,11 @@ public:
         if (prev_tp.has_rotation()) {
             next_state = this->dyn_obj_->propagate_state(dt, prev_last_state, prev_tp.rotation());
             F = this->dyn_obj_->get_state_mat(dt, prev_last_state, prev_tp.rotation());
-            G = this->dyn_obj_->get_input_mat(dt, prev_last_state, prev_tp.rotation());
+            // G = this->dyn_obj_->get_input_mat(dt, prev_last_state, prev_tp.rotation());
         } else {
             next_state = this->dyn_obj_->propagate_state(dt, prev_last_state);
             F = this->dyn_obj_->get_state_mat(dt, prev_last_state);
-            G = this->dyn_obj_->get_input_mat(dt, prev_last_state);
+            // G = this->dyn_obj_->get_input_mat(dt, prev_last_state);
         }
 
         const int cap_hint = Dist::fixed_window ? MaxWindow : l_window_;
@@ -86,9 +86,9 @@ public:
             }
             result.cov_at(last, last) =
                 F * result.cov_at(prev_last, prev_last) * F.transpose()
-                + G * this->process_noise_ * G.transpose();
+                + this->process_noise_;
         } else {
-            result.cov_at(last, last) = G * this->process_noise_ * G.transpose();
+            result.cov_at(last, last) = this->process_noise_;
         }
 
         result.mean_at(last) = next_state;

@@ -14,10 +14,14 @@ void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
     }
 
     const int idx = plt_inds[0];
-    // Use full mean_history when available (shows entire trajectory, not just window)
-    Eigen::MatrixXd states = (tg.mean_history().cols() > 0)
-        ? tg.mean_history() : tg.rearrange_states();
-    const int T = static_cast<int>(states.cols());
+    const auto& sh = tg.state_history();
+    const int T_hist = static_cast<int>(sh.size());
+    const bool append_current = tg.window_size() > 0
+        && (T_hist == 0 || !sh.back().mean().isApprox(tg.current().mean()));
+    const int T = T_hist + (append_current ? 1 : 0);
+    Eigen::MatrixXd states(tg.state_dim, T);
+    for (int i = 0; i < T_hist; ++i) states.col(i) = sh[i].mean();
+    if (append_current) states.col(T - 1) = tg.current().mean();
     const int t0 = 0;
 
     // Time indices
@@ -58,10 +62,14 @@ void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
         throw std::invalid_argument("plot_trajectory_gaussian_2d: plt_inds must have 2 elements");
     }
 
-    // Use full mean_history when available (shows entire trajectory, not just window)
-    Eigen::MatrixXd states = (tg.mean_history().cols() > 0)
-        ? tg.mean_history() : tg.rearrange_states();
-    const int T = static_cast<int>(states.cols());
+    const auto& sh = tg.state_history();
+    const int T_hist = static_cast<int>(sh.size());
+    const bool append_current = tg.window_size() > 0
+        && (T_hist == 0 || !sh.back().mean().isApprox(tg.current().mean()));
+    const int T = T_hist + (append_current ? 1 : 0);
+    Eigen::MatrixXd states(tg.state_dim, T);
+    for (int i = 0; i < T_hist; ++i) states.col(i) = sh[i].mean();
+    if (append_current) states.col(T - 1) = tg.current().mean();
 
     std::vector<double> x(T), y(T);
     for (int t = 0; t < T; ++t) {
@@ -99,10 +107,14 @@ void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
         throw std::invalid_argument("plot_trajectory_gaussian_3d: plt_inds must have 3 elements");
     }
 
-    // Use full mean_history when available (shows entire trajectory, not just window)
-    Eigen::MatrixXd states = (tg.mean_history().cols() > 0)
-        ? tg.mean_history() : tg.rearrange_states();
-    const int T = static_cast<int>(states.cols());
+    const auto& sh = tg.state_history();
+    const int T_hist = static_cast<int>(sh.size());
+    const bool append_current = tg.window_size() > 0
+        && (T_hist == 0 || !sh.back().mean().isApprox(tg.current().mean()));
+    const int T = T_hist + (append_current ? 1 : 0);
+    Eigen::MatrixXd states(tg.state_dim, T);
+    for (int i = 0; i < T_hist; ++i) states.col(i) = sh[i].mean();
+    if (append_current) states.col(T - 1) = tg.current().mean();
 
     std::vector<double> x(T), y(T), z(T);
     for (int t = 0; t < T; ++t) {

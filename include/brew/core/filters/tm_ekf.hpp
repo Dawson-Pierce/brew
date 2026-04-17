@@ -122,13 +122,13 @@ public:
 
         if (prev.has_rotation()) {
             F = this->dyn_obj_->get_state_mat(dt, prev.mean(), prev.rotation());
-            G = this->dyn_obj_->get_input_mat(dt, prev.mean(), prev.rotation());
+            // G = this->dyn_obj_->get_input_mat(dt, prev.mean(), prev.rotation());
             next_mean = this->dyn_obj_->propagate_state(dt, prev.mean(), prev.rotation());
             next_rotation = this->dyn_obj_->propagate_extent(dt, prev.mean(), prev.rotation());
         } else {
             // No rotation yet (birth component) — use base dynamics
             F = this->dyn_obj_->get_state_mat(dt, prev.mean());
-            G = this->dyn_obj_->get_input_mat(dt, prev.mean());
+            // G = this->dyn_obj_->get_input_mat(dt, prev.mean());
             next_mean = this->dyn_obj_->propagate_state(dt, prev.mean());
             next_rotation = Eigen::MatrixXd();  // stays empty
         }
@@ -139,7 +139,7 @@ public:
 
         // Build augmented process noise
         Eigen::MatrixXd Q_aug = Eigen::MatrixXd::Zero(n_aug, n_aug);
-        Q_aug.topLeftCorner(n_trans, n_trans) = G * this->process_noise_ * G.transpose();
+        Q_aug.topLeftCorner(n_trans, n_trans) = this->process_noise_;
         Q_aug.bottomRightCorner(n_rot, n_rot) = rotation_process_noise_;
 
         // Propagate augmented covariance
