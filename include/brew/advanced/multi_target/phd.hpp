@@ -10,6 +10,7 @@
 #include "brew/advanced/clustering/dbscan.hpp"
 
 #include <Eigen/Dense>
+#include <deque>
 #include <memory>
 #include <vector>
 
@@ -86,7 +87,7 @@ public:
     [[nodiscard]] const models::Mixture<T, MaxComponents>& intensity() const { return *intensity_; }
     [[nodiscard]] models::Mixture<T, MaxComponents>& intensity() { return *intensity_; }
 
-    [[nodiscard]] const std::vector<std::unique_ptr<models::Mixture<T, MaxComponents>>>& extracted_mixtures() const {
+    [[nodiscard]] const std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>>& extracted_mixtures() const {
         return extracted_mixtures_;
     }
 
@@ -197,8 +198,7 @@ public:
         fusion::merge(*intensity_, merge_threshold_);
         fusion::cap(*intensity_, static_cast<std::size_t>(max_components_));
 
-        // Extract and store
-        extracted_mixtures_.push_back(extract());
+        this->push_history(extracted_mixtures_, extract());
     }
 
     /// Extract state estimates (components with weight >= threshold).
@@ -226,7 +226,7 @@ private:
     double extract_threshold_ = 0.5;
     double gate_threshold_ = 9.0;
     bool is_extended_ = false;
-    std::vector<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
+    std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
 };
 
 } // namespace brew::multi_target

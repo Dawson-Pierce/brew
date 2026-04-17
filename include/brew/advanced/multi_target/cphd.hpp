@@ -11,6 +11,7 @@
 #include "brew/advanced/clustering/dbscan.hpp"
 
 #include <Eigen/Dense>
+#include <deque>
 #include <memory>
 #include <type_traits>
 #include <vector>
@@ -110,7 +111,7 @@ public:
     [[nodiscard]] const models::Mixture<T, MaxComponents>& intensity() const { return *intensity_; }
     [[nodiscard]] models::Mixture<T, MaxComponents>& intensity() { return *intensity_; }
 
-    [[nodiscard]] const std::vector<std::unique_ptr<models::Mixture<T, MaxComponents>>>& extracted_mixtures() const {
+    [[nodiscard]] const std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>>& extracted_mixtures() const {
         return extracted_mixtures_;
     }
 
@@ -134,7 +135,7 @@ public:
         return best;
     }
 
-    [[nodiscard]] const std::vector<Eigen::VectorXd>& cardinality_history() const {
+    [[nodiscard]] const std::deque<Eigen::VectorXd>& cardinality_history() const {
         return cardinality_history_;
     }
 
@@ -286,9 +287,8 @@ public:
         fusion::merge(*intensity_, merge_threshold_);
         fusion::cap(*intensity_, static_cast<std::size_t>(max_components_));
 
-        // Store history
-        extracted_mixtures_.push_back(extract());
-        cardinality_history_.push_back(cardinality_);
+        this->push_history(extracted_mixtures_, extract());
+        this->push_history(cardinality_history_, cardinality_);
     }
 
     /// Extract state estimates (components with weight >= threshold).
@@ -413,13 +413,13 @@ private:
     double extract_threshold_ = 0.5;
     double gate_threshold_ = 9.0;
     bool is_extended_ = false;
-    std::vector<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
 
     // CPHD-specific state
     Eigen::VectorXd cardinality_;           // PMF over target count
     Eigen::VectorXd birth_cardinality_;     // Birth cardinality PMF
     int max_cardinality_ = 100;
-    std::vector<Eigen::VectorXd> cardinality_history_;
+    std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
+    std::deque<Eigen::VectorXd> cardinality_history_;
 };
 
 } // namespace brew::multi_target

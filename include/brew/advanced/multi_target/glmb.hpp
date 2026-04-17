@@ -11,6 +11,7 @@
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <limits>
 #include <map>
 #include <memory>
@@ -174,9 +175,10 @@ public:
         return extractable_hists_;
     }
     /// Per-timestep snapshot of extracted tracks' latest states. Each entry is a
-    /// unit-weight mixture of the live-track current-state distributions. Grows by one
-    /// entry per cleanup() call.
-    [[nodiscard]] const std::vector<std::unique_ptr<models::Mixture<T, MaxComponents>>>&
+    /// unit-weight mixture of the live-track current-state distributions. Bounded by
+    /// max_history_ (see RFSBase::set_max_history): 0 disables recording, N caps to the
+    /// N most recent entries, SIZE_MAX (default) keeps everything.
+    [[nodiscard]] const std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>>&
     extracted_mixtures() const { return extracted_mixtures_; }
     [[nodiscard]] double estimated_cardinality() const { return estimated_cardinality_; }
     [[nodiscard]] const Eigen::VectorXd& cardinality() const { return cardinality_pmf_; }
@@ -751,6 +753,7 @@ protected:
     }
 
     void push_extracted_snapshot() {
+        if (this->max_history_ == 0) return;
         auto mix = std::make_unique<models::Mixture<T, MaxComponents>>();
         std::size_t idx_cmp = map_hypothesis_index();
         if (idx_cmp != std::numeric_limits<std::size_t>::max()) {
@@ -768,7 +771,7 @@ protected:
                 mix->add_component(last_mix.component(best).clone_typed(), 1.0);
             }
         }
-        extracted_mixtures_.push_back(std::move(mix));
+        this->push_history(extracted_mixtures_, std::move(mix));
     }
 
     // ---- Members ----
@@ -793,7 +796,7 @@ protected:
     Eigen::VectorXd cardinality_pmf_;
     double estimated_cardinality_ = 0.0;
     int time_index_cntr_ = 0;
-    std::vector<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
+    std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
 };
 
 }  // namespace brew::multi_target

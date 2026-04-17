@@ -9,6 +9,7 @@
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <limits>
 #include <map>
 #include <memory>
@@ -98,7 +99,7 @@ public:
     [[nodiscard]] const std::vector<std::unique_ptr<ExtractedTrack>>& extracted_tracks() const {
         return extracted_hists_;
     }
-    [[nodiscard]] const std::vector<MixturePtr>& extracted_mixtures() const {
+    [[nodiscard]] const std::deque<MixturePtr>& extracted_mixtures() const {
         return extracted_mixtures_;
     }
     [[nodiscard]] double estimated_cardinality() const { return estimated_cardinality_; }
@@ -298,7 +299,9 @@ protected:
     }
 
     /// Push a current-step snapshot mixture (one component per MAP track's latest state).
+    /// Governed by max_history_ (see RFSBase::set_max_history).
     void push_extracted_snapshot() {
+        if (this->max_history_ == 0) return;
         auto mix = std::make_unique<models::Mixture<T, MaxComponents>>();
         std::size_t idx = map_hypothesis_index();
         if (idx != std::numeric_limits<std::size_t>::max()) {
@@ -318,7 +321,7 @@ protected:
                                    trk.existence_probability);
             }
         }
-        extracted_mixtures_.push_back(std::move(mix));
+        this->push_history(extracted_mixtures_, std::move(mix));
     }
 
     // ---- Per-track mixture operations (reused by predict/correct in subclasses) ----
@@ -411,7 +414,7 @@ protected:
     std::vector<std::unique_ptr<TrackEntry>> track_tab_;
     std::vector<Hypothesis> hypotheses_;
     std::vector<std::unique_ptr<ExtractedTrack>> extracted_hists_;
-    std::vector<MixturePtr> extracted_mixtures_;
+    std::deque<MixturePtr> extracted_mixtures_;
 
     double prune_threshold_hyp_ = 1e-3;
     double prune_threshold_bern_ = 1e-3;
