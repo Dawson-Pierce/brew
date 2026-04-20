@@ -3,8 +3,6 @@
 #include <brew/desktop/plot_utils/plot_ggiw.hpp>
 #include <brew/desktop/plot_utils/plot_mixture.hpp>
 #include <brew/desktop/plot_utils/plot_point_cloud.hpp>
-#include <brew/desktop/plot_utils/plot_trajectory_gaussian.hpp>
-#include <brew/desktop/plot_utils/plot_trajectory_ggiw.hpp>
 
 namespace brew {
 
@@ -18,32 +16,12 @@ void plot(const models::GGIW<>& g,
     plot_utils::plot_ggiw(g, opts);
 }
 
-void plot(const models::Trajectory<models::Gaussian<>>& g,
-          const plot_utils::PlotOptions& opts) {
-    plot_utils::plot_trajectory_gaussian(g, opts);
-}
-
-void plot(const models::Trajectory<models::GGIW<>>& g,
-          const plot_utils::PlotOptions& opts) {
-    plot_utils::plot_trajectory_ggiw(g, opts);
-}
-
 void plot(const models::Mixture<models::Gaussian<>>& mix,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_mixture(mix, opts);
 }
 
 void plot(const models::Mixture<models::GGIW<>>& mix,
-          const plot_utils::PlotOptions& opts) {
-    plot_utils::plot_mixture(mix, opts);
-}
-
-void plot(const models::Mixture<models::Trajectory<models::Gaussian<>>>& mix,
-          const plot_utils::PlotOptions& opts) {
-    plot_utils::plot_mixture(mix, opts);
-}
-
-void plot(const models::Mixture<models::Trajectory<models::GGIW<>>>& mix,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_mixture(mix, opts);
 }

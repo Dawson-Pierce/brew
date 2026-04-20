@@ -6,6 +6,8 @@ using namespace brew;
 
 class TrajectoryGaussianEKFTest : public ::testing::Test {
 protected:
+    static constexpr int kWindow = 5;
+
     void SetUp() override {
         auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
         filter.set_dynamics(dyn);
@@ -17,10 +19,9 @@ protected:
 
         filter.set_process_noise(0.1 * Eigen::MatrixXd::Identity(4, 4));
         filter.set_measurement_noise(0.5 * Eigen::MatrixXd::Identity(2, 2));
-        filter.set_window_size(5);
     }
 
-    filters::TrajectoryGaussianEKF<> filter;
+    filters::TrajectoryGaussianEKF<kWindow> filter;
 };
 
 TEST_F(TrajectoryGaussianEKFTest, PredictWindowGrowth) {
@@ -29,13 +30,14 @@ TEST_F(TrajectoryGaussianEKFTest, PredictWindowGrowth) {
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
 
-    models::Trajectory<models::Gaussian<>> tg(4, models::Gaussian<>(mean, cov));
+    models::Trajectory<models::Gaussian<>, kWindow> tg(4, models::Gaussian<>(mean, cov));
     EXPECT_EQ(tg.window_size(), 1);
 
-    // Predict should grow the trajectory
+    // Predict should grow the live window (mean() is the full fixed-capacity
+    // stacked vector; stacked_size() tracks the live portion).
     auto pred1 = filter.predict(1.0, tg);
     EXPECT_EQ(pred1.window_size(), 2);
-    EXPECT_EQ(pred1.mean().size(), 8); // 2 states * 4 dims
+    EXPECT_EQ(pred1.stacked_size(), 8); // 2 states * 4 dims
 
     // Mean of new state should be propagated
     EXPECT_NEAR(pred1.get_last_state()(0), 1.0, 1e-10);
@@ -44,7 +46,7 @@ TEST_F(TrajectoryGaussianEKFTest, PredictWindowGrowth) {
     // Second predict
     auto pred2 = filter.predict(1.0, pred1);
     EXPECT_EQ(pred2.window_size(), 3);
-    EXPECT_EQ(pred2.mean().size(), 12);
+    EXPECT_EQ(pred2.stacked_size(), 12);
 }
 
 TEST_F(TrajectoryGaussianEKFTest, LScanTrim) {
@@ -52,7 +54,7 @@ TEST_F(TrajectoryGaussianEKFTest, LScanTrim) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    models::Trajectory<models::Gaussian<>> tg(4, models::Gaussian<>(mean, cov));
+    models::Trajectory<models::Gaussian<>, kWindow> tg(4, models::Gaussian<>(mean, cov));
 
     // l_window_ is 5. Predict 6 times starting from window=1; after slot 5 is full,
     // further predicts slide the buffer left (oldest dropped), so window stays at 5.
@@ -72,7 +74,7 @@ TEST_F(TrajectoryGaussianEKFTest, CorrectStep) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    models::Trajectory<models::Gaussian<>> tg(4, models::Gaussian<>(mean, cov));
+    models::Trajectory<models::Gaussian<>, kWindow> tg(4, models::Gaussian<>(mean, cov));
 
     auto pred = filter.predict(1.0, tg);
 
@@ -95,7 +97,7 @@ TEST_F(TrajectoryGaussianEKFTest, Gate) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    models::Trajectory<models::Gaussian<>> tg(4, models::Gaussian<>(mean, cov));
+    models::Trajectory<models::Gaussian<>, kWindow> tg(4, models::Gaussian<>(mean, cov));
 
     Eigen::VectorXd meas_close(2);
     meas_close << 0.1, 0.1;

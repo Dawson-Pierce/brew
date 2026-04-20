@@ -7,10 +7,9 @@
 //   1. "Window" — a bounded ring buffer holding the most recent MaxWindow inner states
 //      along with their stacked mean / stacked covariance. This is the working set
 //      used by trajectory-aware filter math (prediction, correction, smoothing).
-//      Sized by the MaxWindow template parameter: when MaxWindow = Eigen::Dynamic the
-//      storage is heap-backed (std::vector<T>, dynamic Eigen matrices) and a runtime
-//      soft_cap may be supplied to advance_window(); when MaxWindow is a fixed N the
-//      storage is stack-backed (std::array<T, N>, fixed Eigen of D*N).
+//      MaxWindow is a required compile-time constant; storage is fixed-capacity
+//      (std::array<T, MaxWindow>, fixed Eigen of InnerDim*MaxWindow when InnerDim
+//      is known at compile time, otherwise dynamic Eigen at runtime size state_dim*MaxWindow).
 //
 //   2. "State history" — an independent, unbounded-by-default record of every
 //      finalized state this trajectory has held. Heap-backed std::vector<T>, runtime
@@ -51,8 +50,9 @@
 namespace brew::models {
 
 /// Windowed trajectory of inner distribution T, plus an independent state history.
-/// MaxWindow controls the ring-buffer window size; state history is runtime-bounded.
-template <typename T, int MaxWindow = Eigen::Dynamic>
+/// MaxWindow controls the ring-buffer window size (required compile-time constant);
+/// state history is runtime-bounded.
+template <typename T, int MaxWindow>
 class Trajectory {
 public:
     using Scalar = typename T::Vector::Scalar;
@@ -60,43 +60,35 @@ public:
     using Matrix = typename T::Matrix;
     static constexpr int InnerDim = Vector::RowsAtCompileTime;
 
-    static constexpr bool fixed_window = (MaxWindow != Eigen::Dynamic);
-
     static constexpr int StackedDim =
-        (InnerDim == Eigen::Dynamic || !fixed_window)
+        (InnerDim == Eigen::Dynamic)
             ? Eigen::Dynamic
             : InnerDim * MaxWindow;
 
     using StackedVector = Eigen::Matrix<Scalar, StackedDim, 1>;
     using StackedMatrix = Eigen::Matrix<Scalar, StackedDim, StackedDim>;
 
-    using WindowStorage = std::conditional_t<fixed_window,
-        std::array<T, (MaxWindow > 0 ? MaxWindow : 1)>,
-        std::vector<T>>;
+    using WindowStorage = std::array<T, (MaxWindow > 0 ? MaxWindow : 1)>;
 
     int state_dim = 0;
 
     Trajectory() {
-        if constexpr (fixed_window) {
-            stacked_mean_.setZero();
-            stacked_covariance_.setZero();
-        }
+        stacked_mean_.setZero();
+        stacked_covariance_.setZero();
     }
 
     Trajectory(int state_dim_, T initial) : state_dim(state_dim_) {
-        if constexpr (fixed_window) {
+        if constexpr (StackedDim == Eigen::Dynamic) {
+            stacked_mean_ = StackedVector::Zero(state_dim_ * MaxWindow);
+            stacked_covariance_ = StackedMatrix::Zero(state_dim_ * MaxWindow, state_dim_ * MaxWindow);
+        } else {
             stacked_mean_.setZero();
             stacked_covariance_.setZero();
-            stacked_mean_.segment(0, state_dim_) = initial.mean();
-            stacked_covariance_.block(0, 0, state_dim_, state_dim_) = initial.covariance();
-            history_[0] = initial;
-            window_size_ = 1;
-        } else {
-            stacked_mean_ = initial.mean();
-            stacked_covariance_ = initial.covariance();
-            history_.push_back(initial);
-            window_size_ = 1;
         }
+        stacked_mean_.segment(0, state_dim_) = initial.mean();
+        stacked_covariance_.block(0, 0, state_dim_, state_dim_) = initial.covariance();
+        history_[0] = initial;
+        window_size_ = 1;
         // Seed the state history with the initial state, respecting max_history_.
         push_state_history(std::move(initial));
     }
@@ -109,28 +101,19 @@ public:
 
     // Window metadata
 
-    /// Live step count in the window. For fixed_window, uses the internal window_size_
-    /// counter (advanced by advance_window). For dynamic, derives from history_.size()
-    /// so callers that populate history_ directly still see a consistent count.
-    [[nodiscard]] int window_size() const {
-        if constexpr (fixed_window) return window_size_;
-        else return static_cast<int>(history_.size());
-    }
-    [[nodiscard]] static constexpr int max_window_size() {
-        return fixed_window ? MaxWindow : -1;
-    }
-    [[nodiscard]] int stacked_size() const { return state_dim * window_size(); }
-    [[nodiscard]] bool is_full() const {
-        return fixed_window && window_size_ == MaxWindow;
-    }
+    /// Live step count in the window (advanced by advance_window).
+    [[nodiscard]] int window_size() const { return window_size_; }
+    [[nodiscard]] static constexpr int max_window_size() { return MaxWindow; }
+    [[nodiscard]] int stacked_size() const { return state_dim * window_size_; }
+    [[nodiscard]] bool is_full() const { return window_size_ == MaxWindow; }
 
     [[nodiscard]] bool is_extended() const {
-        if (window_size() == 0) return false;
+        if (window_size_ == 0) return false;
         return current().is_extended();
     }
 
     // Stacked state access
-    // The stored stacked_mean_/covariance_ are always at full max size when fixed_window,
+    // The stored stacked_mean_/covariance_ are always at full max size,
     // zero-padded beyond the live window.
 
     [[nodiscard]] const StackedVector& mean() const { return stacked_mean_; }
@@ -156,14 +139,8 @@ public:
     [[nodiscard]] const WindowStorage& history() const { return history_; }
     [[nodiscard]] WindowStorage& history() { return history_; }
 
-    [[nodiscard]] const T& current() const {
-        if constexpr (fixed_window) return history_[window_size_ - 1];
-        else return history_.back();
-    }
-    [[nodiscard]] T& current() {
-        if constexpr (fixed_window) return history_[window_size_ - 1];
-        else return history_.back();
-    }
+    [[nodiscard]] const T& current() const { return history_[window_size_ - 1]; }
+    [[nodiscard]] T& current() { return history_[window_size_ - 1]; }
 
     [[nodiscard]] const T& history_at(int i) const { return history_[i]; }
     [[nodiscard]] T& history_at(int i) { return history_[i]; }
@@ -193,97 +170,72 @@ public:
     /// Make room for a new step at the end of the window. After this returns,
     /// `last_index()` points at a zeroed slot ready to be filled with a prediction.
     ///
-    /// Window behaviour (unchanged):
-    /// - fixed_window and not full: increments window_size_; last slot zeroed.
-    /// - fixed_window and full: slides stacked_mean_/covariance_/history_ left by one
-    ///   inner-state block, last slot zeroed, window_size_ unchanged (== MaxWindow).
-    /// - dynamic: if `soft_cap > 0` and window_size_ >= soft_cap, slides left instead of
-    ///   growing; otherwise grows the stacked matrices by one inner block.
+    /// Window behaviour:
+    /// - not full: increments window_size_; last slot zeroed.
+    /// - full: slides stacked_mean_/covariance_/history_ left by one inner-state block,
+    ///   last slot zeroed, window_size_ unchanged (== MaxWindow).
     /// Returns true if a slide occurred (oldest window slot was dropped).
     ///
     /// State history behaviour: on every call except the very first post-construction,
     /// pushes the current (last-finalized) window state to state_history_, trimming
     /// front entries to respect max_history_. The first call is a no-op for history
     /// because the constructor already seeded it with the initial state.
-    bool advance_window(int soft_cap = -1) {
-        if (advance_count_ > 0 && window_size() > 0) {
+    bool advance_window() {
+        if (advance_count_ > 0 && window_size_ > 0) {
             push_state_history(current());
         }
         ++advance_count_;
 
         const int sd = state_dim;
-        const int cap = fixed_window ? MaxWindow
-                       : (soft_cap > 0 ? soft_cap : std::numeric_limits<int>::max());
-        const int ws = window_size();
 
         // Grow / bump counter (below cap)
-        if (ws < cap) {
-            if constexpr (fixed_window) {
-                ++window_size_;
-                mean_at(window_size_ - 1).setZero();
-                cov_at(window_size_ - 1, window_size_ - 1).setZero();
-                const int prev = (window_size_ - 1) * sd;
-                stacked_covariance_.block(prev, 0, sd, prev).setZero();
-                stacked_covariance_.block(0, prev, prev, sd).setZero();
-                history_[window_size_ - 1] = T{};
-            } else {
-                const int old_total = static_cast<int>(stacked_mean_.size());
-                const int new_total = old_total + sd;
-                StackedVector new_mean = StackedVector::Zero(new_total);
-                new_mean.head(old_total) = stacked_mean_;
-                stacked_mean_ = std::move(new_mean);
-
-                StackedMatrix new_cov = StackedMatrix::Zero(new_total, new_total);
-                new_cov.topLeftCorner(old_total, old_total) = stacked_covariance_;
-                stacked_covariance_ = std::move(new_cov);
-
-                history_.emplace_back();
-                window_size_ = static_cast<int>(history_.size());
-            }
+        if (window_size_ < MaxWindow) {
+            ++window_size_;
+            mean_at(window_size_ - 1).setZero();
+            cov_at(window_size_ - 1, window_size_ - 1).setZero();
+            const int prev = (window_size_ - 1) * sd;
+            stacked_covariance_.block(prev, 0, sd, prev).setZero();
+            stacked_covariance_.block(0, prev, prev, sd).setZero();
+            history_[window_size_ - 1] = T{};
             return false;
         }
 
         // At cap: slide window left by one block (drop oldest), zero new tail slot
-        const int kept = (cap - 1) * sd;
+        const int kept = (MaxWindow - 1) * sd;
         stacked_mean_.head(kept) = stacked_mean_.tail(kept).eval();
         stacked_mean_.tail(sd).setZero();
         stacked_covariance_.topLeftCorner(kept, kept) =
             stacked_covariance_.bottomRightCorner(kept, kept).eval();
         stacked_covariance_.rightCols(sd).setZero();
         stacked_covariance_.bottomRows(sd).setZero();
-        if constexpr (fixed_window) {
-            for (int i = 0; i < MaxWindow - 1; ++i) {
-                history_[i] = std::move(history_[i + 1]);
-            }
-            history_[MaxWindow - 1] = T{};
-        } else {
-            history_.erase(history_.begin());
-            history_.emplace_back();
+        for (int i = 0; i < MaxWindow - 1; ++i) {
+            history_[i] = std::move(history_[i + 1]);
         }
+        history_[MaxWindow - 1] = T{};
         return true;
     }
 
     /// Explicit commit: push current() to state_history_. Useful after the final
     /// correct() when no further advance_window will occur to flush the last state.
     void commit_current_to_state_history() {
-        if (window_size() > 0) push_state_history(current());
+        if (window_size_ > 0) push_state_history(current());
     }
 
-    [[nodiscard]] int last_index() const { return window_size() - 1; }
+    [[nodiscard]] int last_index() const { return window_size_ - 1; }
 
     // Convenience: extract last-step views
 
     [[nodiscard]] Vector get_last_state() const {
-        return mean_at(window_size() - 1);
+        return mean_at(window_size_ - 1);
     }
     [[nodiscard]] Matrix get_last_cov() const {
-        const int li = window_size() - 1;
+        const int li = window_size_ - 1;
         return cov_at(li, li);
     }
 
     /// Returns (state_dim x window_size) matrix of window-slot means (from history_).
     [[nodiscard]] Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic> mean_history() const {
-        const int ws = window_size();
+        const int ws = window_size_;
         if (ws == 0 || state_dim <= 0) {
             return Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic>();
         }
@@ -296,7 +248,7 @@ public:
 
     /// Returns (state_dim x window_size) matrix of stacked-state per-step blocks.
     [[nodiscard]] Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic> rearrange_states() const {
-        const int ws = window_size();
+        const int ws = window_size_;
         if (state_dim <= 0 || ws == 0) {
             return Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic>();
         }
@@ -327,7 +279,7 @@ private:
     int advance_count_ = 0;
 };
 
-// Type trait for detecting Trajectory<T, ...>
+// Type trait for detecting Trajectory<T, M>
 template <typename U>
 struct is_trajectory : std::false_type {};
 

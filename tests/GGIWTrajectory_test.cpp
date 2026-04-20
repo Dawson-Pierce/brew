@@ -17,19 +17,19 @@ protected:
 
 TEST_F(GGIWTrajectoryTracking, Comparison) {
     // PHD
-    auto phd = test::make_phd<models::Trajectory<models::GGIW<>>>(
+    auto phd = test::make_phd<models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
-    auto phd_result = test::run_tracking<decltype(phd), models::Trajectory<models::GGIW<>>>(
+    auto phd_result = test::run_tracking<decltype(phd), models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         phd, scenario, "GGIW Trajectory PHD Tracking", 10.0, 5);
     EXPECT_GE(phd_result.converged_steps, 10)
         << "Trajectory GGIW PHD should track both extended targets";
 
     // CPHD
-    auto cphd = test::make_cphd<models::Trajectory<models::GGIW<>>>(
+    auto cphd = test::make_cphd<models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
-    auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::Trajectory<models::GGIW<>>>(
+    auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         cphd, scenario, "GGIW Trajectory CPHD Tracking", 10.0, 5);
     // CPHD+TrajectoryGGIW is a new combination; cardinality estimation with
     // extended targets may need further parameter tuning.
@@ -37,37 +37,37 @@ TEST_F(GGIWTrajectoryTracking, Comparison) {
         << "Trajectory GGIW CPHD should not crash";
 
     // MBM
-    auto mbm = test::make_mbm<models::Trajectory<models::GGIW<>>>(
+    auto mbm = test::make_mbm<models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
-    auto mbm_result = test::run_tracking<decltype(mbm), models::Trajectory<models::GGIW<>>>(
+    auto mbm_result = test::run_tracking<decltype(mbm), models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         mbm, scenario, "GGIW Trajectory MBM Tracking", 10.0, 5);
     EXPECT_GE(mbm_result.converged_steps, 10)
         << "Trajectory GGIW MBM should track both extended targets";
 
     // PMBM
-    auto pmbm = test::make_pmbm<models::Trajectory<models::GGIW<>>>(
+    auto pmbm = test::make_pmbm<models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
-    auto pmbm_result = test::run_tracking<decltype(pmbm), models::Trajectory<models::GGIW<>>>(
+    auto pmbm_result = test::run_tracking<decltype(pmbm), models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         pmbm, scenario, "GGIW Trajectory PMBM Tracking", 10.0, 5);
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "Trajectory GGIW PMBM should track both extended targets";
 
     // GLMB
-    auto glmb = test::make_glmb<models::Trajectory<models::GGIW<>>>(
+    auto glmb = test::make_glmb<models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
-    auto glmb_result = test::run_tracking<decltype(glmb), models::Trajectory<models::GGIW<>>>(
+    auto glmb_result = test::run_tracking<decltype(glmb), models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         glmb, scenario, "GGIW Trajectory GLMB Tracking", 10.0, 5);
     EXPECT_GE(glmb_result.converged_steps, 10)
         << "Trajectory GGIW GLMB should track both extended targets";
 
     // JGLMB
-    auto jglmb = test::make_jglmb<models::Trajectory<models::GGIW<>>>(
+    auto jglmb = test::make_jglmb<models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
-    auto jglmb_result = test::run_tracking<decltype(jglmb), models::Trajectory<models::GGIW<>>>(
+    auto jglmb_result = test::run_tracking<decltype(jglmb), models::Trajectory<models::GGIW<>, test::kTrajWindow>>(
         jglmb, scenario, "GGIW Trajectory JGLMB Tracking", 10.0, 5);
     EXPECT_GE(jglmb_result.converged_steps, 10)
         << "Trajectory GGIW JGLMB should track both extended targets";

@@ -497,11 +497,11 @@ void merge(models::Mixture<models::TemplatePose<Scalar, D>, N>& mix, double thre
 
         // Collect group: same template + within gate
         std::vector<std::size_t> grp;
-        const auto ref_templ = mix.component(ref).template_ptr();
+        const int ref_templ_id = mix.component(ref).template_id();
         for (std::size_t i = 0; i < mix.size(); ++i) {
             if (!remaining[i]) continue;
             // Same-template constraint
-            if (mix.component(i).template_ptr() != ref_templ) continue;
+            if (mix.component(i).template_id() != ref_templ_id) continue;
 
             // Augmented state distance (mean + rotation error states share covariance)
             const Eigen::VectorXd d = mix.component(i).mean() - mix.component(ref).mean();
@@ -515,8 +515,13 @@ void merge(models::Mixture<models::TemplatePose<Scalar, D>, N>& mix, double thre
             const Eigen::VectorXd y = llt.matrixL().solve(d_aug);
             if (y.squaredNorm() > threshold) continue;
 
-            // Also gate on rotation: don't merge components with very different rotations
-            if (mix.component(i).has_rotation() && mix.component(ref).has_rotation()) {
+            // Also gate on rotation: don't merge components with very different
+            // rotations — but only when both sides have been PCA-aligned
+            // (i.e. their rotations are meaningful). A birth component's
+            // rotation is a placeholder identity that should not prevent it
+            // from being absorbed into a tracked component.
+            if (!mix.component(i).needs_pca_alignment()
+                && !mix.component(ref).needs_pca_alignment()) {
                 const auto& Ri = mix.component(i).rotation();
                 const auto& Rr = mix.component(ref).rotation();
                 Eigen::MatrixXd R_err = Ri.transpose() * Rr;
@@ -547,31 +552,22 @@ void merge(models::Mixture<models::TemplatePose<Scalar, D>, N>& mix, double thre
         }
         m_new /= w_sum;
 
-        // Merged rotation: projected arithmetic mean via SVD
-        // Only accumulate rotation weights from components that have rotation
-        Eigen::MatrixXd R_new;
+        // Merged rotation: projected arithmetic mean via SVD.
+        // Rotation is always present (identity at birth), so every group member
+        // contributes.
         Eigen::MatrixXd R_sum = Eigen::MatrixXd::Zero(d, d);
-        double w_rot_sum = 0.0;
-        bool any_has_rotation = false;
         for (auto idx : grp) {
-            if (mix.component(idx).has_rotation()) {
-                const double w = mix.weight(idx);
-                R_sum += w * mix.component(idx).rotation();
-                w_rot_sum += w;
-                any_has_rotation = true;
-            }
+            const double w = mix.weight(idx);
+            R_sum += w * mix.component(idx).rotation();
         }
-
-        if (any_has_rotation && w_rot_sum > 0.0) {
-            R_sum /= w_rot_sum;
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(R_sum, Eigen::ComputeFullU | Eigen::ComputeFullV);
-            Eigen::MatrixXd U = svd.matrixU();
-            Eigen::MatrixXd V = svd.matrixV();
-            // Ensure proper rotation (det = +1)
-            Eigen::MatrixXd D_mat = Eigen::MatrixXd::Identity(d, d);
-            D_mat(d - 1, d - 1) = (U * V.transpose()).determinant();
-            R_new = U * D_mat * V.transpose();
-        }
+        R_sum /= w_sum;
+        Eigen::JacobiSVD<Eigen::MatrixXd> svd(R_sum, Eigen::ComputeFullU | Eigen::ComputeFullV);
+        Eigen::MatrixXd U = svd.matrixU();
+        Eigen::MatrixXd V = svd.matrixV();
+        // Ensure proper rotation (det = +1)
+        Eigen::MatrixXd D_mat = Eigen::MatrixXd::Identity(d, d);
+        D_mat(d - 1, d - 1) = (U * V.transpose()).determinant();
+        Eigen::MatrixXd R_new = U * D_mat * V.transpose();
 
         // Moment-matched covariance with translational spread-of-means
         Eigen::MatrixXd P_new = Eigen::MatrixXd::Zero(n_aug, n_aug);
@@ -588,11 +584,18 @@ void merge(models::Mixture<models::TemplatePose<Scalar, D>, N>& mix, double thre
         P_new /= w_sum;
         P_new = 0.5 * (P_new + P_new.transpose());
 
-        result.add_component(
-            std::make_unique<models::TemplatePose<Scalar, D>>(
-                m_new, P_new, R_new, ref_templ,
-                mix.component(ref).pos_indices()),
-            w_sum);
+        // Pick the "most aligned" contributor as the base so the merged
+        // component inherits its PCA-alignment flag (and any other
+        // carry-through state). An already-aligned contributor always wins
+        // over a still-cold-start birth; otherwise ref is fine.
+        std::size_t base_idx = ref;
+        for (auto idx : grp) {
+            if (!mix.component(idx).needs_pca_alignment()) { base_idx = idx; break; }
+        }
+        auto merged = std::make_unique<models::TemplatePose<Scalar, D>>(
+            mix.component(base_idx).with_updated_state(m_new, P_new, R_new));
+
+        result.add_component(std::move(merged), w_sum);
 
         for (auto idx : grp) remaining[idx] = false;
     }
@@ -617,13 +620,16 @@ void merge(models::Mixture<models::Trajectory<models::TemplatePose<Scalar, D>, M
         for (std::size_t i = 0; i < mix.size(); ++i) {
             for (std::size_t j = i + 1; j < mix.size(); ++j) {
                 // Same-template constraint
-                if (mix.component(i).current().template_ptr() !=
-                    mix.component(j).current().template_ptr()) continue;
+                if (mix.component(i).current().template_id() !=
+                    mix.component(j).current().template_id()) continue;
 
-                // Rotation distance gate: skip if rotations are > 90° apart
-                const auto& Ri = mix.component(i).current().rotation();
-                const auto& Rj = mix.component(j).current().rotation();
-                if (Ri.size() > 0 && Rj.size() > 0) {
+                // Rotation distance gate: skip if rotations are > 90° apart,
+                // but only when both sides have been PCA-aligned. A birth
+                // component's identity rotation should not block absorption.
+                if (!mix.component(i).current().needs_pca_alignment()
+                    && !mix.component(j).current().needs_pca_alignment()) {
+                    const auto& Ri = mix.component(i).current().rotation();
+                    const auto& Rj = mix.component(j).current().rotation();
                     Eigen::MatrixXd R_err = Ri.transpose() * Rj;
                     double cos_a = std::clamp((R_err.trace() - 1.0) / 2.0, -1.0, 1.0);
                     if (std::acos(cos_a) > M_PI / 2.0) continue;

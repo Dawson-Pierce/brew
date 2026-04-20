@@ -45,6 +45,11 @@
 
 namespace brew::test {
 
+/// Compile-time trajectory window used by the trajectory-ekf test factories.
+/// Tests that need a different window should pass it explicitly via the templated
+/// factory overloads below.
+inline constexpr int kTrajWindow = 10;
+
 // ---- Truth target ----
 
 struct TruthTarget {
@@ -405,9 +410,9 @@ struct is_ggiw_type<T,
     std::void_t<decltype(std::declval<const T&>().V())>
 > : std::true_type {};
 
-// For Trajectory<T>, check the inner type
-template <typename T>
-struct is_ggiw_type<models::Trajectory<T>,
+// For Trajectory<T, MaxWindow>, check the inner type
+template <typename T, int MaxWindow>
+struct is_ggiw_type<models::Trajectory<T, MaxWindow>,
     std::void_t<decltype(std::declval<const T&>().V())>
 > : std::true_type {};
 
@@ -422,9 +427,9 @@ struct is_orientation_type<T,
     std::void_t<decltype(std::declval<const T&>().basis())>
 > : std::true_type {};
 
-// For Trajectory<T>, check the inner type
-template <typename T>
-struct is_orientation_type<models::Trajectory<T>,
+// For Trajectory<T, MaxWindow>, check the inner type
+template <typename T, int MaxWindow>
+struct is_orientation_type<models::Trajectory<T, MaxWindow>,
     std::void_t<decltype(std::declval<const T&>().basis())>
 > : std::true_type {};
 
@@ -563,13 +568,13 @@ inline std::unique_ptr<filters::GGIWOrientationEKF<>> make_ggiw_orientation_ekf(
     return ekf;
 }
 
-inline std::unique_ptr<filters::TrajectoryGaussianEKF<>> make_trajectory_gaussian_ekf(
-    const ScenarioData& scenario, int window = 10)
+template <int MaxWindow = kTrajWindow>
+inline std::unique_ptr<filters::TrajectoryGaussianEKF<MaxWindow>> make_trajectory_gaussian_ekf(
+    const ScenarioData& scenario)
 {
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
-    auto ekf = std::make_unique<filters::TrajectoryGaussianEKF<>>();
+    auto ekf = std::make_unique<filters::TrajectoryGaussianEKF<MaxWindow>>();
     ekf->set_dynamics(dyn);
-    ekf->set_window_size(window);
 
     Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
     H(0, 0) = 1.0; H(1, 1) = 1.0;
@@ -581,13 +586,13 @@ inline std::unique_ptr<filters::TrajectoryGaussianEKF<>> make_trajectory_gaussia
     return ekf;
 }
 
-inline std::unique_ptr<filters::TrajectoryGGIWEKF<>> make_trajectory_ggiw_ekf(
-    const ScenarioData& scenario, int window = 10)
+template <int MaxWindow = kTrajWindow>
+inline std::unique_ptr<filters::TrajectoryGGIWEKF<MaxWindow>> make_trajectory_ggiw_ekf(
+    const ScenarioData& scenario)
 {
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
-    auto ekf = std::make_unique<filters::TrajectoryGGIWEKF<>>();
+    auto ekf = std::make_unique<filters::TrajectoryGGIWEKF<MaxWindow>>();
     ekf->set_dynamics(dyn);
-    ekf->set_window_size(window);
     ekf->set_temporal_decay(1.0);
     ekf->set_forgetting_factor(5.0);
     ekf->set_scaling_parameter(1.0);
@@ -659,10 +664,11 @@ make_ggiw_orientation_birth(double weight = 0.1)
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::Trajectory<models::Gaussian<>>>>
+template <int MaxWindow = kTrajWindow>
+inline std::unique_ptr<models::Mixture<models::Trajectory<models::Gaussian<>, MaxWindow>>>
 make_trajectory_gaussian_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::Gaussian<>>>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::Gaussian<>, MaxWindow>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
@@ -671,17 +677,18 @@ make_trajectory_gaussian_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Trajectory<models::Gaussian<>>>(4, models::Gaussian<>(b1, birth_cov)), weight);
+        std::make_unique<models::Trajectory<models::Gaussian<>, MaxWindow>>(4, models::Gaussian<>(b1, birth_cov)), weight);
     birth->add_component(
-        std::make_unique<models::Trajectory<models::Gaussian<>>>(4, models::Gaussian<>(b2, birth_cov)), weight);
+        std::make_unique<models::Trajectory<models::Gaussian<>, MaxWindow>>(4, models::Gaussian<>(b2, birth_cov)), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIW<>>>>
+template <int MaxWindow = kTrajWindow>
+inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIW<>, MaxWindow>>>
 make_trajectory_ggiw_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIW<>>>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIW<>, MaxWindow>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -689,22 +696,22 @@ make_trajectory_ggiw_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIW<>>>(
+        std::make_unique<models::Trajectory<models::GGIW<>, MaxWindow>>(
             4, models::GGIW<>(10.0, 1.0, b1, b_cov, 10.0, b_V)), weight);
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIW<>>>(
+        std::make_unique<models::Trajectory<models::GGIW<>, MaxWindow>>(
             4, models::GGIW<>(10.0, 1.0, b2, b_cov, 10.0, b_V)), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF<>> make_trajectory_ggiw_orientation_ekf(
-    const ScenarioData& scenario, int window = 10)
+template <int MaxWindow = kTrajWindow>
+inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF<MaxWindow>> make_trajectory_ggiw_orientation_ekf(
+    const ScenarioData& scenario)
 {
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
-    auto ekf = std::make_unique<filters::TrajectoryGGIWOrientationEKF<>>();
+    auto ekf = std::make_unique<filters::TrajectoryGGIWOrientationEKF<MaxWindow>>();
     ekf->set_dynamics(dyn);
-    ekf->set_window_size(window);
     ekf->set_temporal_decay(1.0);
     ekf->set_forgetting_factor(5.0);
     ekf->set_scaling_parameter(1.0);
@@ -719,10 +726,11 @@ inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF<>> make_trajectory_
     return ekf;
 }
 
-inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIWOrientation<>>>>
+template <int MaxWindow = kTrajWindow>
+inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIWOrientation<>, MaxWindow>>>
 make_trajectory_ggiw_orientation_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIWOrientation<>>>>();
+    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIWOrientation<>, MaxWindow>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -730,10 +738,10 @@ make_trajectory_ggiw_orientation_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIWOrientation<>>>(
+        std::make_unique<models::Trajectory<models::GGIWOrientation<>, MaxWindow>>(
             4, models::GGIWOrientation<>(10.0, 1.0, b1, b_cov, 10.0, b_V)), weight);
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIWOrientation<>>>(
+        std::make_unique<models::Trajectory<models::GGIWOrientation<>, MaxWindow>>(
             4, models::GGIWOrientation<>(10.0, 1.0, b2, b_cov, 10.0, b_V)), weight);
 
     return birth;

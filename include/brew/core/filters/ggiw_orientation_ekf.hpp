@@ -73,7 +73,7 @@ public:
     }
 
     [[nodiscard]] CorrectionResult correct(
-        const Eigen::VectorXd& measurement,
+        const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
         // ---- Standard GGIW EKF correction (same math as ggiw_ekf) ----
@@ -217,7 +217,7 @@ public:
     }
 
     [[nodiscard]] double gate(
-        const Eigen::VectorXd& measurement,
+        const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
         const int d = predicted.extent_dim();

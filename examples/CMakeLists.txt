@@ -4,9 +4,9 @@ add_executable(NonCooperativeSpacecraftExample
 
 target_link_libraries(NonCooperativeSpacecraftExample PRIVATE
     brew
-    yaml-cpp::yaml-cpp
 )
 
-# Copy YAML config next to the binary isn't needed — we run from project root.
-# The executable expects: examples/NonCooperativeSpacecraftConfig.yaml
-# (or pass a custom path as argv[1]).
+# All configuration is inlined as a C++ Config struct in the example source —
+# edit NonCooperativeSpacecraftExample.cpp and rebuild to change parameters.
+# The example expects STL template files (e.g. A.stl, B.stl) in the working
+# directory at runtime. Optional: pass argv[1] to override num_steps.

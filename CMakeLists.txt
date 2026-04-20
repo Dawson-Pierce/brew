@@ -22,9 +22,9 @@ include(FetchContent)
 set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/dependencies" CACHE PATH
     "Directory for fetched dependencies")
 
-# Build-target switch. "desktop" builds the full library (plus serialization,
-# sampling, plotting). "hardware" drops desktop-only modules and their deps
-# (yaml-cpp, matplot++, STL samplers) for cross-compile friendliness.
+# Build-target switch. "desktop" builds the full library (plus sampling,
+# plotting). "hardware" drops desktop-only modules and their deps
+# (matplot++, STL samplers) for cross-compile friendliness.
 set(BREW_TARGET "desktop" CACHE STRING "Build target: desktop or hardware")
 set_property(CACHE BREW_TARGET PROPERTY STRINGS desktop hardware)
 
@@ -67,19 +67,6 @@ if(NOT Eigen3_FOUND)
     FetchContent_MakeAvailable(eigen)
 endif()
 
-# yaml-cpp: desktop only (used by serialization)
-if(BREW_TARGET STREQUAL "desktop")
-    FetchContent_Declare(
-        yaml-cpp
-        GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
-        GIT_TAG        0.8.0
-        GIT_SHALLOW    TRUE
-    )
-    set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(yaml-cpp)
-endif()
-
 # Library modules (order matters: dependencies first)
 # core: hardware-portable hot path
 add_subdirectory(src/brew/core/models)
@@ -93,9 +80,8 @@ add_subdirectory(src/brew/advanced/multi_target)
 add_subdirectory(src/brew/advanced/clustering)
 add_subdirectory(src/brew/advanced/metrics)
 
-# desktop: I/O, serialization, sampling, plotting (skipped on hardware)
+# desktop: I/O, sampling, plotting (skipped on hardware)
 if(BREW_TARGET STREQUAL "desktop")
-    add_subdirectory(src/brew/desktop/serialization)
     add_subdirectory(src/brew/desktop/measurement_sampling)
 
     if(BREW_ENABLE_PLOTTING)
@@ -133,7 +119,6 @@ target_link_libraries(brew INTERFACE
 )
 if(BREW_TARGET STREQUAL "desktop")
     target_link_libraries(brew INTERFACE
-        brew_serialization
         brew_measurement_sampling
     )
     if(BREW_ENABLE_PLOTTING)

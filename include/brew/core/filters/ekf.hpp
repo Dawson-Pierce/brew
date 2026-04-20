@@ -37,31 +37,33 @@ public:
         double dt,
         const Dist& prev) const override {
 
-        const auto F = this->dyn_obj_->get_state_mat(dt, prev.mean());
+        typename Base::StateMatrix F = this->dyn_obj_->get_state_mat(dt, prev.mean());
         // const auto G = this->dyn_obj_->get_input_mat(dt, prev.mean());
 
-        Eigen::VectorXd predicted_mean = this->dyn_obj_->propagate_state(dt, prev.mean());
-        Eigen::MatrixXd predicted_cov = F * prev.covariance() * F.transpose()
-                                        + this->process_noise_;
+        typename Base::StateVector predicted_mean = this->dyn_obj_->propagate_state(dt, prev.mean());
+        typename Base::StateMatrix predicted_cov = F * prev.covariance() * F.transpose()
+                                                   + this->process_noise_;
 
         return Dist(std::move(predicted_mean), std::move(predicted_cov));
     }
 
     [[nodiscard]] CorrectionResult correct(
-        const Eigen::VectorXd& measurement,
+        const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
-        const auto H = this->get_measurement_matrix(predicted.mean());
-        const auto z_hat = this->estimate_measurement(predicted.mean());
+        typename Base::MeasMatrix H = this->get_measurement_matrix(predicted.mean());
+        typename Base::MeasVector z_hat = this->estimate_measurement(predicted.mean());
 
-        Eigen::VectorXd innovation = measurement - z_hat;
-        Eigen::MatrixXd S = H * predicted.covariance() * H.transpose() + this->measurement_noise_;
+        typename Base::MeasVector innovation = measurement - z_hat;
+        typename Base::MeasNoiseMatrix S = H * predicted.covariance() * H.transpose()
+                                           + this->measurement_noise_;
 
-        Eigen::MatrixXd K = predicted.covariance() * H.transpose() * S.inverse();
+        typename Base::KalmanGainMatrix K = predicted.covariance() * H.transpose() * S.inverse();
 
-        Eigen::VectorXd updated_mean = predicted.mean() + K * innovation;
-        Eigen::MatrixXd I = Eigen::MatrixXd::Identity(predicted.mean().size(), predicted.mean().size());
-        Eigen::MatrixXd updated_cov = (I - K * H) * predicted.covariance();
+        typename Base::StateVector updated_mean = predicted.mean() + K * innovation;
+        const auto state_dim = predicted.mean().size();
+        typename Base::StateMatrix I = Base::StateMatrix::Identity(state_dim, state_dim);
+        typename Base::StateMatrix updated_cov = (I - K * H) * predicted.covariance();
 
         const int m = static_cast<int>(measurement.size());
         double log_det = S.ldlt().vectorD().array().log().sum();
@@ -75,14 +77,15 @@ public:
     }
 
     [[nodiscard]] double gate(
-        const Eigen::VectorXd& measurement,
+        const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
-        const auto H = this->get_measurement_matrix(predicted.mean());
-        const auto z_hat = this->estimate_measurement(predicted.mean());
+        typename Base::MeasMatrix H = this->get_measurement_matrix(predicted.mean());
+        typename Base::MeasVector z_hat = this->estimate_measurement(predicted.mean());
 
-        Eigen::VectorXd innovation = measurement - z_hat;
-        Eigen::MatrixXd S = H * predicted.covariance() * H.transpose() + this->measurement_noise_;
+        typename Base::MeasVector innovation = measurement - z_hat;
+        typename Base::MeasNoiseMatrix S = H * predicted.covariance() * H.transpose()
+                                           + this->measurement_noise_;
 
         return innovation.transpose() * S.ldlt().solve(innovation);
     }

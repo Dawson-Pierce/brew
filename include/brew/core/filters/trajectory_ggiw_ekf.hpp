@@ -15,9 +15,9 @@ namespace brew::filters {
 // @mex filter
 // @mex_name TrajectoryGGIWEKF
 // @mex_dist TrajectoryGGIW
-// @mex_setters window_size:int, temporal_decay:scalar, forgetting_factor:scalar, scaling_parameter:scalar
+// @mex_setters temporal_decay:scalar, forgetting_factor:scalar, scaling_parameter:scalar
 
-template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic, int MaxWindow = Eigen::Dynamic>
+template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 class TrajectoryGGIWEKF
     : public Filter<models::Trajectory<models::GGIW<Scalar, D, De>, MaxWindow>> {
 public:
@@ -31,7 +31,7 @@ public:
     TrajectoryGGIWEKF() = default;
 
     [[nodiscard]] std::unique_ptr<Base> clone() const override {
-        auto c = std::make_unique<TrajectoryGGIWEKF<Scalar, D, De, MaxWindow>>();
+        auto c = std::make_unique<TrajectoryGGIWEKF<MaxWindow, Scalar, D, De>>();
         c->dyn_obj_ = this->dyn_obj_;
         c->h_ = this->h_;
         c->H_ = this->H_;
@@ -40,7 +40,6 @@ public:
         c->eta_ = eta_;
         c->tau_ = tau_;
         c->rho_ = rho_;
-        c->l_window_ = l_window_;
         return c;
     }
 
@@ -73,8 +72,7 @@ public:
         Eigen::MatrixXd next_V = scale * this->dyn_obj_->propagate_extent(dt, prev_last_state, prev_V);
 
         // Advance ring buffer (slides if at cap); new tail slot zeroed
-        const int cap_hint = Dist::fixed_window ? MaxWindow : l_window_;
-        result.advance_window(cap_hint);
+        result.advance_window();
 
         const int last = result.last_index();
         const int prev_last = last - 1;
@@ -104,7 +102,7 @@ public:
     }
 
     [[nodiscard]] CorrectionResult correct(
-        const Eigen::VectorXd& measurement,
+        const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
         const int sd = predicted.state_dim;
@@ -229,7 +227,7 @@ public:
     }
 
     [[nodiscard]] double gate(
-        const Eigen::VectorXd& measurement,
+        const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
         const Eigen::VectorXd state = predicted.get_last_state();
@@ -253,13 +251,12 @@ public:
     void set_temporal_decay(double eta) { eta_ = eta; }
     void set_forgetting_factor(double tau) { tau_ = tau; }
     void set_scaling_parameter(double rho) { rho_ = rho; }
-    void set_window_size(int L) { l_window_ = L; }
+    [[nodiscard]] static constexpr int window_size() { return Dist::max_window_size(); }
 
 private:
     double eta_ = 1.0;
     double tau_ = 1.0;
     double rho_ = 1.0;
-    int l_window_ = 50;
 };
 
 } // namespace brew::filters

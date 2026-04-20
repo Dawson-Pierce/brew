@@ -13,9 +13,8 @@ namespace brew::filters {
 // @mex filter
 // @mex_name TrajectoryGaussianEKF
 // @mex_dist TrajectoryGaussian
-// @mex_setters window_size:int
 
-template <typename Scalar = double, int D = Eigen::Dynamic, int MaxWindow = Eigen::Dynamic>
+template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic>
 class TrajectoryGaussianEKF
     : public Filter<models::Trajectory<models::Gaussian<Scalar, D>, MaxWindow>> {
 public:
@@ -29,13 +28,12 @@ public:
     TrajectoryGaussianEKF() = default;
 
     [[nodiscard]] std::unique_ptr<Base> clone() const override {
-        auto c = std::make_unique<TrajectoryGaussianEKF<Scalar, D, MaxWindow>>();
+        auto c = std::make_unique<TrajectoryGaussianEKF<MaxWindow, Scalar, D>>();
         c->dyn_obj_ = this->dyn_obj_;
         c->h_ = this->h_;
         c->H_ = this->H_;
         c->process_noise_ = this->process_noise_;
         c->measurement_noise_ = this->measurement_noise_;
-        c->l_window_ = l_window_;
         return c;
     }
 
@@ -52,8 +50,7 @@ public:
         Eigen::MatrixXd F = this->dyn_obj_->get_state_mat(dt, prev_last_state);
 
         // Advance ring buffer (slides if at cap); new tail slot is zeroed
-        const int cap_hint = Dist::fixed_window ? MaxWindow : l_window_;
-        result.advance_window(cap_hint);
+        result.advance_window();
 
         const int last = result.last_index();
         const int prev_last = last - 1;
@@ -85,7 +82,7 @@ public:
     }
 
     [[nodiscard]] CorrectionResult correct(
-        const Eigen::VectorXd& measurement,
+        const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
         const int sd = predicted.state_dim;
@@ -137,7 +134,7 @@ public:
     }
 
     [[nodiscard]] double gate(
-        const Eigen::VectorXd& measurement,
+        const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
         const Eigen::VectorXd state = predicted.get_last_state();
@@ -153,11 +150,7 @@ public:
         return nu.transpose() * S.ldlt().solve(nu);
     }
 
-    void set_window_size(int L) { l_window_ = L; }
-    [[nodiscard]] int window_size() const { return l_window_; }
-
-private:
-    int l_window_ = 50;  // only used when MaxWindow is Dynamic
+    [[nodiscard]] static constexpr int window_size() { return Dist::max_window_size(); }
 };
 
 } // namespace brew::filters

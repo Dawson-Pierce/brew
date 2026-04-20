@@ -109,7 +109,7 @@ protected:
         return correspondences;
     }
 
-    /// Compute mean Gaussian log-likelihood per correspondence.
+    /// Mean Gaussian log-likelihood per correspondence.
     /// Returns log-likelihood (not exponentiated) to stay in log space.
     [[nodiscard]] double compute_log_likelihood(
         const Eigen::MatrixXd& source_transformed,

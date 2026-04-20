@@ -2,9 +2,10 @@
 // Non-Cooperative Spacecraft TM-PHD Tracking Example
 // ============================================================
 // Demonstrates RFS-based multi-target tracking with template
-// matching and a bounding-box sensor field of view.  All tunable
-// parameters are loaded from a YAML config file so the example
-// can be re-run without recompiling.
+// matching and a bounding-box sensor field of view. All tunable
+// parameters are inlined in a C++ Config struct below; adjust and
+// recompile for a different scenario. (Optional: pass argv[1] as
+// an override for num_steps for quick experimentation.)
 // ============================================================
 
 #include "brew/core/dynamics/single_integrator.hpp"
@@ -18,9 +19,9 @@
 #include "brew/core/template_matching/point_cloud.hpp"
 #include "brew/core/template_matching/point_to_plane_icp.hpp"
 #include "brew/core/template_matching/pca_icp.hpp"
+#include "brew/core/template_matching/template_library.hpp"
 #include "brew/desktop/measurement_sampling/measurement_sampling.hpp"
 
-#include <yaml-cpp/yaml.h>
 #include <Eigen/Dense>
 #include <random>
 #include <vector>
@@ -39,6 +40,117 @@
 #endif
 
 using namespace brew;
+
+// ---- Configuration (inlined — edit and recompile) --------------------------
+
+struct TemplateSpec {
+    std::string file;
+    int num_template_points;
+    int num_dense_points;
+};
+
+struct TargetSpec {
+    int template_index;
+    int birth_time;
+    int death_time;
+    Eigen::VectorXd initial_state;        // [x,y,z,vx,vy,vz]
+    Eigen::Vector3d angular_velocity;     // rad/s axis-angle rate
+};
+
+struct Config {
+    // --- Simulation ---
+    struct {
+        int num_steps          = 30;
+        double dt              = 0.2;
+        int seed               = 42;
+        double point_noise_std = 0.01;
+    } simulation;
+
+    // --- STL templates ---
+    std::vector<TemplateSpec> templates = {
+        {"A.stl", 1000, 5000},
+        {"B.stl", 1000, 5000},
+    };
+
+    // --- Truth targets ---
+    std::vector<TargetSpec> targets = {
+        {
+            0, 0, 29,
+            (Eigen::VectorXd(6) << 0.0, 0.0, 50.0, 15.0, 10.0, 0.5).finished(),
+            Eigen::Vector3d(0.0, 0.0, 0.02),
+        },
+        {
+            1, 5, 29,
+            (Eigen::VectorXd(6) << 30.0, 50.0, 50.0, 20.0, -5.0, -0.3).finished(),
+            Eigen::Vector3d(0.0, 0.0, -0.01),
+        },
+    };
+
+    // --- Sensor (bounding-box field of view) ---
+    struct {
+        Eigen::Vector3d bbox_min           = Eigen::Vector3d(-75.0, 0.0, -75.0);
+        Eigen::Vector3d bbox_max           = Eigen::Vector3d(75.0, 150.0, 75.0);
+        int measurement_candidates         = 1000;
+        int measurement_points             = 100;
+        double cos_visibility_threshold    = -0.3;
+    } sensor;
+
+    // --- ICP ---
+    struct {
+        int max_iterations = 25;
+        double tolerance   = 1.0e-12;
+        double sigma_sq    = 0.1;
+    } icp;
+
+    // --- TM-EKF filter ---
+    struct {
+        double process_noise           = 0.5;
+        double measurement_noise_pos   = 0.1;
+        double measurement_noise_rot   = 0.1;
+        double rotation_process_noise  = 0.05;
+    } filter;
+
+    // --- PHD multi-target filter ---
+    struct {
+        double prob_detection     = 0.95;
+        double prob_survive       = 0.99;
+        double clutter_rate       = 1.0;
+        double clutter_density    = 1.0e-6;
+        double prune_threshold    = 1.0e-5;
+        double merge_threshold    = 4.0;
+        int max_components        = 50;
+        double extract_threshold  = 0.4;
+        double gate_threshold     = 100.0;
+    } phd;
+
+    // --- Birth model ---
+    struct {
+        double weight       = 0.001;
+        double cov_position = 1500.0;
+        double cov_velocity = 500.0;
+        // Rotation birth covariance set to pi^2 so the first correction's
+        // Kalman gain on rotation is effectively 1 (rotation snaps to ICP).
+        double cov_rotation = M_PI * M_PI;
+        Eigen::VectorXd mean = Eigen::VectorXd::Zero(6);
+    } birth;
+
+    // --- DBSCAN clustering ---
+    struct {
+        double epsilon = 8.0;
+        int min_points = 3;
+    } clustering;
+
+    // --- Visualization ---
+    struct {
+        std::string output_dir = "output/spacecraft_example";
+        int fig_width          = 1100;
+        int fig_height         = 900;
+        int wireframe_stride   = 1;
+        float marker_size      = 5.0f;
+        float view_azimuth     = 45.0f;
+        float view_elevation   = 30.0f;
+    } visualization;
+};
 
 // ---- Geometry helpers -------------------------------------------------------
 
@@ -270,83 +382,63 @@ static double rotation_error_3d(const Eigen::Matrix3d& R_est,
     return std::acos(std::clamp(x_est.dot(x_truth), -1.0, 1.0));
 }
 
-// ---- YAML helpers -----------------------------------------------------------
-
-static Eigen::Vector3d yaml_to_vec3(const YAML::Node& node) {
-    return Eigen::Vector3d(node[0].as<double>(),
-                           node[1].as<double>(),
-                           node[2].as<double>());
-}
-
-static Eigen::VectorXd yaml_to_vec(const YAML::Node& node, int n) {
-    Eigen::VectorXd v(n);
-    for (int i = 0; i < n; ++i) v(i) = node[i].as<double>();
-    return v;
-}
-
 // =============================================================================
 // main
 // =============================================================================
 int main(int argc, char* argv[]) {
-    // --- Load config ---------------------------------------------------------
-    std::string config_path = "examples/NonCooperativeSpacecraftConfig.yaml";
-    if (argc > 1) config_path = argv[1];
+    Config config;
 
-    std::cout << "Loading config: " << config_path << "\n";
-    YAML::Node cfg = YAML::LoadFile(config_path);
+    // Optional override: argv[1] = num_steps
+    if (argc > 1) {
+        try {
+            config.simulation.num_steps = std::stoi(argv[1]);
+            std::cout << "Override: num_steps = "
+                      << config.simulation.num_steps << "\n";
+        } catch (const std::exception& e) {
+            std::cerr << "Ignoring argv[1] (not an integer): " << argv[1] << "\n";
+        }
+    }
 
-    const auto& sim_cfg   = cfg["simulation"];
-    const auto& sens_cfg  = cfg["sensor"];
-    const auto& icp_cfg   = cfg["icp"];
-    const auto& filt_cfg  = cfg["filter"];
-    const auto& phd_cfg   = cfg["phd"];
-    const auto& birth_cfg = cfg["birth"];
-    const auto& clust_cfg = cfg["clustering"];
-    const auto& vis_cfg   = cfg["visualization"];
+    const int    num_steps       = config.simulation.num_steps;
+    const double dt              = config.simulation.dt;
+    const int    seed            = config.simulation.seed;
+    const double point_noise_std = config.simulation.point_noise_std;
 
-    const int    num_steps       = sim_cfg["num_steps"].as<int>();
-    const double dt              = sim_cfg["dt"].as<double>();
-    const int    seed            = sim_cfg["seed"].as<int>();
-    const double point_noise_std = sim_cfg["point_noise_std"].as<double>();
+    const Eigen::Vector3d bbox_min = config.sensor.bbox_min;
+    const Eigen::Vector3d bbox_max = config.sensor.bbox_max;
+    const int    meas_candidates   = config.sensor.measurement_candidates;
+    const int    meas_points       = config.sensor.measurement_points;
+    const double cos_vis_thresh    = config.sensor.cos_visibility_threshold;
 
-    const Eigen::Vector3d bbox_min = yaml_to_vec3(sens_cfg["bbox_min"]);
-    const Eigen::Vector3d bbox_max = yaml_to_vec3(sens_cfg["bbox_max"]);
-    const int    meas_candidates   = sens_cfg["measurement_candidates"].as<int>();
-    const int    meas_points       = sens_cfg["measurement_points"].as<int>();
-    const double cos_vis_thresh    = sens_cfg["cos_visibility_threshold"].as<double>();
+    const std::string output_dir = config.visualization.output_dir;
 
-    const std::string output_dir = vis_cfg["output_dir"].as<std::string>();
+    // --- Load templates into TemplateLibrary --------------------------------
+    // The library owns the point clouds + PCA axes/centroid. body_triangles is
+    // kept in parallel (by template id) for truth generation and visualization.
+    auto lib = std::make_shared<template_matching::TemplateLibrary>();
+    std::vector<Eigen::MatrixXd> body_triangles;
+    std::vector<Eigen::Vector3d> template_centroids;
 
-    // --- Load templates ------------------------------------------------------
-    struct TemplateData {
-        std::shared_ptr<template_matching::PointCloud> templ;
-        Eigen::Vector3d centroid;
-        Eigen::Matrix3d pca_axes;
-        Eigen::Vector3d pca_centroid;
-        Eigen::MatrixXd body_triangles;   // centered body-frame tris
-    };
-
-    std::vector<TemplateData> templates;
-    for (const auto& t_cfg : cfg["templates"]) {
-        std::string file     = t_cfg["file"].as<std::string>();
-        int n_templ          = t_cfg["num_template_points"].as<int>();
-        int n_dense          = t_cfg["num_dense_points"].as<int>();
-
-        auto dense = measurement_sampling::sample_stl_vsp(file, n_dense);
+    for (const auto& tspec : config.templates) {
+        // Compute centroid from a dense sampling so the centered template
+        // is well-balanced regardless of sparse sampling artifacts.
+        auto dense = measurement_sampling::sample_stl_vsp(
+            tspec.file, tspec.num_dense_points);
         Eigen::Vector3d centroid = dense.points().rowwise().mean();
-        dense.points().colwise() -= centroid;
-        Eigen::Matrix3d axes = template_matching::PcaIcp::pca_axes(dense.points());
-        Eigen::Vector3d pca_centroid = dense.points().rowwise().mean();
 
-        auto cloud = measurement_sampling::sample_stl_vsp(file, n_templ);
-        cloud.points().colwise() -= centroid;
-        auto templ = std::make_shared<template_matching::PointCloud>(cloud.points());
+        auto cloud_raw = measurement_sampling::sample_stl_vsp(
+            tspec.file, tspec.num_template_points);
+        cloud_raw.points().colwise() -= centroid;
+        int id = lib->add(std::move(cloud_raw));
 
-        Eigen::MatrixXd tris = measurement_sampling::load_stl_triangles_vsp(file);
+        Eigen::MatrixXd tris =
+            measurement_sampling::load_stl_triangles_vsp(tspec.file);
         tris.colwise() -= centroid;
+        body_triangles.push_back(std::move(tris));
+        template_centroids.push_back(centroid);
 
-        templates.push_back({templ, centroid, axes, pca_centroid, tris});
-        std::cout << "Template " << file << ": " << templ->num_points() << " pts\n";
+        std::cout << "Template [" << id << "] " << tspec.file
+                  << ": " << lib->get(id)->num_points() << " pts\n";
     }
 
     // --- Dynamics ------------------------------------------------------------
@@ -354,9 +446,9 @@ int main(int argc, char* argv[]) {
 
     // --- ICP -----------------------------------------------------------------
     template_matching::IcpParams icp_params;
-    icp_params.max_iterations = icp_cfg["max_iterations"].as<int>();
-    icp_params.tolerance      = icp_cfg["tolerance"].as<double>();
-    icp_params.sigma_sq       = icp_cfg["sigma_sq"].as<double>();
+    icp_params.max_iterations = config.icp.max_iterations;
+    icp_params.tolerance      = config.icp.tolerance;
+    icp_params.sigma_sq       = config.icp.sigma_sq;
 
     auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
@@ -365,35 +457,33 @@ int main(int argc, char* argv[]) {
     auto ekf = std::make_unique<filters::TmEkf<>>();
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(
-        filt_cfg["process_noise"].as<double>() * Eigen::MatrixXd::Identity(3, 3));
+        config.filter.process_noise * Eigen::MatrixXd::Identity(3, 3));
     Eigen::MatrixXd R_meas = Eigen::MatrixXd::Zero(6, 6);
-    R_meas.topLeftCorner(3, 3)     = filt_cfg["measurement_noise_pos"].as<double>()
+    R_meas.topLeftCorner(3, 3)     = config.filter.measurement_noise_pos
                                      * Eigen::Matrix3d::Identity();
-    R_meas.bottomRightCorner(3, 3) = filt_cfg["measurement_noise_rot"].as<double>()
+    R_meas.bottomRightCorner(3, 3) = config.filter.measurement_noise_rot
                                      * Eigen::Matrix3d::Identity();
     ekf->set_measurement_noise(R_meas);
     ekf->set_rotation_process_noise(
-        filt_cfg["rotation_process_noise"].as<double>() * Eigen::MatrixXd::Identity(3, 3));
+        config.filter.rotation_process_noise * Eigen::MatrixXd::Identity(3, 3));
     ekf->set_icp(inner_icp);
-
-    for (auto& td : templates)
-        ekf->set_pca_prior(td.templ.get(), td.pca_axes, td.pca_centroid);
+    ekf->set_template_library(lib);
 
     // --- Truth targets -------------------------------------------------------
     std::vector<TruthTarget3D> truth_targets;
     std::vector<Eigen::MatrixXd> target_mesh_tris;   // per-target body tris
 
-    for (const auto& tgt_cfg : cfg["targets"]) {
-        int ti    = tgt_cfg["template_index"].as<int>();
-        int birth = tgt_cfg["birth_time"].as<int>();
-        int death = tgt_cfg["death_time"].as<int>();
-        Eigen::VectorXd x0    = yaml_to_vec(tgt_cfg["initial_state"], 6);
-        Eigen::Vector3d omega = yaml_to_vec3(tgt_cfg["angular_velocity"]);
+    for (const auto& tgt_cfg : config.targets) {
+        int ti    = tgt_cfg.template_index;
+        int birth = tgt_cfg.birth_time;
+        int death = tgt_cfg.death_time;
+        const Eigen::VectorXd& x0    = tgt_cfg.initial_state;
+        const Eigen::Vector3d& omega = tgt_cfg.angular_velocity;
 
         Eigen::Matrix3d R0 = facing_rotation(x0.tail(3));
         truth_targets.push_back(
             make_truth_target(x0, R0, omega, birth, death, dt, ti, *dyn));
-        target_mesh_tris.push_back(templates[ti].body_triangles);
+        target_mesh_tris.push_back(body_triangles[ti]);
     }
 
     // --- Generate measurements -----------------------------------------------
@@ -414,21 +504,20 @@ int main(int argc, char* argv[]) {
     // --- Birth model ---------------------------------------------------------
     auto birth = std::make_unique<models::Mixture<models::TemplatePose<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
-    birth_cov.topLeftCorner(3, 3)     = birth_cfg["cov_position"].as<double>()
+    birth_cov.topLeftCorner(3, 3)     = config.birth.cov_position
                                         * Eigen::Matrix3d::Identity();
-    birth_cov.block(3, 3, 3, 3)      = birth_cfg["cov_velocity"].as<double>()
+    birth_cov.block(3, 3, 3, 3)       = config.birth.cov_velocity
                                         * Eigen::Matrix3d::Identity();
-    birth_cov.bottomRightCorner(3, 3) = birth_cfg["cov_rotation"].as<double>()
+    birth_cov.bottomRightCorner(3, 3) = config.birth.cov_rotation
                                         * Eigen::Matrix3d::Identity();
-    Eigen::MatrixXd R_birth;   // empty -> PCA-ICP cold start
     std::vector<int> pos_indices = {0, 1, 2};
-    Eigen::VectorXd b_mean = yaml_to_vec(birth_cfg["mean"], 6);
-    double w_b = birth_cfg["weight"].as<double>();
+    Eigen::VectorXd b_mean = config.birth.mean;
+    double w_b = config.birth.weight;
 
-    for (auto& td : templates) {
+    for (int id = 0; id < lib->size(); ++id) {
         birth->add_component(
             std::make_unique<models::TemplatePose<>>(
-                b_mean, birth_cov, R_birth, td.templ, pos_indices),
+                b_mean, birth_cov, id, pos_indices),
             w_b);
     }
 
@@ -437,18 +526,18 @@ int main(int argc, char* argv[]) {
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose<>>>());
-    phd.set_prob_detection(phd_cfg["prob_detection"].as<double>());
-    phd.set_prob_survive(phd_cfg["prob_survive"].as<double>());
-    phd.set_clutter_rate(phd_cfg["clutter_rate"].as<double>());
-    phd.set_clutter_density(phd_cfg["clutter_density"].as<double>());
-    phd.set_prune_threshold(phd_cfg["prune_threshold"].as<double>());
-    phd.set_merge_threshold(phd_cfg["merge_threshold"].as<double>());
-    phd.set_max_components(phd_cfg["max_components"].as<int>());
-    phd.set_extract_threshold(phd_cfg["extract_threshold"].as<double>());
-    phd.set_gate_threshold(phd_cfg["gate_threshold"].as<double>());
+    phd.set_prob_detection(config.phd.prob_detection);
+    phd.set_prob_survive(config.phd.prob_survive);
+    phd.set_clutter_rate(config.phd.clutter_rate);
+    phd.set_clutter_density(config.phd.clutter_density);
+    phd.set_prune_threshold(config.phd.prune_threshold);
+    phd.set_merge_threshold(config.phd.merge_threshold);
+    phd.set_max_components(config.phd.max_components);
+    phd.set_extract_threshold(config.phd.extract_threshold);
+    phd.set_gate_threshold(config.phd.gate_threshold);
     phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(
-        clust_cfg["epsilon"].as<double>(),
-        clust_cfg["min_points"].as<int>()));
+        config.clustering.epsilon,
+        config.clustering.min_points));
 
     // --- Run filter ----------------------------------------------------------
     std::cout << "\n=== Non-Cooperative Spacecraft TM-PHD ===\n";
@@ -489,7 +578,7 @@ int main(int argc, char* argv[]) {
                     if (pe < best_pos) {
                         best_pos = pe;
                         best_rot = rotation_error_3d(
-                            Eigen::Matrix3d(latest.component(i).rotation()), truth_R);
+                            latest.component(i).rotation(), truth_R);
                     }
                 }
             }
@@ -503,11 +592,11 @@ int main(int argc, char* argv[]) {
         {
             std::filesystem::create_directories(output_dir);
 
-            const int fig_w   = vis_cfg["fig_width"].as<int>();
-            const int fig_h   = vis_cfg["fig_height"].as<int>();
-            const float az    = vis_cfg["view_azimuth"].as<float>();
-            const float el    = vis_cfg["view_elevation"].as<float>();
-            const float msz   = vis_cfg["marker_size"].as<float>();
+            const int fig_w = config.visualization.fig_width;
+            const int fig_h = config.visualization.fig_height;
+            const float az  = config.visualization.view_azimuth;
+            const float el  = config.visualization.view_elevation;
+            const float msz = config.visualization.marker_size;
 
             auto fig = matplot::figure(true);
             fig->width(fig_w);
@@ -582,17 +671,15 @@ int main(int argc, char* argv[]) {
             for (std::size_t i = 0; i < latest.size(); ++i) {
                 const auto& est = latest.component(i);
                 Eigen::Vector3d est_pos = est.mean().head(3);
-                Eigen::Matrix3d est_R   = Eigen::Matrix3d(est.rotation());
+                Eigen::Matrix3d est_R   = est.rotation();
 
-                // Find which template this estimate uses
+                // Find which template this estimate uses via its template_id.
                 const Eigen::MatrixXd* tri_ptr = nullptr;
                 int n_tris = 0;
-                for (std::size_t ti = 0; ti < templates.size(); ++ti) {
-                    if (&est.get_template() == templates[ti].templ.get()) {
-                        tri_ptr = &templates[ti].body_triangles;
-                        n_tris  = static_cast<int>(tri_ptr->cols()) / 3;
-                        break;
-                    }
+                int ti = est.template_id();
+                if (ti >= 0 && ti < static_cast<int>(body_triangles.size())) {
+                    tri_ptr = &body_triangles[ti];
+                    n_tris  = static_cast<int>(tri_ptr->cols()) / 3;
                 }
                 if (!tri_ptr) continue;
 

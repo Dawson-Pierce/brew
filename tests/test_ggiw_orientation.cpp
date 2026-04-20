@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 #include "brew/core/filters/ggiw_orientation_ekf.hpp"
 #include "brew/core/dynamics/single_integrator.hpp"
-#include "brew/desktop/serialization/rfs_yaml.hpp"
 
 using namespace brew;
 
@@ -213,59 +212,3 @@ TEST_F(GGIWOrientationEKFTest, Gate) {
     EXPECT_GT(gate_far, 100.0);
 }
 
-// ============================================================
-// Serialization tests
-// ============================================================
-
-TEST(GGIWOrientationSerialization, RoundTrip) {
-    Eigen::VectorXd mean(4);
-    mean << 1.0, 2.0, 0.5, -0.5;
-    Eigen::MatrixXd cov = 2.0 * Eigen::MatrixXd::Identity(4, 4);
-    Eigen::MatrixXd V(2, 2);
-    V << 10.0, 2.0,
-          2.0, 5.0;
-
-    models::GGIWOrientation<> original(10.0, 5.0, mean, cov, 10.0, V);
-
-    // Serialize
-    auto j = serialization::to_yaml(original);
-    EXPECT_EQ(j["type"].as<std::string>(), "GGIWOrientation");
-
-    // Deserialize
-    auto restored = serialization::ggiw_orientation_from_yaml(j);
-
-    EXPECT_DOUBLE_EQ(restored.alpha(), original.alpha());
-    EXPECT_DOUBLE_EQ(restored.beta(), original.beta());
-    EXPECT_DOUBLE_EQ(restored.v(), original.v());
-    EXPECT_EQ(restored.mean().size(), original.mean().size());
-
-    for (int i = 0; i < mean.size(); ++i) {
-        EXPECT_NEAR(restored.mean()(i), original.mean()(i), 1e-10);
-    }
-
-    // V should match
-    for (int i = 0; i < 2; ++i) {
-        for (int jj = 0; jj < 2; ++jj) {
-            EXPECT_NEAR(restored.V()(i, jj), original.V()(i, jj), 1e-10);
-        }
-    }
-
-    // Basis should have been re-derived from V (constructor decomposes V)
-    EXPECT_EQ(restored.basis().rows(), 2);
-    EXPECT_TRUE(restored.has_eigenvalues());
-}
-
-TEST(GGIWOrientationSerialization, DistributionSerializerRoundTrip) {
-    Eigen::VectorXd mean(4);
-    mean << 1.0, 2.0, 0.5, -0.5;
-    Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
-
-    models::GGIWOrientation<> original(10.0, 5.0, mean, cov, 10.0, V);
-
-    auto j = serialization::DistributionSerializer<models::GGIWOrientation<>>::serialize(original);
-    auto restored = serialization::DistributionSerializer<models::GGIWOrientation<>>::deserialize(j);
-
-    EXPECT_DOUBLE_EQ(restored.alpha(), 10.0);
-    EXPECT_DOUBLE_EQ(restored.beta(), 5.0);
-}

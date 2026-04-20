@@ -81,7 +81,7 @@ public:
     }
 
     [[nodiscard]] CorrectionResult correct(
-        const Eigen::VectorXd& measurement,
+        const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
         // measurement is d x W matrix stored column-major in a vector,
@@ -184,7 +184,7 @@ public:
     }
 
     [[nodiscard]] double gate(
-        const Eigen::VectorXd& measurement,
+        const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
         const int d = predicted.extent_dim();
