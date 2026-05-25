@@ -15,7 +15,7 @@ namespace brew::filters {
 // @mex filter
 // @mex_name IGGIWEKF
 // @mex_dist IGGIW
-// @mex_setters eta:scalar, lambda:scalar, omega:scalar, intensity_forgetting_factor:scalar, intensity_growth:scalar, extent_forgetting_factor:scalar
+// @mex_setters eta:scalar, lambda:scalar, omega:scalar, intensity_forgetting_factor:scalar, intensity_growth:scalar, extent_forgetting_factor:scalar, centroid_power:scalar
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 class IGGIWEKF : public Filter<models::IGGIW<Scalar, D, De>> {
 public:
@@ -39,6 +39,7 @@ public:
         c->delta_gamma_ = delta_gamma_;
         c->gamma_growth_ = gamma_growth_;
         c->delta_extent_ = delta_extent_;
+        c->centroid_power_ = centroid_power_;
         return c;
     }
 
@@ -100,10 +101,38 @@ public:
         const int n = static_cast<int>(weights.size());
         const double eps = std::numeric_limits<double>::epsilon();
         const double sum_w = std::max(weights.sum(), eps);
-        const double r = std::max(weights.mean(), eps);
 
-        const Eigen::VectorXd z_bar = (positions * weights) / sum_w;
+        // Intensity summary statistic uses the generalized power mean
+        //   r = ( (1/N) * sum(w_j^p) )^(1/p)
+        // so the same centroid_power knob biases the InverseGamma update
+        // toward hot spots. r = mean(w) at p = 1, and r -> max(w) as p
+        // increases — pulling beta/(alpha-1) from "average reflectivity"
+        // toward "peak reflectivity" in lock-step with the centroid.
+        double r;
+        if (centroid_power_ == 1.0) {
+            r = std::max(weights.mean(), eps);
+        } else {
+            const double mean_wp =
+                weights.array().pow(centroid_power_).mean();
+            r = std::pow(std::max(mean_wp, eps), 1.0 / centroid_power_);
+            r = std::max(r, eps);
+        }
 
+        // Centroid uses w^p instead of w so the user can dial how much
+        // the per-cell intensity dominates the location average:
+        //   p = 1  -> standard intensity-weighted centroid (default)
+        //   p > 1  -> centroid pulled harder toward hot spots
+        //   p < 1  -> centroid closer to the geometric (unweighted) mean
+        const Eigen::VectorXd weights_p =
+            (centroid_power_ == 1.0)
+                ? weights
+                : Eigen::VectorXd(weights.array().pow(centroid_power_));
+        const double sum_wp = std::max(weights_p.sum(), eps);
+        const Eigen::VectorXd z_bar = (positions * weights_p) / sum_wp;
+
+        // Z_meas keeps the linear-weight spread around z_bar so the extent
+        // estimate still reflects the full intensity-weighted distribution
+        // of cells (only the centroid is sharpened by p).
         Eigen::MatrixXd Z_meas = Eigen::MatrixXd::Zero(d, d);
         for (int j = 0; j < n; ++j) {
             const Eigen::VectorXd dz = positions.col(j) - z_bar;
@@ -165,8 +194,15 @@ public:
         unpack_measurement(measurement, d, positions, weights);
 
         const double eps = std::numeric_limits<double>::epsilon();
-        const double sum_w = std::max(weights.sum(), eps);
-        const Eigen::VectorXd z_bar = (positions * weights) / sum_w;
+
+        // Match the w^p centroid used in correct() so the gate compares
+        // against the same point estimate the update will move toward.
+        const Eigen::VectorXd weights_p =
+            (centroid_power_ == 1.0)
+                ? weights
+                : Eigen::VectorXd(weights.array().pow(centroid_power_));
+        const double sum_wp = std::max(weights_p.sum(), eps);
+        const Eigen::VectorXd z_bar = (positions * weights_p) / sum_wp;
 
         const double dof_floor = static_cast<double>(2 * d + 2);
         const double v_safe = std::max(predicted.v(), dof_floor + eps);
@@ -229,6 +265,18 @@ public:
         delta_extent_ = delta_extent;
     }
 
+    /// Exponent applied to per-cell intensities when computing the
+    /// measurement centroid: z_bar = (positions * w^p) / sum(w^p).
+    /// p = 1 reproduces the standard intensity-weighted centroid.
+    /// p > 1 pulls the centroid harder toward hot spots; p < 1 relaxes
+    /// it toward the geometric mean of the detection cells.
+    void set_centroid_power(double centroid_power) {
+        if (!(centroid_power > 0.0) || !std::isfinite(centroid_power)) {
+            throw std::invalid_argument("centroid_power must be positive and finite.");
+        }
+        centroid_power_ = centroid_power;
+    }
+
 private:
     double eta_ = 4.0;
     double lambda_ = 4.0;
@@ -236,6 +284,7 @@ private:
     double delta_gamma_ = 0.9;
     double gamma_growth_ = 1.0;
     double delta_extent_ = 0.9;
+    double centroid_power_ = 1.0;
 
     static void unpack_measurement(
         const Eigen::VectorXd& measurement,

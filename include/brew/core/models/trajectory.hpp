@@ -35,6 +35,10 @@
 // @mex_trajectory GGIWOrientation
 //
 // @mex model
+// @mex_name TrajectoryIGGIW
+// @mex_trajectory IGGIW
+//
+// @mex model
 // @mex_name TrajectoryTemplatePose
 // @mex_trajectory TemplatePose
 
