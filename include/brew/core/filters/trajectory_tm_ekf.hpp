@@ -218,6 +218,7 @@ public:
         result.history_at(last) = result.history_at(last).with_updated_state_aligned(
             std::move(last_mean), std::move(next_aug_cov), next_rotation);
 
+        result.commit_current_to_state_history();
         return { std::move(result), likelihood };
     }
 

@@ -1,22 +1,49 @@
 #include "brew/advanced/clustering/dbscan.hpp"
 #include <algorithm>
+#include <cmath>
 #include <queue>
 #include <set>
+#include <utility>
 
 namespace brew::clustering {
 
-DBSCAN::DBSCAN(double epsilon, int min_pts)
-    : epsilon_(epsilon), min_pts_(min_pts) {}
+DBSCAN::DBSCAN(double epsilon, int min_pts,
+               std::vector<int> dims, std::vector<double> scales)
+    : epsilon_(epsilon), min_pts_(min_pts),
+      dims_(std::move(dims)), scales_(std::move(scales)) {}
 
 std::vector<int> DBSCAN::run_dbscan(const Eigen::MatrixXd& Z) const {
     const int n = static_cast<int>(Z.cols());
+
+    // Metric matrix: the selected rows (default: all rows), each optionally
+    // scaled by sqrt(scales[d]) so the plain Euclidean norm below evaluates
+    // sqrt(sum_d scales[d] * (z_i,d - z_j,d)^2) -- a weighted distance.
+    const bool need_copy = !dims_.empty() || !scales_.empty();
+    Eigen::MatrixXd Zsub;
+    if (!dims_.empty()) {
+        Zsub.resize(static_cast<Eigen::Index>(dims_.size()), Z.cols());
+        for (std::size_t r = 0; r < dims_.size(); ++r) {
+            Zsub.row(static_cast<Eigen::Index>(r)) = Z.row(dims_[r]);
+        }
+    } else if (need_copy) {
+        Zsub = Z;
+    }
+    if (!scales_.empty()) {
+        const Eigen::Index m = std::min<Eigen::Index>(
+            Zsub.rows(), static_cast<Eigen::Index>(scales_.size()));
+        for (Eigen::Index r = 0; r < m; ++r) {
+            Zsub.row(r) *= std::sqrt(std::max(scales_[static_cast<std::size_t>(r)], 0.0));
+        }
+    }
+    const Eigen::MatrixXd& Zm = need_copy ? Zsub : Z;
+
     std::vector<int> labels(n, -2); // -2 = unvisited, -1 = noise
     int cluster_id = 0;
 
     auto range_query = [&](int idx) -> std::vector<int> {
         std::vector<int> neighbors;
         for (int j = 0; j < n; ++j) {
-            if ((Z.col(idx) - Z.col(j)).norm() <= epsilon_) {
+            if ((Zm.col(idx) - Zm.col(j)).norm() <= epsilon_) {
                 neighbors.push_back(j);
             }
         }

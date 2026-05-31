@@ -5,6 +5,7 @@
 #include "brew/core/models/iggiw.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -23,7 +24,7 @@ namespace brew::filters {
 // @mex filter
 // @mex_name TrajectoryIGGIWEKF
 // @mex_dist TrajectoryIGGIW
-// @mex_setters eta:scalar, lambda:scalar, omega:scalar, intensity_forgetting_factor:scalar, intensity_growth:scalar, extent_forgetting_factor:scalar, centroid_power:scalar
+// @mex_setters eta:scalar, lambda:scalar, omega:scalar, intensity_forgetting_factor:scalar, intensity_growth:scalar, extent_forgetting_factor:scalar, centroid_power:scalar, max_history:scalar
 template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 class TrajectoryIGGIWEKF
     : public Filter<models::Trajectory<models::IGGIW<Scalar, D, De>, MaxWindow>> {
@@ -51,11 +52,13 @@ public:
         c->gamma_growth_ = gamma_growth_;
         c->delta_extent_ = delta_extent_;
         c->centroid_power_ = centroid_power_;
+        c->history_cap_ = history_cap_;
         return c;
     }
 
     [[nodiscard]] Dist predict(double dt, const Dist& prev) const override {
         Dist result = prev;
+        result.set_max_history(history_cap_);
         const int sd = prev.state_dim;
         (void)sd;
 
@@ -140,7 +143,6 @@ public:
 
         const int n = static_cast<int>(weights.size());
         const double eps = std::numeric_limits<double>::epsilon();
-        const double sum_w = std::max(weights.sum(), eps);
 
         // Intensity summary uses the generalized power mean
         //   r = ( (1/N) * sum(w_j^p) )^(1/p)
@@ -164,13 +166,13 @@ public:
         const double sum_wp = std::max(weights_p.sum(), eps);
         const Eigen::VectorXd z_bar = (positions * weights_p) / sum_wp;
 
-        // ---- Z_meas keeps linear weights so extent reflects full spread ----
+        // ---- Z_meas uses w^p weights so extent tracks the core ----
         Eigen::MatrixXd Z_meas = Eigen::MatrixXd::Zero(d, d);
         for (int j = 0; j < n; ++j) {
             const Eigen::VectorXd dz = positions.col(j) - z_bar;
-            Z_meas += weights(j) * dz * dz.transpose();
+            Z_meas += weights_p(j) * dz * dz.transpose();
         }
-        Z_meas /= sum_w;
+        Z_meas /= sum_wp;
         Z_meas = 0.5 * (Z_meas + Z_meas.transpose());
 
         // ---- Expected extent ----
@@ -237,6 +239,7 @@ public:
         last_iggiw.v()     = next_v;
         last_iggiw.V()     = next_V;
 
+        result.commit_current_to_state_history();
         return { std::move(result), likelihood };
     }
 
@@ -313,6 +316,17 @@ public:
         if (!(centroid_power > 0.0) || !std::isfinite(centroid_power))
             throw std::invalid_argument("centroid_power must be positive and finite.");
         centroid_power_ = centroid_power;
+    }
+
+    /// Runtime cap on each trajectory's full state-history record (applied every
+    /// predict, so it survives birth/merge). Non-finite or negative => unbounded
+    /// (keep all); 0 disables recording.
+    void set_max_history(double n) {
+        if (!std::isfinite(n) || n < 0.0) {
+            history_cap_ = std::numeric_limits<std::size_t>::max();
+        } else {
+            history_cap_ = static_cast<std::size_t>(n);
+        }
     }
 
     [[nodiscard]] static constexpr int window_size() { return Dist::max_window_size(); }
@@ -415,6 +429,7 @@ private:
     double gamma_growth_ = 1.0;
     double delta_extent_ = 0.9;
     double centroid_power_ = 1.0;
+    std::size_t history_cap_ = std::numeric_limits<std::size_t>::max();
 };
 
 } // namespace brew::filters

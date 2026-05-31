@@ -100,7 +100,6 @@ public:
 
         const int n = static_cast<int>(weights.size());
         const double eps = std::numeric_limits<double>::epsilon();
-        const double sum_w = std::max(weights.sum(), eps);
 
         // Intensity summary statistic uses the generalized power mean
         //   r = ( (1/N) * sum(w_j^p) )^(1/p)
@@ -130,15 +129,13 @@ public:
         const double sum_wp = std::max(weights_p.sum(), eps);
         const Eigen::VectorXd z_bar = (positions * weights_p) / sum_wp;
 
-        // Z_meas keeps the linear-weight spread around z_bar so the extent
-        // estimate still reflects the full intensity-weighted distribution
-        // of cells (only the centroid is sharpened by p).
+        // Z_meas uses the centroid's w^p weights so the extent tracks the core.
         Eigen::MatrixXd Z_meas = Eigen::MatrixXd::Zero(d, d);
         for (int j = 0; j < n; ++j) {
             const Eigen::VectorXd dz = positions.col(j) - z_bar;
-            Z_meas += weights(j) * dz * dz.transpose();
+            Z_meas += weights_p(j) * dz * dz.transpose();
         }
-        Z_meas /= sum_w;
+        Z_meas /= sum_wp;
         Z_meas = 0.5 * (Z_meas + Z_meas.transpose());
 
         const double dof_floor = static_cast<double>(2 * d + 2);
