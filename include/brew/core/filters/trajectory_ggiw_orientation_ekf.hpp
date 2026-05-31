@@ -271,6 +271,7 @@ public:
         last_ggiw.basis() = U_aligned;
         last_ggiw.eigenvalues() = S_aligned.asDiagonal();
 
+        result.commit_current_to_state_history();
         return { std::move(result), likelihood };
     }
 

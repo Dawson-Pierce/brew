@@ -223,6 +223,7 @@ public:
         last_ggiw.v() = next_v;
         last_ggiw.V() = next_V;
 
+        result.commit_current_to_state_history();
         return { std::move(result), likelihood };
     }
 

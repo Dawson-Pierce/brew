@@ -35,6 +35,10 @@
 // @mex_trajectory GGIWOrientation
 //
 // @mex model
+// @mex_name TrajectoryIGGIW
+// @mex_trajectory IGGIW
+//
+// @mex model
 // @mex_name TrajectoryTemplatePose
 // @mex_trajectory TemplatePose
 
@@ -87,10 +91,8 @@ public:
         }
         stacked_mean_.segment(0, state_dim_) = initial.mean();
         stacked_covariance_.block(0, 0, state_dim_, state_dim_) = initial.covariance();
-        history_[0] = initial;
+        history_[0] = std::move(initial);
         window_size_ = 1;
-        // Seed the state history with the initial state, respecting max_history_.
-        push_state_history(std::move(initial));
     }
 
     [[nodiscard]] std::unique_ptr<Trajectory> clone() const {
@@ -176,16 +178,10 @@ public:
     ///   last slot zeroed, window_size_ unchanged (== MaxWindow).
     /// Returns true if a slide occurred (oldest window slot was dropped).
     ///
-    /// State history behaviour: on every call except the very first post-construction,
-    /// pushes the current (last-finalized) window state to state_history_, trimming
-    /// front entries to respect max_history_. The first call is a no-op for history
-    /// because the constructor already seeded it with the initial state.
+    /// State history is NOT recorded here. The filter's correct() records the
+    /// corrected state via commit_current_to_state_history(), so state_history
+    /// holds only corrected states -- never a predicted or birth-prior state.
     bool advance_window() {
-        if (advance_count_ > 0 && window_size_ > 0) {
-            push_state_history(current());
-        }
-        ++advance_count_;
-
         const int sd = state_dim;
 
         // Grow / bump counter (below cap)
@@ -246,6 +242,20 @@ public:
         return result;
     }
 
+    /// Returns (state_dim x M) matrix of per-step means over the full state
+    /// history (the independent, runtime-bounded lifetime record).
+    [[nodiscard]] Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic> state_history_means() const {
+        const int m = static_cast<int>(state_history_.size());
+        if (m == 0 || state_dim <= 0) {
+            return Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic>();
+        }
+        Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic> result(state_dim, m);
+        for (int i = 0; i < m; ++i) {
+            result.col(i) = state_history_[i].mean();
+        }
+        return result;
+    }
+
     /// Returns (state_dim x window_size) matrix of stacked-state per-step blocks.
     [[nodiscard]] Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic> rearrange_states() const {
         const int ws = window_size_;
@@ -276,7 +286,6 @@ private:
     // Independent full-lifetime record.
     std::vector<T> state_history_{};
     std::size_t max_history_ = std::numeric_limits<std::size_t>::max();
-    int advance_count_ = 0;
 };
 
 // Type trait for detecting Trajectory<T, M>

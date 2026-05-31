@@ -22,6 +22,7 @@ add_executable(brew_tests
     test_ekf.cpp
     test_dbscan.cpp
     test_ggiw_ekf.cpp
+    test_iggiw_ekf.cpp
     test_ggiw_orientation.cpp
     test_trajectory_ggiw_orientation.cpp
     test_trajectory_ekf.cpp

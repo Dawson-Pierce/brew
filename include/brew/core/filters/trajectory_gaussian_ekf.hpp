@@ -130,6 +130,7 @@ public:
         result.history_at(last).covariance() =
             Eigen::MatrixXd(result.cov_at(last, last));
 
+        result.commit_current_to_state_history();
         return { std::move(result), likelihood };
     }
 
