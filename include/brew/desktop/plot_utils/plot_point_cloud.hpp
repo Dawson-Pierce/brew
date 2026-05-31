@@ -1,7 +1,7 @@
 #pragma once
 
 #include "brew/desktop/plot_utils/plot_options.hpp"
-#include "brew/core/template_matching/point_cloud.hpp"
+#include "brew/template_matching/point_cloud.hpp"
 #include <matplot/matplot.h>
 
 namespace brew::plot_utils {

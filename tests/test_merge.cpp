@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/core/fusion/merge.hpp"
+#include "brew/shared/fusion/merge.hpp"
 
 using namespace brew;
 

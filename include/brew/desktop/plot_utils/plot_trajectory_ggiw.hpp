@@ -3,8 +3,8 @@
 #include "brew/desktop/plot_utils/plot_options.hpp"
 #include "brew/desktop/plot_utils/plot_ggiw.hpp"
 #include "brew/desktop/plot_utils/math_utils.hpp"
-#include <brew/core/models/trajectory.hpp>
-#include <brew/core/models/ggiw.hpp>
+#include <brew/shared/trajectory.hpp>
+#include <brew/ggiw/ggiw_model.hpp>
 #include <matplot/matplot.h>
 #include <stdexcept>
 #include <vector>

@@ -3,8 +3,8 @@
 #include "brew/desktop/plot_utils/plot_options.hpp"
 #include "brew/desktop/plot_utils/plot_ggiw_orientation.hpp"
 #include "brew/desktop/plot_utils/math_utils.hpp"
-#include <brew/core/models/trajectory.hpp>
-#include <brew/core/models/ggiw_orientation.hpp>
+#include <brew/shared/trajectory.hpp>
+#include <brew/ggiw_orientation/ggiw_orientation_model.hpp>
 #include <matplot/matplot.h>
 #include <stdexcept>
 #include <cmath>

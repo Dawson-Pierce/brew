@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "brew/core/models/gaussian.hpp"
-#include "brew/core/models/mixture.hpp"
+#include "brew/gaussian/gaussian_model.hpp"
+#include "brew/shared/mixture.hpp"
 
 using namespace brew::models;
 

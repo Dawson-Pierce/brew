@@ -2,8 +2,8 @@
 
 #include "brew/desktop/plot_utils/plot_options.hpp"
 #include "brew/desktop/plot_utils/math_utils.hpp"
-#include <brew/core/models/trajectory.hpp>
-#include <brew/core/models/gaussian.hpp>
+#include <brew/shared/trajectory.hpp>
+#include <brew/gaussian/gaussian_model.hpp>
 #include <matplot/matplot.h>
 #include <stdexcept>
 #include <algorithm>

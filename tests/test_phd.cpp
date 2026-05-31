@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "brew/advanced/multi_target/phd.hpp"
-#include "brew/core/filters/ekf.hpp"
-#include "brew/core/dynamics/single_integrator.hpp"
+#include "brew/shared/multi_target_generic/phd.hpp"
+#include "brew/gaussian/filters/ekf.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "brew/desktop/plot_utils/plot_options.hpp"
-#include <brew/core/models/gaussian.hpp>
+#include <brew/gaussian/gaussian_model.hpp>
 #include <matplot/matplot.h>
 
 namespace brew::plot_utils {

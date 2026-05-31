@@ -8,18 +8,18 @@
 // an override for num_steps for quick experimentation.)
 // ============================================================
 
-#include "brew/core/dynamics/single_integrator.hpp"
-#include "brew/core/models/template_pose.hpp"
-#include "brew/core/models/mixture.hpp"
-#include "brew/core/filters/tm_ekf.hpp"
-#include "brew/advanced/multi_target/phd.hpp"
-#include "brew/core/fusion/prune.hpp"
-#include "brew/core/fusion/merge.hpp"
-#include "brew/advanced/clustering/dbscan.hpp"
-#include "brew/core/template_matching/point_cloud.hpp"
-#include "brew/core/template_matching/point_to_plane_icp.hpp"
-#include "brew/core/template_matching/pca_icp.hpp"
-#include "brew/core/template_matching/template_library.hpp"
+#include "brew/dynamics/single_integrator.hpp"
+#include "brew/template_pose/template_pose_model.hpp"
+#include "brew/shared/mixture.hpp"
+#include "brew/template_pose/filters/tm_ekf.hpp"
+#include "brew/shared/multi_target_generic/phd.hpp"
+#include "brew/shared/fusion/prune.hpp"
+#include "brew/shared/fusion/merge.hpp"
+#include "brew/clustering/dbscan.hpp"
+#include "brew/template_matching/point_cloud.hpp"
+#include "brew/template_matching/point_to_plane_icp.hpp"
+#include "brew/template_matching/pca_icp.hpp"
+#include "brew/template_matching/template_library.hpp"
 #include "brew/desktop/measurement_sampling/measurement_sampling.hpp"
 
 #include <Eigen/Dense>

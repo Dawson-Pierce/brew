@@ -1,10 +1,10 @@
 #pragma once
 
-#include <brew/core/models/gaussian.hpp>
-#include <brew/core/models/ggiw.hpp>
-#include <brew/core/models/mixture.hpp>
-#include <brew/core/models/trajectory.hpp>
-#include <brew/core/template_matching/point_cloud.hpp>
+#include <brew/gaussian/gaussian_model.hpp>
+#include <brew/ggiw/ggiw_model.hpp>
+#include <brew/shared/mixture.hpp>
+#include <brew/shared/trajectory.hpp>
+#include <brew/template_matching/point_cloud.hpp>
 #include <brew/desktop/plot_utils/plot_options.hpp>
 #include <brew/desktop/plot_utils/plot_mixture.hpp>
 #include <brew/desktop/plot_utils/plot_trajectory_gaussian.hpp>

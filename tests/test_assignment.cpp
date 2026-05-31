@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "brew/advanced/assignment/hungarian.hpp"
-#include "brew/advanced/assignment/murty.hpp"
+#include "brew/assignment/hungarian.hpp"
+#include "brew/assignment/murty.hpp"
 #include <cmath>
 #include <limits>
 

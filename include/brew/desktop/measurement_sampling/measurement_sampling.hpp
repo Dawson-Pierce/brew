@@ -1,6 +1,6 @@
 #pragma once
 
-#include "brew/core/template_matching/point_cloud.hpp"
+#include "brew/template_matching/point_cloud.hpp"
 #include <string>
 
 namespace brew::measurement_sampling {

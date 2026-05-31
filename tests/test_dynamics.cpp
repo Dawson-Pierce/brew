@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "brew/core/dynamics/single_integrator.hpp"
-#include "brew/core/dynamics/double_integrator.hpp"
-#include "brew/core/dynamics/constant_turn_2d.hpp"
+#include "brew/dynamics/single_integrator.hpp"
+#include "brew/dynamics/double_integrator.hpp"
+#include "brew/dynamics/constant_turn_2d.hpp"
 
 using namespace brew::dynamics;
 

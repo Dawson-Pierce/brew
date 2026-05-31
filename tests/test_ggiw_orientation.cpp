@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "brew/core/filters/ggiw_orientation_ekf.hpp"
-#include "brew/core/dynamics/single_integrator.hpp"
+#include "brew/ggiw_orientation/filters/ggiw_orientation_ekf.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
 

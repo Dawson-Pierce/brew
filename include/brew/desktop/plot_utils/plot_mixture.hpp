@@ -6,11 +6,11 @@
 #include "brew/desktop/plot_utils/plot_trajectory_ggiw_orientation.hpp"
 #include "brew/desktop/plot_utils/color_palette.hpp"
 #include "brew/desktop/plot_utils/math_utils.hpp"
-#include <brew/core/models/mixture.hpp>
-#include <brew/core/models/gaussian.hpp>
-#include <brew/core/models/ggiw.hpp>
-#include <brew/core/models/ggiw_orientation.hpp>
-#include <brew/core/models/trajectory.hpp>
+#include <brew/shared/mixture.hpp>
+#include <brew/gaussian/gaussian_model.hpp>
+#include <brew/ggiw/ggiw_model.hpp>
+#include <brew/ggiw_orientation/ggiw_orientation_model.hpp>
+#include <brew/shared/trajectory.hpp>
 #include <matplot/matplot.h>
 
 namespace brew::plot_utils {

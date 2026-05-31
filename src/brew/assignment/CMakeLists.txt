@@ -1,0 +1,2 @@
+add_library(brew_assignment INTERFACE)
+target_link_libraries(brew_assignment INTERFACE brew_shared)

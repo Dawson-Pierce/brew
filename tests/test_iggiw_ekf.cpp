@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "brew/core/filters/iggiw_ekf.hpp"
-#include "brew/core/dynamics/single_integrator.hpp"
+#include "brew/iggiw/filters/iggiw_ekf.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
 

@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
-#include "brew/advanced/multi_target/elementary_symmetric.hpp"
-#include "brew/advanced/multi_target/cphd.hpp"
-#include "brew/core/filters/ekf.hpp"
-#include "brew/core/dynamics/single_integrator.hpp"
+#include "brew/shared/elementary_symmetric.hpp"
+#include "brew/shared/multi_target_generic/cphd.hpp"
+#include "brew/gaussian/filters/ekf.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 #include <random>
 
 using namespace brew;

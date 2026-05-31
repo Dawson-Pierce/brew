@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "brew/core/filters/ekf.hpp"
-#include "brew/core/dynamics/single_integrator.hpp"
+#include "brew/gaussian/filters/ekf.hpp"
+#include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew::filters;
 using namespace brew::models;
