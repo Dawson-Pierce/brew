@@ -20,6 +20,7 @@ add_executable(brew_tests
     test_gaussian.cpp
     test_dynamics.cpp
     test_ekf.cpp
+    test_ukf.cpp
     test_dbscan.cpp
     test_ggiw_ekf.cpp
     test_iggiw_ekf.cpp

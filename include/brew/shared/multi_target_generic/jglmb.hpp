@@ -1,9 +1,11 @@
 #pragma once
 
 #include "brew/shared/multi_target_generic/glmb.hpp"
+#include "brew/assignment/gibbs.hpp"
 
 #include <Eigen/Dense>
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -17,7 +19,7 @@ namespace brew::multi_target {
 /// candidates compete directly with surviving tracks for measurements.
 // @mex rfs
 // @mex_name JGLMB
-// @mex_params req_surv:int:5, req_upd:int:5, prune_threshold:double:1e-15, max_hypotheses:int:3000, extract_threshold:double:0.5, gate_threshold:double:9.0, gating_on:bool:false
+// @mex_params req_surv:int:5, req_upd:int:5, prune_threshold:double:1e-15, max_hypotheses:int:3000, extract_threshold:double:0.5, gate_threshold:double:9.0, gating_on:bool:false, use_gibbs:bool:false
 // @mex_has cardinality, track_histories, cluster_object
 template <typename T, int MaxComponents = Eigen::Dynamic>
 class JGLMB : public GLMB<T, MaxComponents> {
@@ -52,6 +54,7 @@ public:
         c->extract_threshold_ = this->extract_threshold_;
         c->gate_threshold_ = this->gate_threshold_;
         c->gating_on_ = this->gating_on_;
+        c->use_gibbs_ = this->use_gibbs_;
         c->is_extended_ = this->is_extended_;
         if (this->cluster_obj_) c->cluster_obj_ = this->cluster_obj_;
         c->cardinality_pmf_ = this->cardinality_pmf_;
@@ -334,7 +337,18 @@ public:
                     this->req_upd_ * std::sqrt(p_hyp.assoc_prob) / ss_w));
                 if (m_req < 1) m_req = 1;
 
-                auto solutions = assignment::murty(neg_log, m_req);
+                std::vector<assignment::AssignmentResult> solutions;
+                if (use_gibbs_) {
+                    // Approximate the m_req best assignments by Gibbs sampling
+                    // (scales past Murty on large problems). Seed deterministically
+                    // for reproducibility, decorrelated across parents/timesteps.
+                    const std::uint64_t seed =
+                        0x9E3779B97F4A7C15ull * (static_cast<std::uint64_t>(up_hyps.size()) + 1)
+                        + static_cast<std::uint64_t>(this->time_index_cntr_) + 1ull;
+                    solutions = assignment::gibbs(neg_log, num_meas, m_req, seed);
+                } else {
+                    solutions = assignment::murty(neg_log, m_req);
+                }
 
                 for (const auto& sol : solutions) {
                     std::vector<int> assigned(n_rows, -1);
@@ -381,6 +395,13 @@ public:
         this->card_dist_from_hyps();
         this->clean_updates();
     }
+
+    /// Use the Gibbs sampler (approximate, scales to large problems) instead of
+    /// exact Murty ranked assignment for the joint update. Default: Murty.
+    void set_use_gibbs(bool b) { use_gibbs_ = b; }
+
+private:
+    bool use_gibbs_ = false;
 };
 
 }  // namespace brew::multi_target

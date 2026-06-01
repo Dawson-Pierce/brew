@@ -93,3 +93,15 @@ TEST_F(GMTracking, Comparison) {
         "GM CPHD - Estimated Cardinality", "gm_cphd_cardinality.png");
 #endif
 }
+
+TEST_F(GMTracking, JGLMBGibbs) {
+    // JGLMB using the Gibbs sampler for the joint update (instead of exact Murty
+    // ranked assignment) should still track both targets for most of the run.
+    auto jglmb = test::make_jglmb<models::Gaussian<>>(
+        test::make_ekf(scenario), test::make_gm_birth(0.1), params);
+    jglmb.set_use_gibbs(true);
+    auto result = test::run_tracking<decltype(jglmb), models::Gaussian<>>(
+        jglmb, scenario, "GM JGLMB-Gibbs Tracking", 5.0, 10);
+    EXPECT_GE(result.converged_steps, 10)
+        << "JGLMB with Gibbs sampling should track both targets for most of the run";
+}
