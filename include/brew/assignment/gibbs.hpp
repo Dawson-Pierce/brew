@@ -29,10 +29,12 @@ namespace brew::assignment {
 /// this runs a Gibbs chain: each sweep resamples every row's column from its
 /// conditional posterior (weight = exp(-cost)) given the other rows' current
 /// columns, respecting measurement exclusivity. The unique assignments visited
-/// are returned in ascending total-cost order — a drop-in replacement for
-/// murty(): each is a full AssignmentResult with the same total_cost semantics
-/// (sum of cost(row, assigned_col) over all rows, missed slots included), so the
-/// caller weights the resulting hypotheses identically.
+/// are returned in ascending total-cost order, in the same AssignmentResult
+/// format murty() produces for this GLMB-style layout: each is a full
+/// AssignmentResult with the same total_cost semantics (sum of cost(row,
+/// assigned_col) over all rows, missed slots included), so the caller weights the
+/// resulting hypotheses identically. (This expects the missed-column layout
+/// above; it is not a general square-assignment solver like murty().)
 ///
 /// Returns up to `num_samples` unique assignments. `seed` makes the draw
 /// reproducible. Scales far better than Murty on large (rows x measurements)
@@ -63,8 +65,9 @@ namespace brew::assignment {
     std::vector<int> cbuf;        // candidate columns (-1 == missed)
     std::vector<double> wbuf;     // candidate weights
 
-    const int max_sweeps = std::max(num_samples * 4, 20);
-    for (int sweep = 0; sweep < max_sweeps; ++sweep) {
+    const std::int64_t max_sweeps =
+        std::max<std::int64_t>(static_cast<std::int64_t>(num_samples) * 4, 20);
+    for (std::int64_t sweep = 0; sweep < max_sweeps; ++sweep) {
         for (int r = 0; r < n_rows; ++r) {
             if (gamma[r] >= 0) owner[gamma[r]] = -1;  // release current
 
@@ -99,7 +102,11 @@ namespace brew::assignment {
             if (pick >= 0) owner[pick] = r;
         }
 
-        // Record this sweep's assignment (deduplicated).
+        // Record this sweep's assignment (deduplicated). Skip assignments that
+        // are infeasible (a row with no in-range missed slot and no free finite
+        // measurement) or carry an infinite cost — mirroring murty()'s handling
+        // of forbidden (+inf) entries, and guarding against an out-of-range
+        // missed column on non-canonical (missed-less) cost matrices.
         std::string key;
         key.reserve(static_cast<std::size_t>(n_rows) * 4);
         for (int r = 0; r < n_rows; ++r) { key += std::to_string(gamma[r]); key += ','; }
@@ -107,12 +114,20 @@ namespace brew::assignment {
             AssignmentResult res;
             res.total_cost = 0.0;
             res.assignments.reserve(static_cast<std::size_t>(n_rows));
+            bool feasible = true;
             for (int r = 0; r < n_rows; ++r) {
-                int col = gamma[r] < 0 ? missed_col(r) : gamma[r];
+                int col = gamma[r];
+                if (col < 0) {
+                    const int mc = missed_col(r);
+                    if (mc >= n_cols) { feasible = false; break; }  // genuinely unassignable
+                    col = mc;
+                }
                 res.assignments.emplace_back(r, col);
                 res.total_cost += cost(r, col);
             }
-            uniq.emplace(std::move(key), std::move(res));
+            if (feasible && std::isfinite(res.total_cost)) {
+                uniq.emplace(std::move(key), std::move(res));
+            }
         }
         if (static_cast<int>(uniq.size()) >= num_samples) break;
     }

@@ -164,3 +164,21 @@ TEST(Gibbs, AllMissedWhenMeasurementsUnfavorable) {
     ASSERT_FALSE(g.empty());
     EXPECT_NEAR(g.front().total_cost, 0.0, 1e-9);
 }
+
+TEST(Gibbs, HandlesNonCanonicalMatrixWithoutCrashing) {
+    // A square matrix with num_meas == n_cols has NO per-row missed columns, so
+    // two rows competing for one column leaves one row unassignable. This must
+    // not read out of bounds (regression for the missed-column OOB); any returned
+    // assignment must be feasible (in-range, finite cost).
+    Eigen::MatrixXd cost(2, 1);
+    cost << 1.0,
+            1.0;
+    auto g = gibbs(cost, /*num_meas=*/1, /*num_samples=*/8, /*seed=*/3);  // must not crash
+    for (const auto& res : g) {
+        EXPECT_TRUE(std::isfinite(res.total_cost));
+        for (auto [row, col] : res.assignments) {
+            EXPECT_GE(col, 0);
+            EXPECT_LT(col, cost.cols());
+        }
+    }
+}

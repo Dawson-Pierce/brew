@@ -99,3 +99,44 @@ TEST(UKFTest, MatchesEKFOnLinearModel) {
     EXPECT_LT((ce.covariance() - cu.covariance()).cwiseAbs().maxCoeff(), 1e-6);
     EXPECT_NEAR(le, lu, 1e-6 * std::max(1.0, le));
 }
+
+TEST(UKFTest, MatchesEKFAtLargeStateScale) {
+    // Regression for the sigma-point cancellation bug: at large state magnitude
+    // (e.g. coordinates ~1e6) the UKF must still match the EKF on a linear model.
+    // A tiny default alpha (1e-3) made n+lambda ~ 4e-6 and the weights ~1e6, which
+    // lost ~6 digits here (mean error ~2e-4); the O(1)-weight default + central-
+    // point reconstruction keep it at machine precision.
+    auto dyn = std::make_shared<SingleIntegrator<>>(2);
+    Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+    Eigen::MatrixXd Q = G * (0.05 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose();
+    Eigen::MatrixXd H(2, 4);
+    H << 1, 0, 0, 0,
+         0, 1, 0, 0;
+    Eigen::MatrixXd R = 0.2 * Eigen::MatrixXd::Identity(2, 2);
+
+    EKF<> ekf;
+    ekf.set_dynamics(dyn); ekf.set_process_noise(Q);
+    ekf.set_measurement_jacobian(H); ekf.set_measurement_noise(R);
+    UKF<> ukf;
+    ukf.set_dynamics(dyn); ukf.set_process_noise(Q);
+    ukf.set_measurement_jacobian(H); ukf.set_measurement_noise(R);
+
+    const double scale = 1e6;
+    Eigen::VectorXd mean(4);
+    mean << scale, -2 * scale, 0.5, 0.3;
+    Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4) * 2.0;
+    cov(0, 2) = cov(2, 0) = 0.3;
+    Gaussian prior(mean, cov);
+
+    auto pe = ekf.predict(1.0, prior);
+    auto pu = ukf.predict(1.0, prior);
+    EXPECT_LT((pe.mean() - pu.mean()).cwiseAbs().maxCoeff(), 1e-5);
+    EXPECT_LT((pe.covariance() - pu.covariance()).cwiseAbs().maxCoeff(), 1e-5);
+
+    Eigen::VectorXd z(2);
+    z << pe.mean()(0) + 0.4, pe.mean()(1) - 0.7;
+    auto [ce, le] = ekf.correct(z, pe);
+    auto [cu, lu] = ukf.correct(z, pu);
+    EXPECT_LT((ce.mean() - cu.mean()).cwiseAbs().maxCoeff(), 1e-5);
+    EXPECT_LT((ce.covariance() - cu.covariance()).cwiseAbs().maxCoeff(), 1e-5);
+}

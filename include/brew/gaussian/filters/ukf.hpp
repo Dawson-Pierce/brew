@@ -3,6 +3,7 @@
 
 #include "brew/shared/filter_base.hpp"
 #include "brew/gaussian/gaussian_model.hpp"
+#include "brew/assert.hpp"
 #include <Eigen/Dense>
 #include <cmath>
 #include <memory>
@@ -19,9 +20,13 @@ namespace brew::filters {
 /// typically more accurate than the EKF; for linear models it reduces to the
 /// Kalman filter and matches the EKF up to numerical precision.
 ///
-/// Scaling parameters: alpha (spread of sigma points, small e.g. 1e-3), beta
-/// (prior knowledge of the distribution; 2 is optimal for Gaussians), kappa
-/// (secondary scaling, usually 0).
+/// Scaling parameters: alpha (sigma-point spread), beta (prior knowledge of the
+/// distribution; 2 is optimal for Gaussians), kappa (secondary scaling, usually
+/// 0). The default alpha=1 keeps the weights O(1) and the transform numerically
+/// robust at any state magnitude; the textbook alpha=1e-3 (sigma points hugging
+/// the mean) makes n+lambda tiny, which both reduces the UKF to ~the EKF and
+/// causes catastrophic cancellation for large-magnitude states — avoid it unless
+/// you specifically want near-mean (derivative-like) behavior on a small state.
 ///
 /// NOTE: not yet registered as an @mex filter. The RFS hot path is devirtualized
 /// around default_filter<Gaussian> == EKF (set_filter downcasts to EKF), so a UKF
@@ -75,8 +80,12 @@ public:
             prop.col(i) = this->dyn_obj_->propagate_state(dt, xi);
         }
 
-        StateVector mean = StateVector::Zero(n);
-        for (int i = 0; i < 2 * n + 1; ++i) mean += s.Wm(i) * prop.col(i);
+        // Reconstruct around the central propagated point so the (possibly
+        // large) central term never forms a huge intermediate that cancels back
+        // down (stable even for small alpha / large-magnitude states). Exact:
+        // sum_i Wm_i X_i == X_0 + sum_{i>=1} Wm_i (X_i - X_0) since sum Wm = 1.
+        StateVector mean = prop.col(0);
+        for (int i = 1; i < 2 * n + 1; ++i) mean += s.Wm(i) * (prop.col(i) - prop.col(0));
 
         typename Base::StateMatrix cov = this->process_noise_;
         for (int i = 0; i < 2 * n + 1; ++i) {
@@ -142,7 +151,7 @@ private:
         DynVector Wc;    // covariance weights
     };
 
-    Scalar alpha_ = Scalar(1e-3);
+    Scalar alpha_ = Scalar(1);     // O(1) weights: numerically robust default
     Scalar beta_  = Scalar(2);
     Scalar kappa_ = Scalar(0);
 
@@ -154,6 +163,8 @@ private:
         const int n = static_cast<int>(mean.size());
         const Scalar lambda = alpha_ * alpha_ * (n + kappa_) - n;
         const Scalar c = n + lambda;
+        BREW_ASSERT(c > Scalar(0),
+            "UKF: n + lambda must be positive; check alpha/kappa (need alpha^2*(n+kappa) > 0)");
 
         SigmaSet s;
         s.Wm.resize(2 * n + 1);
@@ -163,7 +174,17 @@ private:
         for (int i = 1; i <= 2 * n; ++i) s.Wm(i) = s.Wc(i) = Scalar(1) / (2 * c);
 
         // Matrix square root of c*cov via Cholesky (columns are the +/- offsets).
-        Eigen::LLT<DynMatrix> llt(c * cov);
+        // Symmetrize and check success; if the covariance is not numerically
+        // positive-definite, regularize with a small jitter (cf. fusion/merge.hpp)
+        // rather than silently consuming a meaningless factor.
+        DynMatrix P = c * cov;
+        P = Scalar(0.5) * (P + P.transpose());
+        Eigen::LLT<DynMatrix> llt(P);
+        if (llt.info() != Eigen::Success) {
+            const Scalar jitter = Scalar(1e-9) * (P.diagonal().cwiseAbs().maxCoeff() + Scalar(1));
+            P.diagonal().array() += jitter;
+            llt.compute(P);
+        }
         DynMatrix L = llt.matrixL();
 
         s.pts.resize(n, 2 * n + 1);
@@ -196,8 +217,8 @@ private:
             Z.col(i) = this->estimate_measurement(xi);
         }
 
-        z_hat = MeasVector::Zero(m);
-        for (int i = 0; i < npts; ++i) z_hat += s.Wm(i) * Z.col(i);
+        z_hat = Z.col(0);
+        for (int i = 1; i < npts; ++i) z_hat += s.Wm(i) * (Z.col(i) - Z.col(0));
 
         S = this->measurement_noise_;
         Pxz = DynMatrix::Zero(n, m);
