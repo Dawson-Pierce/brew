@@ -88,7 +88,7 @@ public:
     void set_gating_on(bool on) { gating_on_ = on; }
     void set_k_best(int k) { k_best_ = k; }
     void set_extended_target(bool ext) { is_extended_ = ext; }
-    void set_cluster_object(std::shared_ptr<clustering::DBSCAN> obj) {
+    void set_cluster_object(std::shared_ptr<clustering::ClusterBase> obj) {
         cluster_obj_ = std::move(obj);
     }
 
@@ -428,7 +428,7 @@ protected:
     int k_best_ = 5;
     int next_track_id_ = 0;
     bool is_extended_ = false;
-    std::shared_ptr<clustering::DBSCAN> cluster_obj_;
+    std::shared_ptr<clustering::ClusterBase> cluster_obj_;
 
     Eigen::VectorXd cardinality_pmf_;
     double estimated_cardinality_ = 0.0;

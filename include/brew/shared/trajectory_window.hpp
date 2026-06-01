@@ -249,6 +249,20 @@ public:
         return result;
     }
 
+    /// Returns (state_dim x M) matrix of full-lifetime state-history means
+    /// (one column per recorded state in state_history()).
+    [[nodiscard]] Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic> state_history_means() const {
+        const int m = static_cast<int>(state_history_.size());
+        if (m == 0 || state_dim <= 0) {
+            return Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic>();
+        }
+        Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic> result(state_dim, m);
+        for (int i = 0; i < m; ++i) {
+            result.col(i) = state_history_[i].mean();
+        }
+        return result;
+    }
+
 private:
     void push_state_history(T v) {
         if (max_history_ == 0) return;

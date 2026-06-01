@@ -87,7 +87,7 @@ public:
     void set_extract_threshold(double t) { extract_threshold_ = t; }
     void set_gate_threshold(double t) { gate_threshold_ = t; }
     void set_extended_target(bool ext) { is_extended_ = ext; }
-    void set_cluster_object(std::shared_ptr<clustering::DBSCAN> obj) { cluster_obj_ = std::move(obj); }
+    void set_cluster_object(std::shared_ptr<clustering::ClusterBase> obj) { cluster_obj_ = std::move(obj); }
 
     /// Set the cardinality distribution (PMF over number of targets).
     /// card(n) = P(N = n), must sum to 1, length = max_cardinality + 1.
@@ -410,7 +410,7 @@ private:
     bool has_filter_ = false;
     std::unique_ptr<models::Mixture<T, MaxComponents>> intensity_;
     std::unique_ptr<models::Mixture<T, MaxComponents>> birth_model_;
-    std::shared_ptr<clustering::DBSCAN> cluster_obj_;
+    std::shared_ptr<clustering::ClusterBase> cluster_obj_;
     double prune_threshold_ = 1e-4;
     double merge_threshold_ = 4.0;
     int max_components_ = 100;
