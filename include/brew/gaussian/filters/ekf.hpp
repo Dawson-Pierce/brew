@@ -1,4 +1,5 @@
 #pragma once
+#include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
 #include "brew/gaussian/gaussian_model.hpp"
@@ -92,3 +93,9 @@ public:
 };
 
 } // namespace brew::filters
+
+namespace brew::filters {
+// Concrete filter used for this model (RFS devirtualization).
+template <typename Scalar, int D>
+struct default_filter<models::Gaussian<Scalar, D>> { using type = EKF<Scalar, D>; };
+}  // namespace brew::filters

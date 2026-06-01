@@ -4,6 +4,7 @@
 #include "brew/shared/rfs_detail.hpp"
 #include "brew/shared/mixture.hpp"
 #include "brew/shared/filter_base.hpp"
+#include "brew/shared/filter_traits.hpp"
 #include "brew/clustering/dbscan.hpp"
 
 #include <Eigen/Dense>
@@ -76,7 +77,8 @@ public:
     // ---- Common configuration ----
 
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
-        filter_ = std::move(filter);
+        filter_ = static_cast<typename filters::default_filter<T>::type&>(*filter);
+        has_filter_ = true;
     }
     void set_prune_threshold_hypothesis(double t) { prune_threshold_hyp_ = t; }
     void set_prune_threshold_bernoulli(double t) { prune_threshold_bern_ = t; }
@@ -326,18 +328,18 @@ protected:
 
     // ---- Per-track mixture operations (reused by predict/correct in subclasses) ----
 
-    /// Build a predicted mixture from the current mixture by calling filter_->predict
+    /// Build a predicted mixture from the current mixture by calling filter_.predict
     /// on each component. Weights are preserved.
     MixturePtr predict_mixture(const models::Mixture<T, MaxComponents>& src, double dt) const {
         auto out = std::make_unique<models::Mixture<T, MaxComponents>>();
         for (std::size_t c = 0; c < src.size(); ++c) {
-            T pc = filter_->predict(dt, src.component(c));
+            T pc = filter_.predict(dt, src.component(c));
             out->add_component(pc.clone_typed(), src.weight(c));
         }
         return out;
     }
 
-    /// Correct a mixture by a measurement. Each component is updated by filter_->correct,
+    /// Correct a mixture by a measurement. Each component is updated by filter_.correct,
     /// weights become w_c * likelihood_c, then re-normalized. Returns (corrected_mixture,
     /// total_weight) where total_weight is the track-level likelihood of the measurement.
     std::pair<MixturePtr, double> correct_mixture(
@@ -348,7 +350,7 @@ protected:
         std::vector<double> w_new(src.size(), 0.0);
         double total_w = 0.0;
         for (std::size_t c = 0; c < src.size(); ++c) {
-            auto [dist, qz] = filter_->correct(meas_flat, src.component(c));
+            auto [dist, qz] = filter_.correct(meas_flat, src.component(c));
             double w = src.weight(c) * qz;
             w_new[c] = w;
             total_w += w;
@@ -380,7 +382,7 @@ protected:
     bool passes_gate(const TrackEntry& trk, const Eigen::VectorXd& z_gate) const {
         const auto& mix = trk.current_mixture();
         for (std::size_t c = 0; c < mix.size(); ++c) {
-            if (filter_->gate(z_gate, mix.component(c)) < gate_threshold_) return true;
+            if (filter_.gate(z_gate, mix.component(c)) < gate_threshold_) return true;
         }
         return false;
     }
@@ -410,7 +412,8 @@ protected:
 
     // ---- Members (protected for subclass access) ----
 
-    std::unique_ptr<filters::Filter<T>> filter_;
+    typename filters::default_filter<T>::type filter_{};
+    bool has_filter_ = false;
     std::vector<std::unique_ptr<TrackEntry>> track_tab_;
     std::vector<Hypothesis> hypotheses_;
     std::vector<std::unique_ptr<ExtractedTrack>> extracted_hists_;

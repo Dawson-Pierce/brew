@@ -11,12 +11,12 @@
 #include "brew/trajectory_iggiw/filters/trajectory_iggiw_ekf.hpp"
 
 // Multi-object (RFS) filters
-#include "brew/shared/multi_target_generic/phd.hpp"
-#include "brew/shared/multi_target_generic/cphd.hpp"
-#include "brew/shared/multi_target_generic/glmb.hpp"
-#include "brew/shared/multi_target_generic/jglmb.hpp"
-#include "brew/shared/multi_target_generic/mbm.hpp"
-#include "brew/shared/multi_target_generic/pmbm.hpp"
+#include "brew/trajectory_iggiw/multi_target/phd.hpp"
+#include "brew/trajectory_iggiw/multi_target/cphd.hpp"
+#include "brew/trajectory_iggiw/multi_target/glmb.hpp"
+#include "brew/trajectory_iggiw/multi_target/jglmb.hpp"
+#include "brew/trajectory_iggiw/multi_target/mbm.hpp"
+#include "brew/trajectory_iggiw/multi_target/pmbm.hpp"
 
 // Mixture management + clustering helpers
 #include "brew/shared/fusion/merge.hpp"

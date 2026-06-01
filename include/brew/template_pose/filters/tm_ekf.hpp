@@ -1,4 +1,5 @@
 #pragma once
+#include "brew/shared/filter_traits.hpp"
 
 #include "brew/assert.hpp"
 #include "brew/shared/filter_base.hpp"
@@ -229,3 +230,9 @@ private:
 };
 
 } // namespace brew::filters
+
+namespace brew::filters {
+// Concrete filter used for this model (RFS devirtualization).
+template <typename Scalar, int D>
+struct default_filter<models::TemplatePose<Scalar, D>> { using type = TmEkf<Scalar, D>; };
+}  // namespace brew::filters

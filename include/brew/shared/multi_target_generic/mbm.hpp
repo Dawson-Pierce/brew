@@ -43,7 +43,8 @@ public:
         c->prob_survive_ = this->prob_survive_;
         c->clutter_rate_ = this->clutter_rate_;
         c->clutter_density_ = this->clutter_density_;
-        if (this->filter_) c->filter_ = this->filter_->clone();
+        c->filter_ = this->filter_;
+        c->has_filter_ = this->has_filter_;
         for (const auto& t : this->track_tab_) c->track_tab_.push_back(t->clone());
         c->hypotheses_ = this->hypotheses_;
         for (const auto& bt : birth_terms_) {
@@ -102,7 +103,7 @@ public:
     // ---- RFS interface ----
 
     void predict(int /*timestep*/, double dt) override {
-        if (!this->filter_) return;
+        if (!this->has_filter_) return;
 
         // Propagate existing tracks (append predicted mixture to history).
         for (auto& trk : this->track_tab_) {
@@ -134,7 +135,7 @@ public:
     }
 
     void correct(const Eigen::MatrixXd& measurements) override {
-        if (!this->filter_) return;
+        if (!this->has_filter_) return;
 
         auto meas_groups = this->group_measurements(measurements);
         const int m = static_cast<int>(meas_groups.size());

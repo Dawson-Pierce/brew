@@ -37,7 +37,8 @@ public:
         c->prob_survive_ = this->prob_survive_;
         c->clutter_rate_ = this->clutter_rate_;
         c->clutter_density_ = this->clutter_density_;
-        if (this->filter_) c->filter_ = this->filter_->clone();
+        c->filter_ = this->filter_;
+        c->has_filter_ = this->has_filter_;
         for (const auto& t : this->track_tab_) c->track_tab_.push_back(t->clone());
         c->hypotheses_ = this->hypotheses_;
         for (const auto& bt : this->birth_terms_) {
@@ -71,7 +72,7 @@ public:
 
     /// Predict existing tracks only (no separate birth step).
     void predict(int /*timestep*/, double dt) override {
-        if (!this->filter_) return;
+        if (!this->has_filter_) return;
 
         std::vector<std::unique_ptr<TabEntry>> surv_tab;
         surv_tab.reserve(this->track_tab_.size());
@@ -80,7 +81,7 @@ public:
             const auto& last = *nt->mixture_hist.back();
             auto predicted = std::make_unique<models::Mixture<T, MaxComponents>>();
             for (std::size_t c = 0; c < last.size(); ++c) {
-                T pc = this->filter_->predict(dt, last.component(c));
+                T pc = this->filter_.predict(dt, last.component(c));
                 predicted->add_component(pc.clone_typed(), last.weight(c));
             }
             nt->mixture_hist.push_back(std::move(predicted));
@@ -141,7 +142,7 @@ public:
     /// Joint correct: birth candidates compete with surviving tracks for measurements
     /// within the same Murty assignment.
     void correct(const Eigen::MatrixXd& measurements) override {
-        if (!this->filter_) return;
+        if (!this->has_filter_) return;
 
         std::vector<Eigen::MatrixXd> meas_groups;
         if (this->is_extended_ && this->cluster_obj_) {
@@ -189,7 +190,7 @@ public:
                 if (this->gating_on_) {
                     bool gated = false;
                     for (std::size_t c = 0; c < last.size(); ++c) {
-                        if (this->filter_->gate(z_gate, last.component(c)) < this->gate_threshold_) {
+                        if (this->filter_.gate(z_gate, last.component(c)) < this->gate_threshold_) {
                             gated = true; break;
                         }
                     }
@@ -199,7 +200,7 @@ public:
                 std::vector<double> new_w(last.size(), 0.0);
                 double total_w = 0.0;
                 for (std::size_t c = 0; c < last.size(); ++c) {
-                    auto [dist, qz] = this->filter_->correct(meas_flat, last.component(c));
+                    auto [dist, qz] = this->filter_.correct(meas_flat, last.component(c));
                     double w = last.weight(c) * qz;
                     new_w[c] = w;
                     total_w += w;
@@ -225,7 +226,7 @@ public:
                 std::vector<double> new_w(birth_mix->size(), 0.0);
                 double total_w = 0.0;
                 for (std::size_t c = 0; c < birth_mix->size(); ++c) {
-                    auto [dist, qz] = this->filter_->correct(meas_flat, birth_mix->component(c));
+                    auto [dist, qz] = this->filter_.correct(meas_flat, birth_mix->component(c));
                     double w = birth_mix->weight(c) * qz;
                     new_w[c] = w;
                     total_w += w;

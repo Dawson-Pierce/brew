@@ -1,4 +1,5 @@
 #pragma once
+#include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
 #include "brew/ggiw/filters/ggiw_ekf.hpp"  // for detail::sqrtm_spd
@@ -260,3 +261,9 @@ private:
 };
 
 } // namespace brew::filters
+
+namespace brew::filters {
+// Concrete filter used for this model (RFS devirtualization).
+template <int MaxWindow, typename Scalar, int D, int De>
+struct default_filter<models::TrajectoryGGIW<MaxWindow, Scalar, D, De>> { using type = TrajectoryGGIWEKF<MaxWindow, Scalar, D, De>; };
+}  // namespace brew::filters

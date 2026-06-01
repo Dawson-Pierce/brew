@@ -5,6 +5,7 @@
 #include "brew/shared/mixture.hpp"
 #include "brew/shared/trajectory_window.hpp"
 #include "brew/shared/filter_base.hpp"
+#include "brew/shared/filter_traits.hpp"
 #include "brew/shared/fusion/prune.hpp"
 #include "brew/shared/fusion/merge.hpp"
 #include "brew/shared/fusion/cap.hpp"
@@ -42,7 +43,8 @@ public:
         c->prob_survive_ = prob_survive_;
         c->clutter_rate_ = clutter_rate_;
         c->clutter_density_ = clutter_density_;
-        if (filter_) c->filter_ = filter_->clone();
+        c->filter_ = filter_;
+        c->has_filter_ = has_filter_;
         if (intensity_) c->intensity_ = intensity_->clone();
         if (birth_model_) c->birth_model_ = birth_model_->clone();
         c->prune_threshold_ = prune_threshold_;
@@ -61,7 +63,8 @@ public:
     // ---- Configuration ----
 
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
-        filter_ = std::move(filter);
+        filter_ = static_cast<typename filters::default_filter<T>::type&>(*filter);
+        has_filter_ = true;
     }
 
     void set_birth_model(std::unique_ptr<models::Mixture<T, MaxComponents>> birth) {
@@ -142,13 +145,13 @@ public:
     // ---- RFS interface ----
 
     void predict(int /*timestep*/, double dt) override {
-        if (!intensity_ || !filter_) return;
+        if (!intensity_ || !has_filter_) return;
 
         // --- Phase A: Intensity prediction (same as PHD) ---
 
         for (std::size_t k = 0; k < intensity_->size(); ++k) {
             intensity_->weights()(static_cast<Eigen::Index>(k)) *= prob_survive_;
-            intensity_->component(k) = filter_->predict(dt, intensity_->component(k));
+            intensity_->component(k) = filter_.predict(dt, intensity_->component(k));
         }
 
         if (birth_model_) {
@@ -169,7 +172,7 @@ public:
     }
 
     void correct(const Eigen::MatrixXd& measurements) override {
-        if (!intensity_ || !filter_) return;
+        if (!intensity_ || !has_filter_) return;
 
         // Build measurement groups (same as PHD)
         std::vector<Eigen::MatrixXd> meas_groups;
@@ -212,8 +215,8 @@ public:
             }
 
             for (int k = 0; k < J; ++k) {
-                if (filter_->gate(z_gate, intensity_->component(k)) < gate_threshold_) {
-                    auto [dist, qz] = filter_->correct(meas_flat, intensity_->component(k));
+                if (filter_.gate(z_gate, intensity_->component(k)) < gate_threshold_) {
+                    auto [dist, qz] = filter_.correct(meas_flat, intensity_->component(k));
                     delta(k, j) = prob_detection_ * intensity_->weight(k) * qz;
                     corrected_dists[k][j] = dist.clone_typed();
                 }
@@ -403,7 +406,8 @@ private:
         return result;
     }
 
-    std::unique_ptr<filters::Filter<T>> filter_;
+    typename filters::default_filter<T>::type filter_{};
+    bool has_filter_ = false;
     std::unique_ptr<models::Mixture<T, MaxComponents>> intensity_;
     std::unique_ptr<models::Mixture<T, MaxComponents>> birth_model_;
     std::shared_ptr<clustering::DBSCAN> cluster_obj_;

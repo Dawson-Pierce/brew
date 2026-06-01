@@ -1,4 +1,5 @@
 #pragma once
+#include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
 #include "brew/trajectory_iggiw/trajectory_iggiw_model.hpp"
@@ -418,3 +419,9 @@ private:
 };
 
 } // namespace brew::filters
+
+namespace brew::filters {
+// Concrete filter used for this model (RFS devirtualization).
+template <int MaxWindow, typename Scalar, int D, int De>
+struct default_filter<models::TrajectoryIGGIW<MaxWindow, Scalar, D, De>> { using type = TrajectoryIGGIWEKF<MaxWindow, Scalar, D, De>; };
+}  // namespace brew::filters

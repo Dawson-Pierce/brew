@@ -82,6 +82,20 @@ Any RFS filter can be swapped in by changing the type (`PHD`, `CPHD`, `MBM`,
 `PMBM`, `GLMB`, `JGLMB`); the predict/correct/cleanup interface is the same. Swap
 the model package to switch between point and extended targets.
 
+### Per-package multi-object filters & devirtualization
+
+Each package also exposes its RFS filters in its own namespace, e.g.
+`brew::gaussian::PHD<>` or `brew::trajectory_gaussian::PHD<MaxWindow>`, via
+`brew/<pkg>/multi_target/<rfs>.hpp` (pulled in by the package umbrella). These are
+the **devirtualized** hot path: an RFS holds its single-object filter **by value
+as the concrete type** (resolved by the `filters::default_filter<Model>` trait),
+so the per-component `predict`/`gate`/`correct` calls are direct and inlinable —
+no virtual `Filter<Model>` dispatch. `set_filter(...)` still takes the configured
+filter and copies it into the value member, so configuration is unchanged. Results
+are identical to the polymorphic path; only the dispatch is removed. Combine with a
+fixed `MaxComponents` (e.g. `PHD<Gaussian<double,4>, 200>`) for a stack-backed,
+allocation-free mixture on embedded/hardware targets.
+
 ## Testing
 
 ```bash

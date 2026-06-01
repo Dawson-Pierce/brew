@@ -5,6 +5,7 @@
 #include "brew/shared/mixture.hpp"
 #include "brew/shared/trajectory_window.hpp"
 #include "brew/shared/filter_base.hpp"
+#include "brew/shared/filter_traits.hpp"
 #include "brew/clustering/dbscan.hpp"
 #include "brew/assignment/murty.hpp"
 
@@ -83,7 +84,8 @@ public:
         c->prob_survive_ = prob_survive_;
         c->clutter_rate_ = clutter_rate_;
         c->clutter_density_ = clutter_density_;
-        if (filter_) c->filter_ = filter_->clone();
+        c->filter_ = filter_;
+        c->has_filter_ = has_filter_;
         for (const auto& t : track_tab_) c->track_tab_.push_back(t->clone());
         c->hypotheses_ = hypotheses_;
         for (const auto& bt : birth_terms_) {
@@ -117,7 +119,8 @@ public:
     // ---- Configuration ----
 
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
-        filter_ = std::move(filter);
+        filter_ = static_cast<typename filters::default_filter<T>::type&>(*filter);
+        has_filter_ = true;
     }
 
     /// Birth model: a list of (spatial mixture, birth probability) terms. The mixture
@@ -202,7 +205,7 @@ public:
     // ---- RFS interface ----
 
     void predict(int /*timestep*/, double dt) override {
-        if (!filter_) return;
+        if (!has_filter_) return;
 
         // Build birth table and costs
         std::vector<std::unique_ptr<TabEntry>> birth_tab;
@@ -249,7 +252,7 @@ public:
             const auto& last = *nt->mixture_hist.back();
             auto predicted = std::make_unique<models::Mixture<T, MaxComponents>>();
             for (std::size_t c = 0; c < last.size(); ++c) {
-                T pc = filter_->predict(dt, last.component(c));
+                T pc = filter_.predict(dt, last.component(c));
                 predicted->add_component(pc.clone_typed(), last.weight(c));
             }
             nt->mixture_hist.push_back(std::move(predicted));
@@ -328,7 +331,7 @@ public:
     }
 
     void correct(const Eigen::MatrixXd& measurements) override {
-        if (!filter_) return;
+        if (!has_filter_) return;
 
         // Build measurement groups
         std::vector<Eigen::MatrixXd> meas_groups;
@@ -383,7 +386,7 @@ public:
                     // Skip tracks where no component passes the gate
                     bool gated = false;
                     for (std::size_t c = 0; c < last.size(); ++c) {
-                        double gv = filter_->gate(z_gate, last.component(c));
+                        double gv = filter_.gate(z_gate, last.component(c));
                         if (gv < gate_threshold_) { gated = true; break; }
                     }
                     if (!gated) {
@@ -398,7 +401,7 @@ public:
                 std::vector<double> new_w(last.size(), 0.0);
                 double total_w = 0.0;
                 for (std::size_t c = 0; c < last.size(); ++c) {
-                    auto [dist, qz] = filter_->correct(meas_flat, last.component(c));
+                    auto [dist, qz] = filter_.correct(meas_flat, last.component(c));
                     double w = last.weight(c) * qz;
                     new_w[c] = w;
                     total_w += w;
@@ -776,7 +779,8 @@ protected:
 
     // ---- Members ----
 
-    std::unique_ptr<filters::Filter<T>> filter_;
+    typename filters::default_filter<T>::type filter_{};
+    bool has_filter_ = false;
     std::vector<std::unique_ptr<TabEntry>> track_tab_;
     std::vector<Hypothesis> hypotheses_;
     std::vector<std::unique_ptr<ExtractedTrack>> extractable_hists_;

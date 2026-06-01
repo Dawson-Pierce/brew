@@ -1,4 +1,5 @@
 #pragma once
+#include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
 #include "brew/ggiw/ggiw_model.hpp"
@@ -214,3 +215,9 @@ private:
 };
 
 } // namespace brew::filters
+
+namespace brew::filters {
+// Concrete filter used for this model (RFS devirtualization).
+template <typename Scalar, int D, int De>
+struct default_filter<models::GGIW<Scalar, D, De>> { using type = GGIWEKF<Scalar, D, De>; };
+}  // namespace brew::filters

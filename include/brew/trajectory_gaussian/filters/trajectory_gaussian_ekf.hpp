@@ -1,4 +1,5 @@
 #pragma once
+#include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
 #include "brew/trajectory_gaussian/trajectory_gaussian_model.hpp"
@@ -154,3 +155,9 @@ public:
 };
 
 } // namespace brew::filters
+
+namespace brew::filters {
+// Concrete filter used for this model (RFS devirtualization).
+template <int MaxWindow, typename Scalar, int D>
+struct default_filter<models::TrajectoryGaussian<MaxWindow, Scalar, D>> { using type = TrajectoryGaussianEKF<MaxWindow, Scalar, D>; };
+}  // namespace brew::filters

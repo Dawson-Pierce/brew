@@ -48,7 +48,8 @@ public:
         c->prob_survive_ = this->prob_survive_;
         c->clutter_rate_ = this->clutter_rate_;
         c->clutter_density_ = this->clutter_density_;
-        if (this->filter_) c->filter_ = this->filter_->clone();
+        c->filter_ = this->filter_;
+        c->has_filter_ = this->has_filter_;
         if (poisson_intensity_) c->poisson_intensity_ = poisson_intensity_->clone();
         if (birth_model_) c->birth_model_ = birth_model_->clone();
         for (const auto& t : this->track_tab_) c->track_tab_.push_back(t->clone());
@@ -115,14 +116,14 @@ public:
     // ---- RFS interface ----
 
     void predict(int /*timestep*/, double dt) override {
-        if (!this->filter_) return;
+        if (!this->has_filter_) return;
 
         // Poisson prediction (weight *= ps, each component predicted).
         if (poisson_intensity_) {
             for (std::size_t k = 0; k < poisson_intensity_->size(); ++k) {
                 poisson_intensity_->weights()(static_cast<Eigen::Index>(k)) *= this->prob_survive_;
                 poisson_intensity_->component(k) =
-                    this->filter_->predict(dt, poisson_intensity_->component(k));
+                    this->filter_.predict(dt, poisson_intensity_->component(k));
             }
             // Birth adds to Poisson intensity.
             if (birth_model_) {
@@ -139,7 +140,7 @@ public:
     }
 
     void correct(const Eigen::MatrixXd& measurements) override {
-        if (!this->filter_ || !poisson_intensity_) return;
+        if (!this->has_filter_ || !poisson_intensity_) return;
 
         auto meas_groups = this->group_measurements(measurements);
         const int m = static_cast<int>(meas_groups.size());
@@ -162,9 +163,9 @@ public:
             double total_w = 0.0;
             for (std::size_t k = 0; k < poisson_intensity_->size(); ++k) {
                 if (this->gating_on_ &&
-                    this->filter_->gate(z_gate, poisson_intensity_->component(k))
+                    this->filter_.gate(z_gate, poisson_intensity_->component(k))
                         >= this->gate_threshold_) continue;
-                auto [dist, qz] = this->filter_->correct(meas_flat,
+                auto [dist, qz] = this->filter_.correct(meas_flat,
                     poisson_intensity_->component(k));
                 double w = this->prob_detection_ * poisson_intensity_->weight(k) * qz;
                 if (w <= 0.0) continue;
