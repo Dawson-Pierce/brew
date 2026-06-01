@@ -6,7 +6,11 @@
 #include "brew/ggiw_orientation/ggiw_orientation_model.hpp"
 #include "brew/iggiw/iggiw_model.hpp"
 #include "brew/template_pose/template_pose_model.hpp"
-#include "brew/shared/trajectory.hpp"
+#include "brew/trajectory_gaussian/trajectory_gaussian_model.hpp"
+#include "brew/trajectory_ggiw/trajectory_ggiw_model.hpp"
+#include "brew/trajectory_ggiw_orientation/trajectory_ggiw_orientation_model.hpp"
+#include "brew/trajectory_iggiw/trajectory_iggiw_model.hpp"
+#include "brew/trajectory_template_pose/trajectory_template_pose_model.hpp"
 
 #include <Eigen/Dense>
 #include <algorithm>
@@ -371,7 +375,7 @@ inline double trajectory_mahal_dist(const Eigen::VectorXd& mi, const Eigen::Matr
 
 /// Merge close Trajectory<Gaussian<>> components (same-size, absorb into longer/heavier).
 template <typename Scalar, int D, int N, int MaxWindow>
-void merge(models::Mixture<models::Trajectory<models::Gaussian<Scalar, D>, MaxWindow>, N>& mix, double threshold) {
+void merge(models::Mixture<models::TrajectoryGaussian<MaxWindow, Scalar, D>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -434,7 +438,7 @@ void merge(models::Mixture<models::Trajectory<models::Gaussian<Scalar, D>, MaxWi
 
 /// Merge close Trajectory<GGIW<>> components (same-size, absorb into longer/heavier).
 template <typename Scalar, int D, int De, int N, int MaxWindow>
-void merge(models::Mixture<models::Trajectory<models::GGIW<Scalar, D, De>, MaxWindow>, N>& mix, double threshold) {
+void merge(models::Mixture<models::TrajectoryGGIW<MaxWindow, Scalar, D, De>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -496,7 +500,7 @@ void merge(models::Mixture<models::Trajectory<models::GGIW<Scalar, D, De>, MaxWi
 
 /// Merge close Trajectory<GGIWOrientation<>> components (same-size, absorb into longer/heavier; basis left empty).
 template <typename Scalar, int D, int De, int N, int MaxWindow>
-void merge(models::Mixture<models::Trajectory<models::GGIWOrientation<Scalar, D, De>, MaxWindow>, N>& mix, double threshold) {
+void merge(models::Mixture<models::TrajectoryGGIWOrientation<MaxWindow, Scalar, D, De>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -558,7 +562,7 @@ void merge(models::Mixture<models::Trajectory<models::GGIWOrientation<Scalar, D,
 
 /// Merge close Trajectory<IGGIW<>> components (same-size, absorb into longer/heavier).
 template <typename Scalar, int D, int De, int N, int MaxWindow>
-void merge(models::Mixture<models::Trajectory<models::IGGIW<Scalar, D, De>, MaxWindow>, N>& mix, double threshold) {
+void merge(models::Mixture<models::TrajectoryIGGIW<MaxWindow, Scalar, D, De>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;
@@ -763,7 +767,7 @@ void merge(models::Mixture<models::TemplatePose<Scalar, D>, N>& mix, double thre
 
 /// Merge close Trajectory<TemplatePose<>> components (same-size, same-template, absorb into longer/heavier).
 template <typename Scalar, int D, int N, int MaxWindow>
-void merge(models::Mixture<models::Trajectory<models::TemplatePose<Scalar, D>, MaxWindow>, N>& mix, double threshold) {
+void merge(models::Mixture<models::TrajectoryTemplatePose<MaxWindow, Scalar, D>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
 
     bool keep_merging = true;

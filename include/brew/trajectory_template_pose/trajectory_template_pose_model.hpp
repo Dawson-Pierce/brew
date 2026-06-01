@@ -1,0 +1,29 @@
+#pragma once
+
+#include "brew/shared/trajectory_window.hpp"
+#include "brew/template_pose/template_pose_model.hpp"
+
+namespace brew::models {
+
+/// Concrete TemplatePose trajectory model: a windowed trajectory of TemplatePose states.
+/// Its own first-class type (not a Trajectory<T> instantiation); the windowed
+/// ring-buffer mechanics are inherited from TrajectoryWindow.
+// @mex model
+// @mex_name TrajectoryTemplatePose
+// @mex_trajectory TemplatePose
+template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic>
+class TrajectoryTemplatePose : public TrajectoryWindow<TemplatePose<Scalar, D>, MaxWindow> {
+    using Base = TrajectoryWindow<TemplatePose<Scalar, D>, MaxWindow>;
+public:
+    TrajectoryTemplatePose() = default;
+    using Base::Base;
+
+    [[nodiscard]] std::unique_ptr<TrajectoryTemplatePose> clone() const {
+        return std::make_unique<TrajectoryTemplatePose>(*this);
+    }
+    [[nodiscard]] std::unique_ptr<TrajectoryTemplatePose> clone_typed() const {
+        return std::make_unique<TrajectoryTemplatePose>(*this);
+    }
+};
+
+} // namespace brew::models

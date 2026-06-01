@@ -2,7 +2,7 @@
 
 #include "brew/desktop/plot_utils/plot_options.hpp"
 #include "brew/desktop/plot_utils/math_utils.hpp"
-#include <brew/shared/trajectory.hpp>
+#include <brew/trajectory_gaussian/trajectory_gaussian_model.hpp>
 #include <brew/gaussian/gaussian_model.hpp>
 #include <matplot/matplot.h>
 #include <stdexcept>
@@ -15,7 +15,7 @@ namespace brew::plot_utils {
 /// plt_inds must contain exactly 1 index.
 template <int MaxWindow>
 void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
-                                  const brew::models::Trajectory<brew::models::Gaussian<>, MaxWindow>& tg,
+                                  const brew::models::TrajectoryGaussian<MaxWindow>& tg,
                                   const std::vector<int>& plt_inds,
                                   const Color& color) {
     if (plt_inds.size() != 1) {
@@ -67,7 +67,7 @@ void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
 /// plt_inds must contain exactly 2 indices.
 template <int MaxWindow>
 void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
-                                  const brew::models::Trajectory<brew::models::Gaussian<>, MaxWindow>& tg,
+                                  const brew::models::TrajectoryGaussian<MaxWindow>& tg,
                                   const std::vector<int>& plt_inds,
                                   const Color& color) {
     if (plt_inds.size() != 2) {
@@ -115,7 +115,7 @@ void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
 /// plt_inds must contain exactly 3 indices.
 template <int MaxWindow>
 void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
-                                  const brew::models::Trajectory<brew::models::Gaussian<>, MaxWindow>& tg,
+                                  const brew::models::TrajectoryGaussian<MaxWindow>& tg,
                                   const std::vector<int>& plt_inds,
                                   const Color& color) {
     if (plt_inds.size() != 3) {
@@ -165,7 +165,7 @@ void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
 /// Convenience: auto-dispatch based on plt_inds.size().
 template <int MaxWindow>
 void plot_trajectory_gaussian(matplot::axes_handle ax,
-                               const brew::models::Trajectory<brew::models::Gaussian<>, MaxWindow>& tg,
+                               const brew::models::TrajectoryGaussian<MaxWindow>& tg,
                                const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 1:
@@ -184,7 +184,7 @@ void plot_trajectory_gaussian(matplot::axes_handle ax,
 
 /// Convenience: create figure, plot, save if output_file set.
 template <int MaxWindow>
-void plot_trajectory_gaussian(const brew::models::Trajectory<brew::models::Gaussian<>, MaxWindow>& tg,
+void plot_trajectory_gaussian(const brew::models::TrajectoryGaussian<MaxWindow>& tg,
                                const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

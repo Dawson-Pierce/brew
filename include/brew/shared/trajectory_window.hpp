@@ -22,25 +22,10 @@
 // this sliding — it records the previous cycle's final state on each advance_window
 // call regardless of window slides, subject only to its own independent cap.
 //
-// @mex model
-// @mex_name TrajectoryGaussian
-// @mex_trajectory Gaussian
 //
-// @mex model
-// @mex_name TrajectoryGGIW
-// @mex_trajectory GGIW
 //
-// @mex model
-// @mex_name TrajectoryGGIWOrientation
-// @mex_trajectory GGIWOrientation
 //
-// @mex model
-// @mex_name TrajectoryIGGIW
-// @mex_trajectory IGGIW
 //
-// @mex model
-// @mex_name TrajectoryTemplatePose
-// @mex_trajectory TemplatePose
 
 #include <Eigen/Dense>
 #include <array>
@@ -57,8 +42,9 @@ namespace brew::models {
 /// MaxWindow controls the ring-buffer window size (required compile-time constant);
 /// state history is runtime-bounded.
 template <typename T, int MaxWindow>
-class Trajectory {
+class TrajectoryWindow {
 public:
+    using InnerType = T;
     using Scalar = typename T::Vector::Scalar;
     using Vector = typename T::Vector;
     using Matrix = typename T::Matrix;
@@ -76,12 +62,12 @@ public:
 
     int state_dim = 0;
 
-    Trajectory() {
+    TrajectoryWindow() {
         stacked_mean_.setZero();
         stacked_covariance_.setZero();
     }
 
-    Trajectory(int state_dim_, T initial) : state_dim(state_dim_) {
+    TrajectoryWindow(int state_dim_, T initial) : state_dim(state_dim_) {
         if constexpr (StackedDim == Eigen::Dynamic) {
             stacked_mean_ = StackedVector::Zero(state_dim_ * MaxWindow);
             stacked_covariance_ = StackedMatrix::Zero(state_dim_ * MaxWindow, state_dim_ * MaxWindow);
@@ -97,11 +83,11 @@ public:
         push_state_history(std::move(initial));
     }
 
-    [[nodiscard]] std::unique_ptr<Trajectory> clone() const {
-        return std::make_unique<Trajectory>(*this);
+    [[nodiscard]] std::unique_ptr<TrajectoryWindow> clone() const {
+        return std::make_unique<TrajectoryWindow>(*this);
     }
 
-    [[nodiscard]] std::unique_ptr<Trajectory> clone_typed() const { return clone(); }
+    [[nodiscard]] std::unique_ptr<TrajectoryWindow> clone_typed() const { return clone(); }
 
     // Window metadata
 
@@ -283,11 +269,11 @@ private:
     int advance_count_ = 0;
 };
 
-// Type trait for detecting Trajectory<T, M>
+// Type trait for detecting TrajectoryWindow<T, M>
 template <typename U>
 struct is_trajectory : std::false_type {};
 
 template <typename U, int M>
-struct is_trajectory<Trajectory<U, M>> : std::true_type {};
+struct is_trajectory<TrajectoryWindow<U, M>> : std::true_type {};
 
 } // namespace brew::models

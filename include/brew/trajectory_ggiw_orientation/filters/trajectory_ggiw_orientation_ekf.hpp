@@ -2,7 +2,7 @@
 
 #include "brew/shared/filter_base.hpp"
 #include "brew/ggiw/filters/ggiw_ekf.hpp"  // for detail::sqrtm_spd
-#include "brew/shared/trajectory.hpp"
+#include "brew/trajectory_ggiw_orientation/trajectory_ggiw_orientation_model.hpp"
 #include "brew/ggiw_orientation/ggiw_orientation_model.hpp"
 #include <algorithm>
 #include <cmath>
@@ -22,10 +22,10 @@ namespace brew::filters {
 // @mex_setters temporal_decay:scalar, forgetting_factor:scalar, scaling_parameter:scalar
 template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 class TrajectoryGGIWOrientationEKF
-    : public Filter<models::Trajectory<models::GGIWOrientation<Scalar, D, De>, MaxWindow>> {
+    : public Filter<models::TrajectoryGGIWOrientation<MaxWindow, Scalar, D, De>> {
 public:
     using InnerDist = models::GGIWOrientation<Scalar, D, De>;
-    using Dist = models::Trajectory<InnerDist, MaxWindow>;
+    using Dist = models::TrajectoryGGIWOrientation<MaxWindow, Scalar, D, De>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;

@@ -3,7 +3,7 @@
 #include "brew/shared/rfs_base.hpp"
 #include "brew/shared/elementary_symmetric.hpp"
 #include "brew/shared/mixture.hpp"
-#include "brew/shared/trajectory.hpp"
+#include "brew/shared/trajectory_window.hpp"
 #include "brew/shared/filter_base.hpp"
 #include "brew/shared/fusion/prune.hpp"
 #include "brew/shared/fusion/merge.hpp"

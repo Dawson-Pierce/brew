@@ -1,7 +1,7 @@
 #pragma once
 
 #include "brew/shared/filter_base.hpp"
-#include "brew/shared/trajectory.hpp"
+#include "brew/trajectory_iggiw/trajectory_iggiw_model.hpp"
 #include "brew/iggiw/iggiw_model.hpp"
 #include <algorithm>
 #include <cmath>
@@ -26,10 +26,10 @@ namespace brew::filters {
 // @mex_setters eta:scalar, lambda:scalar, omega:scalar, intensity_forgetting_factor:scalar, intensity_growth:scalar, extent_forgetting_factor:scalar, centroid_power:scalar
 template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 class TrajectoryIGGIWEKF
-    : public Filter<models::Trajectory<models::IGGIW<Scalar, D, De>, MaxWindow>> {
+    : public Filter<models::TrajectoryIGGIW<MaxWindow, Scalar, D, De>> {
 public:
     using InnerDist = models::IGGIW<Scalar, D, De>;
-    using Dist = models::Trajectory<InnerDist, MaxWindow>;
+    using Dist = models::TrajectoryIGGIW<MaxWindow, Scalar, D, De>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;

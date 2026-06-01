@@ -4,7 +4,7 @@
 // single-object filters, and the multi-object (RFS) filters usable with it.
 
 // Model
-#include "brew/shared/trajectory.hpp"
+#include "brew/trajectory_iggiw/trajectory_iggiw_model.hpp"
 #include "brew/iggiw/iggiw_model.hpp"
 
 // Single-object filters

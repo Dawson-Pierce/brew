@@ -4,7 +4,7 @@
 #include "brew/shared/mixture.hpp"
 #include "brew/gaussian/gaussian_model.hpp"
 #include "brew/ggiw/ggiw_model.hpp"
-#include "brew/shared/trajectory.hpp"
+#include "brew/shared/trajectory_window.hpp"
 #include "brew/ggiw_orientation/ggiw_orientation_model.hpp"
 #include "brew/gaussian/filters/ekf.hpp"
 #include "brew/ggiw/filters/ggiw_ekf.hpp"
@@ -410,10 +410,10 @@ struct is_ggiw_type<T,
     std::void_t<decltype(std::declval<const T&>().V())>
 > : std::true_type {};
 
-// For Trajectory<T, MaxWindow>, check the inner type
-template <typename T, int MaxWindow>
-struct is_ggiw_type<models::Trajectory<T, MaxWindow>,
-    std::void_t<decltype(std::declval<const T&>().V())>
+// For trajectory model types (which expose InnerType), check the inner type
+template <typename T>
+struct is_ggiw_type<T,
+    std::void_t<decltype(std::declval<const typename T::InnerType&>().V())>
 > : std::true_type {};
 
 template <typename T>
@@ -427,10 +427,10 @@ struct is_orientation_type<T,
     std::void_t<decltype(std::declval<const T&>().basis())>
 > : std::true_type {};
 
-// For Trajectory<T, MaxWindow>, check the inner type
-template <typename T, int MaxWindow>
-struct is_orientation_type<models::Trajectory<T, MaxWindow>,
-    std::void_t<decltype(std::declval<const T&>().basis())>
+// For trajectory model types (which expose InnerType), check the inner type
+template <typename T>
+struct is_orientation_type<T,
+    std::void_t<decltype(std::declval<const typename T::InnerType&>().basis())>
 > : std::true_type {};
 
 template <typename T, typename = void>
@@ -665,10 +665,10 @@ make_ggiw_orientation_birth(double weight = 0.1)
 }
 
 template <int MaxWindow = kTrajWindow>
-inline std::unique_ptr<models::Mixture<models::Trajectory<models::Gaussian<>, MaxWindow>>>
+inline std::unique_ptr<models::Mixture<models::TrajectoryGaussian<MaxWindow>>>
 make_trajectory_gaussian_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::Gaussian<>, MaxWindow>>>();
+    auto birth = std::make_unique<models::Mixture<models::TrajectoryGaussian<MaxWindow>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
@@ -677,18 +677,18 @@ make_trajectory_gaussian_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Trajectory<models::Gaussian<>, MaxWindow>>(4, models::Gaussian<>(b1, birth_cov)), weight);
+        std::make_unique<models::TrajectoryGaussian<MaxWindow>>(4, models::Gaussian<>(b1, birth_cov)), weight);
     birth->add_component(
-        std::make_unique<models::Trajectory<models::Gaussian<>, MaxWindow>>(4, models::Gaussian<>(b2, birth_cov)), weight);
+        std::make_unique<models::TrajectoryGaussian<MaxWindow>>(4, models::Gaussian<>(b2, birth_cov)), weight);
 
     return birth;
 }
 
 template <int MaxWindow = kTrajWindow>
-inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIW<>, MaxWindow>>>
+inline std::unique_ptr<models::Mixture<models::TrajectoryGGIW<MaxWindow>>>
 make_trajectory_ggiw_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIW<>, MaxWindow>>>();
+    auto birth = std::make_unique<models::Mixture<models::TrajectoryGGIW<MaxWindow>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -696,10 +696,10 @@ make_trajectory_ggiw_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIW<>, MaxWindow>>(
+        std::make_unique<models::TrajectoryGGIW<MaxWindow>>(
             4, models::GGIW<>(10.0, 1.0, b1, b_cov, 10.0, b_V)), weight);
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIW<>, MaxWindow>>(
+        std::make_unique<models::TrajectoryGGIW<MaxWindow>>(
             4, models::GGIW<>(10.0, 1.0, b2, b_cov, 10.0, b_V)), weight);
 
     return birth;
@@ -727,10 +727,10 @@ inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF<MaxWindow>> make_tr
 }
 
 template <int MaxWindow = kTrajWindow>
-inline std::unique_ptr<models::Mixture<models::Trajectory<models::GGIWOrientation<>, MaxWindow>>>
+inline std::unique_ptr<models::Mixture<models::TrajectoryGGIWOrientation<MaxWindow>>>
 make_trajectory_ggiw_orientation_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::GGIWOrientation<>, MaxWindow>>>();
+    auto birth = std::make_unique<models::Mixture<models::TrajectoryGGIWOrientation<MaxWindow>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -738,10 +738,10 @@ make_trajectory_ggiw_orientation_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIWOrientation<>, MaxWindow>>(
+        std::make_unique<models::TrajectoryGGIWOrientation<MaxWindow>>(
             4, models::GGIWOrientation<>(10.0, 1.0, b1, b_cov, 10.0, b_V)), weight);
     birth->add_component(
-        std::make_unique<models::Trajectory<models::GGIWOrientation<>, MaxWindow>>(
+        std::make_unique<models::TrajectoryGGIWOrientation<MaxWindow>>(
             4, models::GGIWOrientation<>(10.0, 1.0, b2, b_cov, 10.0, b_V)), weight);
 
     return birth;

@@ -4,7 +4,7 @@
 // single-object filters, and the multi-object (RFS) filters usable with it.
 
 // Model
-#include "brew/shared/trajectory.hpp"
+#include "brew/trajectory_template_pose/trajectory_template_pose_model.hpp"
 #include "brew/template_pose/template_pose_model.hpp"
 
 // Single-object filters

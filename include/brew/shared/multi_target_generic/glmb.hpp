@@ -3,7 +3,7 @@
 #include "brew/shared/rfs_base.hpp"
 #include "brew/shared/rfs_detail.hpp"
 #include "brew/shared/mixture.hpp"
-#include "brew/shared/trajectory.hpp"
+#include "brew/shared/trajectory_window.hpp"
 #include "brew/shared/filter_base.hpp"
 #include "brew/clustering/dbscan.hpp"
 #include "brew/assignment/murty.hpp"

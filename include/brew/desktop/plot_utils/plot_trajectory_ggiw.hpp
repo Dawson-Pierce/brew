@@ -3,7 +3,7 @@
 #include "brew/desktop/plot_utils/plot_options.hpp"
 #include "brew/desktop/plot_utils/plot_ggiw.hpp"
 #include "brew/desktop/plot_utils/math_utils.hpp"
-#include <brew/shared/trajectory.hpp>
+#include <brew/trajectory_ggiw/trajectory_ggiw_model.hpp>
 #include <brew/ggiw/ggiw_model.hpp>
 #include <matplot/matplot.h>
 #include <stdexcept>
@@ -15,7 +15,7 @@ namespace brew::plot_utils {
 /// plt_inds must contain exactly 2 indices.
 template <int MaxWindow>
 void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
-                              const brew::models::Trajectory<brew::models::GGIW<>, MaxWindow>& tg,
+                              const brew::models::TrajectoryGGIW<MaxWindow>& tg,
                               const std::vector<int>& plt_inds,
                               const Color& color,
                               double confidence = 0.99) {
@@ -66,7 +66,7 @@ void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
 /// plt_inds must contain exactly 3 indices.
 template <int MaxWindow>
 void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
-                              const brew::models::Trajectory<brew::models::GGIW<>, MaxWindow>& tg,
+                              const brew::models::TrajectoryGGIW<MaxWindow>& tg,
                               const std::vector<int>& plt_inds,
                               const Color& color,
                               double confidence = 0.99,
@@ -119,7 +119,7 @@ void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
 /// Convenience: auto-dispatch based on plt_inds.size().
 template <int MaxWindow>
 void plot_trajectory_ggiw(matplot::axes_handle ax,
-                           const brew::models::Trajectory<brew::models::GGIW<>, MaxWindow>& tg,
+                           const brew::models::TrajectoryGGIW<MaxWindow>& tg,
                            const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 2:
@@ -135,7 +135,7 @@ void plot_trajectory_ggiw(matplot::axes_handle ax,
 
 /// Convenience: create figure, plot, save if output_file set.
 template <int MaxWindow>
-void plot_trajectory_ggiw(const brew::models::Trajectory<brew::models::GGIW<>, MaxWindow>& tg,
+void plot_trajectory_ggiw(const brew::models::TrajectoryGGIW<MaxWindow>& tg,
                            const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

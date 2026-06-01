@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include "brew/dynamics/single_integrator.hpp"
 #include "brew/template_pose/template_pose_model.hpp"
-#include "brew/shared/trajectory.hpp"
+#include "brew/shared/trajectory_window.hpp"
 #include "brew/shared/mixture.hpp"
 #include "brew/template_pose/filters/tm_ekf.hpp"
 #include "brew/trajectory_template_pose/filters/trajectory_tm_ekf.hpp"
@@ -1148,7 +1148,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     }
 
     // --- Birth model ---
-    auto birth = std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose<>, kTrajTmWindow3D>>>();
+    auto birth = std::make_unique<models::Mixture<models::TrajectoryTemplatePose<kTrajTmWindow3D>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
     birth_cov.topLeftCorner(3, 3) = 1500.0 * Eigen::Matrix3d::Identity();
     birth_cov.block(3, 3, 3, 3) = 500.0 * Eigen::Matrix3d::Identity();
@@ -1169,7 +1169,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
         models::TemplatePose<> tp_trans = tp;
         tp_trans.covariance() = tp.covariance().topLeftCorner(sd, sd);
         auto traj = std::make_unique<
-            models::Trajectory<models::TemplatePose<>, kTrajTmWindow3D>>(sd, tp_trans);
+            models::TrajectoryTemplatePose<kTrajTmWindow3D>>(sd, tp_trans);
         traj->history_at(0) = tp;
         return traj;
     };
@@ -1180,11 +1180,11 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     birth->add_component(make_traj_birth(id_B), w_b);
 
     // --- PHD filter ---
-    multi_target::PHD<models::Trajectory<models::TemplatePose<>, kTrajTmWindow3D>> phd;
+    multi_target::PHD<models::TrajectoryTemplatePose<kTrajTmWindow3D>> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(
-        std::make_unique<models::Mixture<models::Trajectory<models::TemplatePose<>, kTrajTmWindow3D>>>());
+        std::make_unique<models::Mixture<models::TrajectoryTemplatePose<kTrajTmWindow3D>>>());
     phd.set_prob_detection(p_detect);
     phd.set_prob_survive(0.99);
     phd.set_clutter_rate(1.0);

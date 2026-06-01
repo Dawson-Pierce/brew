@@ -3,7 +3,8 @@
 #include <brew/gaussian/gaussian_model.hpp>
 #include <brew/ggiw/ggiw_model.hpp>
 #include <brew/shared/mixture.hpp>
-#include <brew/shared/trajectory.hpp>
+#include <brew/trajectory_gaussian/trajectory_gaussian_model.hpp>
+#include <brew/trajectory_ggiw/trajectory_ggiw_model.hpp>
 #include <brew/template_matching/point_cloud.hpp>
 #include <brew/desktop/plot_utils/plot_options.hpp>
 #include <brew/desktop/plot_utils/plot_mixture.hpp>
@@ -20,13 +21,13 @@ void plot(const models::GGIW<>& g,
           const plot_utils::PlotOptions& opts);
 
 template <int MaxWindow>
-void plot(const models::Trajectory<models::Gaussian<>, MaxWindow>& g,
+void plot(const models::TrajectoryGaussian<MaxWindow>& g,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_trajectory_gaussian(g, opts);
 }
 
 template <int MaxWindow>
-void plot(const models::Trajectory<models::GGIW<>, MaxWindow>& g,
+void plot(const models::TrajectoryGGIW<MaxWindow>& g,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_trajectory_ggiw(g, opts);
 }
@@ -37,13 +38,13 @@ void plot(const models::Mixture<models::GGIW<>>& mix,
           const plot_utils::PlotOptions& opts);
 
 template <int MaxWindow>
-void plot(const models::Mixture<models::Trajectory<models::Gaussian<>, MaxWindow>>& mix,
+void plot(const models::Mixture<models::TrajectoryGaussian<MaxWindow>>& mix,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_mixture(mix, opts);
 }
 
 template <int MaxWindow>
-void plot(const models::Mixture<models::Trajectory<models::GGIW<>, MaxWindow>>& mix,
+void plot(const models::Mixture<models::TrajectoryGGIW<MaxWindow>>& mix,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_mixture(mix, opts);
 }

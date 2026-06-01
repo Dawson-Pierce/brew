@@ -3,7 +3,7 @@
 #include "brew/desktop/plot_utils/plot_options.hpp"
 #include "brew/desktop/plot_utils/plot_ggiw_orientation.hpp"
 #include "brew/desktop/plot_utils/math_utils.hpp"
-#include <brew/shared/trajectory.hpp>
+#include <brew/trajectory_ggiw_orientation/trajectory_ggiw_orientation_model.hpp>
 #include <brew/ggiw_orientation/ggiw_orientation_model.hpp>
 #include <matplot/matplot.h>
 #include <stdexcept>
@@ -16,7 +16,7 @@ namespace brew::plot_utils {
 /// + principal axis lines at last state.
 template <int MaxWindow>
 void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
-                                         const brew::models::Trajectory<brew::models::GGIWOrientation<>, MaxWindow>& tg,
+                                         const brew::models::TrajectoryGGIWOrientation<MaxWindow>& tg,
                                          const std::vector<int>& plt_inds,
                                          const Color& color,
                                          double confidence = 0.99) {
@@ -72,7 +72,7 @@ void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
 /// Convenience: auto-dispatch based on plt_inds.size().
 template <int MaxWindow>
 void plot_trajectory_ggiw_orientation(matplot::axes_handle ax,
-                                      const brew::models::Trajectory<brew::models::GGIWOrientation<>, MaxWindow>& tg,
+                                      const brew::models::TrajectoryGGIWOrientation<MaxWindow>& tg,
                                       const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 2:
@@ -85,7 +85,7 @@ void plot_trajectory_ggiw_orientation(matplot::axes_handle ax,
 
 /// Convenience: create figure, plot, save if output_file set.
 template <int MaxWindow>
-void plot_trajectory_ggiw_orientation(const brew::models::Trajectory<brew::models::GGIWOrientation<>, MaxWindow>& tg,
+void plot_trajectory_ggiw_orientation(const brew::models::TrajectoryGGIWOrientation<MaxWindow>& tg,
                                       const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

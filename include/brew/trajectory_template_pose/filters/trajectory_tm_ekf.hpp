@@ -2,7 +2,7 @@
 
 #include "brew/assert.hpp"
 #include "brew/shared/filter_base.hpp"
-#include "brew/shared/trajectory.hpp"
+#include "brew/trajectory_template_pose/trajectory_template_pose_model.hpp"
 #include "brew/template_pose/template_pose_model.hpp"
 #include "brew/template_matching/icp_base.hpp"
 #include "brew/template_matching/point_cloud.hpp"
@@ -28,10 +28,10 @@ namespace brew::filters {
 
 template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic>
 class TrajectoryTmEkf
-    : public Filter<models::Trajectory<models::TemplatePose<Scalar, D>, MaxWindow>> {
+    : public Filter<models::TrajectoryTemplatePose<MaxWindow, Scalar, D>> {
 public:
     using InnerDist = models::TemplatePose<Scalar, D>;
-    using Dist = models::Trajectory<InnerDist, MaxWindow>;
+    using Dist = models::TrajectoryTemplatePose<MaxWindow, Scalar, D>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;

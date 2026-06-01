@@ -10,7 +10,9 @@
 #include <brew/gaussian/gaussian_model.hpp>
 #include <brew/ggiw/ggiw_model.hpp>
 #include <brew/ggiw_orientation/ggiw_orientation_model.hpp>
-#include <brew/shared/trajectory.hpp>
+#include <brew/trajectory_gaussian/trajectory_gaussian_model.hpp>
+#include <brew/trajectory_ggiw/trajectory_ggiw_model.hpp>
+#include <brew/trajectory_ggiw_orientation/trajectory_ggiw_orientation_model.hpp>
 #include <matplot/matplot.h>
 
 namespace brew::plot_utils {
@@ -45,7 +47,7 @@ inline std::vector<std::vector<double>> to_colormap_argb(const std::vector<Color
 /// Plot a TrajectoryGaussian mixture (color order reversed to match MATLAB).
 template <int MaxWindow>
 void plot_mixture(matplot::axes_handle ax,
-                  const brew::models::Mixture<brew::models::Trajectory<brew::models::Gaussian<>, MaxWindow>>& mix,
+                  const brew::models::Mixture<brew::models::TrajectoryGaussian<MaxWindow>>& mix,
                   const PlotOptions& opts) {
     const int n = static_cast<int>(mix.size());
     auto colors = lines_colors(n);
@@ -66,7 +68,7 @@ void plot_mixture(matplot::axes_handle ax,
 /// Plot a TrajectoryGGIW mixture (color order reversed to match MATLAB).
 template <int MaxWindow>
 void plot_mixture(matplot::axes_handle ax,
-                  const brew::models::Mixture<brew::models::Trajectory<brew::models::GGIW<>, MaxWindow>>& mix,
+                  const brew::models::Mixture<brew::models::TrajectoryGGIW<MaxWindow>>& mix,
                   const PlotOptions& opts) {
     const int n = static_cast<int>(mix.size());
     auto colors = lines_colors(n);
@@ -87,7 +89,7 @@ void plot_mixture(matplot::axes_handle ax,
 /// Plot a TrajectoryGGIWOrientation mixture (color order reversed, with principal axes).
 template <int MaxWindow>
 void plot_mixture(matplot::axes_handle ax,
-                  const brew::models::Mixture<brew::models::Trajectory<brew::models::GGIWOrientation<>, MaxWindow>>& mix,
+                  const brew::models::Mixture<brew::models::TrajectoryGGIWOrientation<MaxWindow>>& mix,
                   const PlotOptions& opts) {
     const int n = static_cast<int>(mix.size());
     auto colors = lines_colors(n);
@@ -110,7 +112,7 @@ void plot_mixture(const brew::models::Mixture<brew::models::GGIWOrientation<>>& 
                   const PlotOptions& opts);
 
 template <int MaxWindow>
-void plot_mixture(const brew::models::Mixture<brew::models::Trajectory<brew::models::Gaussian<>, MaxWindow>>& mix,
+void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGaussian<MaxWindow>>& mix,
                   const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);
@@ -125,7 +127,7 @@ void plot_mixture(const brew::models::Mixture<brew::models::Trajectory<brew::mod
 }
 
 template <int MaxWindow>
-void plot_mixture(const brew::models::Mixture<brew::models::Trajectory<brew::models::GGIW<>, MaxWindow>>& mix,
+void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGGIW<MaxWindow>>& mix,
                   const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);
@@ -140,7 +142,7 @@ void plot_mixture(const brew::models::Mixture<brew::models::Trajectory<brew::mod
 }
 
 template <int MaxWindow>
-void plot_mixture(const brew::models::Mixture<brew::models::Trajectory<brew::models::GGIWOrientation<>, MaxWindow>>& mix,
+void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGGIWOrientation<MaxWindow>>& mix,
                   const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

@@ -2,7 +2,7 @@
 
 #include "brew/shared/filter_base.hpp"
 #include "brew/ggiw/filters/ggiw_ekf.hpp"  // for detail::sqrtm_spd
-#include "brew/shared/trajectory.hpp"
+#include "brew/trajectory_ggiw/trajectory_ggiw_model.hpp"
 #include "brew/ggiw/ggiw_model.hpp"
 #include <algorithm>
 #include <cmath>
@@ -19,10 +19,10 @@ namespace brew::filters {
 
 template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 class TrajectoryGGIWEKF
-    : public Filter<models::Trajectory<models::GGIW<Scalar, D, De>, MaxWindow>> {
+    : public Filter<models::TrajectoryGGIW<MaxWindow, Scalar, D, De>> {
 public:
     using InnerDist = models::GGIW<Scalar, D, De>;
-    using Dist = models::Trajectory<InnerDist, MaxWindow>;
+    using Dist = models::TrajectoryGGIW<MaxWindow, Scalar, D, De>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;

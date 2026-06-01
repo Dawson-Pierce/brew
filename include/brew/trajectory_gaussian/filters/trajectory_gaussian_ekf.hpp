@@ -1,7 +1,7 @@
 #pragma once
 
 #include "brew/shared/filter_base.hpp"
-#include "brew/shared/trajectory.hpp"
+#include "brew/trajectory_gaussian/trajectory_gaussian_model.hpp"
 #include "brew/gaussian/gaussian_model.hpp"
 #include <cmath>
 #include <memory>
@@ -16,10 +16,10 @@ namespace brew::filters {
 
 template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic>
 class TrajectoryGaussianEKF
-    : public Filter<models::Trajectory<models::Gaussian<Scalar, D>, MaxWindow>> {
+    : public Filter<models::TrajectoryGaussian<MaxWindow, Scalar, D>> {
 public:
     using InnerDist = models::Gaussian<Scalar, D>;
-    using Dist = models::Trajectory<InnerDist, MaxWindow>;
+    using Dist = models::TrajectoryGaussian<MaxWindow, Scalar, D>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;
