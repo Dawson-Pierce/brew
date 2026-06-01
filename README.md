@@ -3,71 +3,93 @@
 
 A header-heavy C++ library for single-target and multi-target tracking, supporting both point and extended targets. Built on Eigen and C++20.
 
-## Modules
+## Layout
 
-| Module | Description |
-|---|---|
-| `models` | State distribution representations (point, extended, trajectory-aware) |
-| `dynamics` | Motion models for prediction |
-| `filters` | Single-target recursive filters (prediction + update) |
-| `multi_target` | Random Finite Set (RFS) multi-target tracking filters |
-| `fusion` | Mixture management operations (prune, merge, cap) |
-| `assignment` | Optimal and K-best assignment solvers |
-| `clustering` | Measurement clustering for extended targets |
-| `metrics` | Performance metrics (OSPA, GOSPA) |
-| `serialization` | Filter state serialization (nlohmann/json) |
-| `plot_utils` | Optional visualization utilities (requires matplot++) |
+The library is organized into **flat, per-model-type packages** plus a shared
+core and standalone subsystems. Each model package owns its data structure, its
+single-object filters, and (the entry points to) the multi-object filters usable
+with it. Include a package's umbrella header to pull in its whole stack:
+
+```cpp
+#include <brew/gaussian/gaussian.hpp>   // Gaussian model + EKF + PHD/CPHD/GLMB/...
+```
+
+```
+include/brew/
+  shared/        base classes (filter_base, rfs_base, base_single_model),
+                 generic containers (mixture, bernoulli, trajectory), the generic
+                 RFS templates (shared/multi_target_generic/), fusion primitives
+  dynamics/  clustering/  template_matching/  assignment/  metrics/   (standalone subsystems)
+  gaussian/  ggiw/  ggiw_orientation/  iggiw/  template_pose/           (model packages)
+  trajectory_gaussian/  trajectory_ggiw/  trajectory_ggiw_orientation/
+  trajectory_iggiw/  trajectory_template_pose/
+  desktop/       plotting + sampling (desktop builds only)
+```
+
+Each package is `#include`-able via `brew/<pkg>/<pkg>.hpp` and builds as its own
+CMake library `brew_pkg_<pkg>`.
 
 ## Building
 
 ```bash
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build .
+cmake -S . -B build -G Ninja
+cmake --build build
 ```
 
-Eigen and GTest are fetched automatically if not found on the system. Plotting support is enabled by default and can be disabled with `-DBREW_ENABLE_PLOTTING=OFF`.
+Eigen and GTest are fetched automatically if not found. Key options:
+
+| Option | Default | Effect |
+|---|---|---|
+| `BREW_TARGET` | `desktop` | `desktop` (full library + sampling/plotting) or `hardware` (drops desktop modules, exceptions off, `BREW_ASSERT` instead of throw) |
+| `BREW_MODELS` | all 10 packages | Semicolon list of model packages to compile. Lets a C++/hardware build include only what it needs, e.g. `-DBREW_MODELS="gaussian;trajectory_gaussian"` |
+| `BREW_ENABLE_PLOTTING` | `ON` | matplot++ plotting (desktop only) |
+| `BREW_BUILD_TESTS` | `ON` | GoogleTest suite |
+
+(The MATLAB MEX build always compiles every model regardless of `BREW_MODELS`.)
 
 ## Quick Start
 
-All multi-target filters share a common template interface parameterized on distribution type. A typical tracking loop looks like:
-
 ```cpp
-#include <brew/multi_target/pmbm.hpp>
-#include <brew/filters/ekf.hpp>
-#include <brew/models/gaussian.hpp>
-#include <brew/dynamics/integrator_2d.hpp>
+#include <brew/gaussian/gaussian.hpp>
+#include <brew/dynamics/single_integrator.hpp>
 
-// 1. Set up dynamics and single-target filter
-auto dynamics = std::make_shared<brew::dynamics::Integrator2D>(dt);
-auto ekf = std::make_shared<brew::filters::EKF>(dynamics, R);
+using namespace brew;
 
-// 2. Create birth model
-auto birth = std::make_shared<brew::models::Mixture<brew::models::Gaussian>>();
-birth->add_component(birth_gaussian, birth_weight);
+// Dynamics + single-target filter
+auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+auto ekf = std::make_unique<filters::EKF<>>();
+ekf->set_dynamics(dyn);
+// ... set process/measurement noise ...
 
-// 3. Create multi-target filter
-brew::multi_target::PMBM<brew::models::Gaussian> tracker(ekf, birth);
-tracker.set_prob_detection(0.9);
-tracker.set_prob_survive(0.99);
-tracker.set_clutter_rate(10.0);
+// Birth intensity + multi-target filter
+auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+// ... add birth components ...
 
-// 4. Predict-update loop
+multi_target::PHD<models::Gaussian<>> tracker;
+tracker.set_filter(std::move(ekf));
+tracker.set_birth_model(std::move(birth));
+tracker.prob_detection_ = 0.9;
+tracker.prob_survive_   = 0.99;
+
 for (const auto& measurements : measurement_sequence) {
-    tracker.predict();
-    tracker.update(measurements);
-    auto estimates = tracker.estimate();
+    tracker.predict(t, dt);
+    tracker.correct(measurements);
+    tracker.cleanup();
 }
 ```
 
-Any RFS filter can be swapped in by changing the type (e.g. `PHD`, `CPHD`, `MBM`, `PMBM`, `GLMB`, `JGLMB`) — the predict/update/estimate interface is the same. Swap the distribution type template parameter to switch between point and extended target tracking.
+Any RFS filter can be swapped in by changing the type (`PHD`, `CPHD`, `MBM`,
+`PMBM`, `GLMB`, `JGLMB`); the predict/correct/cleanup interface is the same. Swap
+the model package to switch between point and extended targets.
 
 ## Testing
 
 ```bash
-cd build
-ctest --output-on-failure
+ctest --test-dir build --output-on-failure
 ```
+
+Per-package, no-MATLAB verification (including the `hardware` target) is available
+via `../docker/` — see `docker/README.md`.
 
 ## License
 
