@@ -45,9 +45,9 @@ inline std::vector<std::vector<double>> to_colormap_argb(const std::vector<Color
 } // namespace detail
 
 /// Plot a TrajectoryGaussian mixture (color order reversed to match MATLAB).
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_mixture(matplot::axes_handle ax,
-                  const brew::models::Mixture<brew::models::TrajectoryGaussian<MaxWindow>>& mix,
+                  const brew::models::Mixture<brew::models::TrajectoryGaussian<Scalar, D>>& mix,
                   const PlotOptions& opts) {
     const int n = static_cast<int>(mix.size());
     auto colors = lines_colors(n);
@@ -66,9 +66,9 @@ void plot_mixture(matplot::axes_handle ax,
 }
 
 /// Plot a TrajectoryGGIW mixture (color order reversed to match MATLAB).
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_mixture(matplot::axes_handle ax,
-                  const brew::models::Mixture<brew::models::TrajectoryGGIW<MaxWindow>>& mix,
+                  const brew::models::Mixture<brew::models::TrajectoryGGIW<Scalar, D, De>>& mix,
                   const PlotOptions& opts) {
     const int n = static_cast<int>(mix.size());
     auto colors = lines_colors(n);
@@ -87,9 +87,9 @@ void plot_mixture(matplot::axes_handle ax,
 }
 
 /// Plot a TrajectoryGGIWOrientation mixture (color order reversed, with principal axes).
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_mixture(matplot::axes_handle ax,
-                  const brew::models::Mixture<brew::models::TrajectoryGGIWOrientation<MaxWindow>>& mix,
+                  const brew::models::Mixture<brew::models::TrajectoryGGIWOrientation<Scalar, D, De>>& mix,
                   const PlotOptions& opts) {
     const int n = static_cast<int>(mix.size());
     auto colors = lines_colors(n);
@@ -111,8 +111,8 @@ void plot_mixture(const brew::models::Mixture<brew::models::GGIW<>>& mix,
 void plot_mixture(const brew::models::Mixture<brew::models::GGIWOrientation<>>& mix,
                   const PlotOptions& opts);
 
-template <int MaxWindow>
-void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGaussian<MaxWindow>>& mix,
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGaussian<Scalar, D>>& mix,
                   const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);
@@ -126,8 +126,8 @@ void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGaussian<M
     }
 }
 
-template <int MaxWindow>
-void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGGIW<MaxWindow>>& mix,
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGGIW<Scalar, D, De>>& mix,
                   const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);
@@ -141,8 +141,8 @@ void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGGIW<MaxWi
     }
 }
 
-template <int MaxWindow>
-void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGGIWOrientation<MaxWindow>>& mix,
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGGIWOrientation<Scalar, D, De>>& mix,
                   const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

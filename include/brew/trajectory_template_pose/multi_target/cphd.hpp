@@ -7,7 +7,7 @@
 
 namespace brew::trajectory_template_pose {
 
-template <int MaxWindow, int MaxComponents = Eigen::Dynamic, typename Scalar = double, int D = Eigen::Dynamic>
-using CPHD = brew::multi_target::CPHD<models::TrajectoryTemplatePose<MaxWindow, Scalar, D>, MaxComponents>;
+template <int MaxComponents = Eigen::Dynamic, typename Scalar = double, int D = Eigen::Dynamic>
+using CPHD = brew::multi_target::CPHD<models::TrajectoryTemplatePose<Scalar, D>, MaxComponents>;
 
 }  // namespace brew::trajectory_template_pose

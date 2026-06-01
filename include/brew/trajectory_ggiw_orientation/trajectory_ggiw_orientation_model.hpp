@@ -11,9 +11,9 @@ namespace brew::models {
 // @mex model
 // @mex_name TrajectoryGGIWOrientation
 // @mex_trajectory GGIWOrientation
-template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
-class TrajectoryGGIWOrientation : public TrajectoryWindow<GGIWOrientation<Scalar, D, De>, MaxWindow> {
-    using Base = TrajectoryWindow<GGIWOrientation<Scalar, D, De>, MaxWindow>;
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+class TrajectoryGGIWOrientation : public TrajectoryWindow<GGIWOrientation<Scalar, D, De>> {
+    using Base = TrajectoryWindow<GGIWOrientation<Scalar, D, De>>;
 public:
     TrajectoryGGIWOrientation() = default;
     using Base::Base;

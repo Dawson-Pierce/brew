@@ -7,7 +7,7 @@
 
 namespace brew::trajectory_template_pose {
 
-template <int MaxWindow, int MaxComponents = Eigen::Dynamic, typename Scalar = double, int D = Eigen::Dynamic>
-using GLMB = brew::multi_target::GLMB<models::TrajectoryTemplatePose<MaxWindow, Scalar, D>, MaxComponents>;
+template <int MaxComponents = Eigen::Dynamic, typename Scalar = double, int D = Eigen::Dynamic>
+using GLMB = brew::multi_target::GLMB<models::TrajectoryTemplatePose<Scalar, D>, MaxComponents>;
 
 }  // namespace brew::trajectory_template_pose

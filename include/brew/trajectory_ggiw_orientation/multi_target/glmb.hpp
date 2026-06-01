@@ -7,7 +7,7 @@
 
 namespace brew::trajectory_ggiw_orientation {
 
-template <int MaxWindow, int MaxComponents = Eigen::Dynamic, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
-using GLMB = brew::multi_target::GLMB<models::TrajectoryGGIWOrientation<MaxWindow, Scalar, D, De>, MaxComponents>;
+template <int MaxComponents = Eigen::Dynamic, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+using GLMB = brew::multi_target::GLMB<models::TrajectoryGGIWOrientation<Scalar, D, De>, MaxComponents>;
 
 }  // namespace brew::trajectory_ggiw_orientation

@@ -14,9 +14,9 @@ namespace brew::plot_utils {
 
 /// Plot 2D TrajectoryGGIWOrientation: trajectory line + GGIW extent ellipses
 /// + principal axis lines at last state.
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
-                                         const brew::models::TrajectoryGGIWOrientation<MaxWindow>& tg,
+                                         const brew::models::TrajectoryGGIWOrientation<Scalar, D, De>& tg,
                                          const std::vector<int>& plt_inds,
                                          const Color& color,
                                          double confidence = 0.99) {
@@ -70,9 +70,9 @@ void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
 }
 
 /// Convenience: auto-dispatch based on plt_inds.size().
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw_orientation(matplot::axes_handle ax,
-                                      const brew::models::TrajectoryGGIWOrientation<MaxWindow>& tg,
+                                      const brew::models::TrajectoryGGIWOrientation<Scalar, D, De>& tg,
                                       const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 2:
@@ -84,8 +84,8 @@ void plot_trajectory_ggiw_orientation(matplot::axes_handle ax,
 }
 
 /// Convenience: create figure, plot, save if output_file set.
-template <int MaxWindow>
-void plot_trajectory_ggiw_orientation(const brew::models::TrajectoryGGIWOrientation<MaxWindow>& tg,
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+void plot_trajectory_ggiw_orientation(const brew::models::TrajectoryGGIWOrientation<Scalar, D, De>& tg,
                                       const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

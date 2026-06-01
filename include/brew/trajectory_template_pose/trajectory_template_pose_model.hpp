@@ -11,9 +11,9 @@ namespace brew::models {
 // @mex model
 // @mex_name TrajectoryTemplatePose
 // @mex_trajectory TemplatePose
-template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic>
-class TrajectoryTemplatePose : public TrajectoryWindow<TemplatePose<Scalar, D>, MaxWindow> {
-    using Base = TrajectoryWindow<TemplatePose<Scalar, D>, MaxWindow>;
+template <typename Scalar = double, int D = Eigen::Dynamic>
+class TrajectoryTemplatePose : public TrajectoryWindow<TemplatePose<Scalar, D>> {
+    using Base = TrajectoryWindow<TemplatePose<Scalar, D>>;
 public:
     TrajectoryTemplatePose() = default;
     using Base::Base;

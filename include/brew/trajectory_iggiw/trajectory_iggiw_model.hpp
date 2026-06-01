@@ -11,9 +11,9 @@ namespace brew::models {
 // @mex model
 // @mex_name TrajectoryIGGIW
 // @mex_trajectory IGGIW
-template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
-class TrajectoryIGGIW : public TrajectoryWindow<IGGIW<Scalar, D, De>, MaxWindow> {
-    using Base = TrajectoryWindow<IGGIW<Scalar, D, De>, MaxWindow>;
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+class TrajectoryIGGIW : public TrajectoryWindow<IGGIW<Scalar, D, De>> {
+    using Base = TrajectoryWindow<IGGIW<Scalar, D, De>>;
 public:
     TrajectoryIGGIW() = default;
     using Base::Base;

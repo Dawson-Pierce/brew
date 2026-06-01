@@ -20,14 +20,14 @@ void plot(const models::Gaussian<>& g,
 void plot(const models::GGIW<>& g,
           const plot_utils::PlotOptions& opts);
 
-template <int MaxWindow>
-void plot(const models::TrajectoryGaussian<MaxWindow>& g,
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+void plot(const models::TrajectoryGaussian<Scalar, D>& g,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_trajectory_gaussian(g, opts);
 }
 
-template <int MaxWindow>
-void plot(const models::TrajectoryGGIW<MaxWindow>& g,
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+void plot(const models::TrajectoryGGIW<Scalar, D, De>& g,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_trajectory_ggiw(g, opts);
 }
@@ -37,14 +37,14 @@ void plot(const models::Mixture<models::Gaussian<>>& mix,
 void plot(const models::Mixture<models::GGIW<>>& mix,
           const plot_utils::PlotOptions& opts);
 
-template <int MaxWindow>
-void plot(const models::Mixture<models::TrajectoryGaussian<MaxWindow>>& mix,
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+void plot(const models::Mixture<models::TrajectoryGaussian<Scalar, D>>& mix,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_mixture(mix, opts);
 }
 
-template <int MaxWindow>
-void plot(const models::Mixture<models::TrajectoryGGIW<MaxWindow>>& mix,
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+void plot(const models::Mixture<models::TrajectoryGGIW<Scalar, D, De>>& mix,
           const plot_utils::PlotOptions& opts) {
     plot_utils::plot_mixture(mix, opts);
 }

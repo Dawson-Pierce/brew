@@ -11,9 +11,9 @@ namespace brew::models {
 // @mex model
 // @mex_name TrajectoryGaussian
 // @mex_trajectory Gaussian
-template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic>
-class TrajectoryGaussian : public TrajectoryWindow<Gaussian<Scalar, D>, MaxWindow> {
-    using Base = TrajectoryWindow<Gaussian<Scalar, D>, MaxWindow>;
+template <typename Scalar = double, int D = Eigen::Dynamic>
+class TrajectoryGaussian : public TrajectoryWindow<Gaussian<Scalar, D>> {
+    using Base = TrajectoryWindow<Gaussian<Scalar, D>>;
 public:
     TrajectoryGaussian() = default;
     using Base::Base;

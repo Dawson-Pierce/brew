@@ -7,7 +7,7 @@
 
 namespace brew::trajectory_iggiw {
 
-template <int MaxWindow, int MaxComponents = Eigen::Dynamic, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
-using PMBM = brew::multi_target::PMBM<models::TrajectoryIGGIW<MaxWindow, Scalar, D, De>, MaxComponents>;
+template <int MaxComponents = Eigen::Dynamic, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+using PMBM = brew::multi_target::PMBM<models::TrajectoryIGGIW<Scalar, D, De>, MaxComponents>;
 
 }  // namespace brew::trajectory_iggiw

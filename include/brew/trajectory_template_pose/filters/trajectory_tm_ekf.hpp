@@ -24,15 +24,15 @@ namespace brew::filters {
 // @mex filter
 // @mex_name TrajectoryTmEkf
 // @mex_dist TrajectoryTemplatePose
-// @mex_setters rotation_process_noise:mat
+// @mex_setters rotation_process_noise:mat, window_size:int
 // @mex_handle_setters icp:IcpBase, template_library:TemplateLibrary
 
-template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic>
+template <typename Scalar = double, int D = Eigen::Dynamic>
 class TrajectoryTmEkf
-    : public Filter<models::TrajectoryTemplatePose<MaxWindow, Scalar, D>> {
+    : public Filter<models::TrajectoryTemplatePose<Scalar, D>> {
 public:
     using InnerDist = models::TemplatePose<Scalar, D>;
-    using Dist = models::TrajectoryTemplatePose<MaxWindow, Scalar, D>;
+    using Dist = models::TrajectoryTemplatePose<Scalar, D>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;
@@ -41,7 +41,7 @@ public:
     TrajectoryTmEkf() = default;
 
     [[nodiscard]] std::unique_ptr<Base> clone() const override {
-        auto c = std::make_unique<TrajectoryTmEkf<MaxWindow, Scalar, D>>();
+        auto c = std::make_unique<TrajectoryTmEkf<Scalar, D>>();
         c->dyn_obj_ = this->dyn_obj_;
         c->h_ = this->h_;
         c->H_ = this->H_;
@@ -49,6 +49,7 @@ public:
         c->measurement_noise_ = this->measurement_noise_;
         c->rotation_process_noise_ = rotation_process_noise_;
         c->icp_runner_ = icp_runner_;
+        c->window_size_ = window_size_;
         return c;
     }
 
@@ -261,7 +262,11 @@ public:
         icp_runner_.set_template_library(std::move(lib));
     }
 
-    [[nodiscard]] static constexpr int window_size() { return Dist::max_window_size(); }
+    void set_window_size(int n) { window_size_ = (n > 0 ? n : 1); }
+    [[nodiscard]] int window_size() const { return window_size_; }
+
+private:
+    int window_size_ = Dist::kDefaultWindow;
 
 private:
     Eigen::MatrixXd rotation_process_noise_;
@@ -272,6 +277,6 @@ private:
 
 namespace brew::filters {
 // Concrete filter used for this model (RFS devirtualization).
-template <int MaxWindow, typename Scalar, int D>
-struct default_filter<models::TrajectoryTemplatePose<MaxWindow, Scalar, D>> { using type = TrajectoryTmEkf<MaxWindow, Scalar, D>; };
+template <typename Scalar, int D>
+struct default_filter<models::TrajectoryTemplatePose<Scalar, D>> { using type = TrajectoryTmEkf<Scalar, D>; };
 }  // namespace brew::filters

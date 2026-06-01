@@ -41,7 +41,7 @@ namespace brew::models {
 /// Windowed trajectory of inner distribution T, plus an independent state history.
 /// MaxWindow controls the ring-buffer window size (required compile-time constant);
 /// state history is runtime-bounded.
-template <typename T, int MaxWindow>
+template <typename T>
 class TrajectoryWindow {
 public:
     using InnerType = T;
@@ -50,31 +50,25 @@ public:
     using Matrix = typename T::Matrix;
     static constexpr int InnerDim = Vector::RowsAtCompileTime;
 
-    static constexpr int StackedDim =
-        (InnerDim == Eigen::Dynamic)
-            ? Eigen::Dynamic
-            : InnerDim * MaxWindow;
+    // Window size is a runtime value; the stacked state is therefore always dynamic.
+    using StackedVector = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+    using StackedMatrix = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
-    using StackedVector = Eigen::Matrix<Scalar, StackedDim, 1>;
-    using StackedMatrix = Eigen::Matrix<Scalar, StackedDim, StackedDim>;
+    using WindowStorage = std::vector<T>;
 
-    using WindowStorage = std::array<T, (MaxWindow > 0 ? MaxWindow : 1)>;
+    static constexpr int kDefaultWindow = 5;
 
     int state_dim = 0;
 
     TrajectoryWindow() {
-        stacked_mean_.setZero();
-        stacked_covariance_.setZero();
+        history_.assign(max_window_, T{});
     }
 
-    TrajectoryWindow(int state_dim_, T initial) : state_dim(state_dim_) {
-        if constexpr (StackedDim == Eigen::Dynamic) {
-            stacked_mean_ = StackedVector::Zero(state_dim_ * MaxWindow);
-            stacked_covariance_ = StackedMatrix::Zero(state_dim_ * MaxWindow, state_dim_ * MaxWindow);
-        } else {
-            stacked_mean_.setZero();
-            stacked_covariance_.setZero();
-        }
+    TrajectoryWindow(int state_dim_, T initial, int max_window = kDefaultWindow)
+        : state_dim(state_dim_), max_window_(max_window > 0 ? max_window : 1) {
+        stacked_mean_ = StackedVector::Zero(state_dim_ * max_window_);
+        stacked_covariance_ = StackedMatrix::Zero(state_dim_ * max_window_, state_dim_ * max_window_);
+        history_.assign(max_window_, T{});
         stacked_mean_.segment(0, state_dim_) = initial.mean();
         stacked_covariance_.block(0, 0, state_dim_, state_dim_) = initial.covariance();
         history_[0] = initial;
@@ -93,9 +87,21 @@ public:
 
     /// Live step count in the window (advanced by advance_window).
     [[nodiscard]] int window_size() const { return window_size_; }
-    [[nodiscard]] static constexpr int max_window_size() { return MaxWindow; }
+    [[nodiscard]] int max_window_size() const { return max_window_; }
     [[nodiscard]] int stacked_size() const { return state_dim * window_size_; }
-    [[nodiscard]] bool is_full() const { return window_size_ == MaxWindow; }
+    [[nodiscard]] bool is_full() const { return window_size_ == max_window_; }
+
+    /// Set the (runtime) maximum window size; resets the live window to empty.
+    void set_max_window_size(int n) {
+        max_window_ = (n > 0 ? n : 1);
+        history_.assign(max_window_, T{});
+        if (state_dim > 0) {
+            stacked_mean_ = StackedVector::Zero(state_dim * max_window_);
+            stacked_covariance_ = StackedMatrix::Zero(state_dim * max_window_, state_dim * max_window_);
+        }
+        window_size_ = 0;
+    }
+    void set_window_size(int n) { set_max_window_size(n); }
 
     [[nodiscard]] bool is_extended() const {
         if (window_size_ == 0) return false;
@@ -179,7 +185,7 @@ public:
         const int sd = state_dim;
 
         // Grow / bump counter (below cap)
-        if (window_size_ < MaxWindow) {
+        if (window_size_ < max_window_) {
             ++window_size_;
             mean_at(window_size_ - 1).setZero();
             cov_at(window_size_ - 1, window_size_ - 1).setZero();
@@ -191,17 +197,17 @@ public:
         }
 
         // At cap: slide window left by one block (drop oldest), zero new tail slot
-        const int kept = (MaxWindow - 1) * sd;
+        const int kept = (max_window_ - 1) * sd;
         stacked_mean_.head(kept) = stacked_mean_.tail(kept).eval();
         stacked_mean_.tail(sd).setZero();
         stacked_covariance_.topLeftCorner(kept, kept) =
             stacked_covariance_.bottomRightCorner(kept, kept).eval();
         stacked_covariance_.rightCols(sd).setZero();
         stacked_covariance_.bottomRows(sd).setZero();
-        for (int i = 0; i < MaxWindow - 1; ++i) {
+        for (int i = 0; i < max_window_ - 1; ++i) {
             history_[i] = std::move(history_[i + 1]);
         }
-        history_[MaxWindow - 1] = T{};
+        history_[max_window_ - 1] = T{};
         return true;
     }
 
@@ -276,6 +282,7 @@ private:
     StackedMatrix stacked_covariance_{};
     WindowStorage history_{};
     int window_size_ = 0;
+    int max_window_ = kDefaultWindow;
 
     // Independent full-lifetime record.
     std::vector<T> state_history_{};
@@ -287,7 +294,7 @@ private:
 template <typename U>
 struct is_trajectory : std::false_type {};
 
-template <typename U, int M>
-struct is_trajectory<TrajectoryWindow<U, M>> : std::true_type {};
+template <typename U>
+struct is_trajectory<TrajectoryWindow<U>> : std::true_type {};
 
 } // namespace brew::models

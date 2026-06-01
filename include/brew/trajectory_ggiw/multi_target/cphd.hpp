@@ -7,7 +7,7 @@
 
 namespace brew::trajectory_ggiw {
 
-template <int MaxWindow, int MaxComponents = Eigen::Dynamic, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
-using CPHD = brew::multi_target::CPHD<models::TrajectoryGGIW<MaxWindow, Scalar, D, De>, MaxComponents>;
+template <int MaxComponents = Eigen::Dynamic, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+using CPHD = brew::multi_target::CPHD<models::TrajectoryGGIW<Scalar, D, De>, MaxComponents>;
 
 }  // namespace brew::trajectory_ggiw

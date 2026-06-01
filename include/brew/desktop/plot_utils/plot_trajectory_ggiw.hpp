@@ -13,9 +13,9 @@ namespace brew::plot_utils {
 
 /// Plot 2D TrajectoryGGIW: trajectory line + GGIW extent ellipses at last state.
 /// plt_inds must contain exactly 2 indices.
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
-                              const brew::models::TrajectoryGGIW<MaxWindow>& tg,
+                              const brew::models::TrajectoryGGIW<Scalar, D, De>& tg,
                               const std::vector<int>& plt_inds,
                               const Color& color,
                               double confidence = 0.99) {
@@ -64,9 +64,9 @@ void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
 
 /// Plot 3D TrajectoryGGIW: plot3 trajectory + GGIW extent ellipsoids at last state.
 /// plt_inds must contain exactly 3 indices.
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
-                              const brew::models::TrajectoryGGIW<MaxWindow>& tg,
+                              const brew::models::TrajectoryGGIW<Scalar, D, De>& tg,
                               const std::vector<int>& plt_inds,
                               const Color& color,
                               double confidence = 0.99,
@@ -117,9 +117,9 @@ void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
 }
 
 /// Convenience: auto-dispatch based on plt_inds.size().
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw(matplot::axes_handle ax,
-                           const brew::models::TrajectoryGGIW<MaxWindow>& tg,
+                           const brew::models::TrajectoryGGIW<Scalar, D, De>& tg,
                            const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 2:
@@ -134,8 +134,8 @@ void plot_trajectory_ggiw(matplot::axes_handle ax,
 }
 
 /// Convenience: create figure, plot, save if output_file set.
-template <int MaxWindow>
-void plot_trajectory_ggiw(const brew::models::TrajectoryGGIW<MaxWindow>& tg,
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+void plot_trajectory_ggiw(const brew::models::TrajectoryGGIW<Scalar, D, De>& tg,
                            const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

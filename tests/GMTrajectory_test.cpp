@@ -17,55 +17,55 @@ protected:
 
 TEST_F(GMTrajectoryTracking, Comparison) {
     // PHD
-    auto phd = test::make_phd<models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto phd = test::make_phd<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.05), params);
-    auto phd_result = test::run_tracking<decltype(phd), models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto phd_result = test::run_tracking<decltype(phd), models::TrajectoryGaussian<>>(
         phd, scenario, "GM Trajectory PHD Tracking", 5.0, 10);
     EXPECT_GE(phd_result.converged_steps, 10)
         << "Trajectory Gaussian PHD should track both targets";
 
     // CPHD
-    auto cphd = test::make_cphd<models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto cphd = test::make_cphd<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.05), params);
-    auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::TrajectoryGaussian<>>(
         cphd, scenario, "GM Trajectory CPHD Tracking", 5.0, 10);
     EXPECT_GE(cphd_result.converged_steps, 10)
         << "Trajectory Gaussian CPHD should track both targets";
 
     // MBM
-    auto mbm = test::make_mbm<models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto mbm = test::make_mbm<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.1), params);
-    auto mbm_result = test::run_tracking<decltype(mbm), models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto mbm_result = test::run_tracking<decltype(mbm), models::TrajectoryGaussian<>>(
         mbm, scenario, "GM Trajectory MBM Tracking", 5.0, 10);
     EXPECT_GE(mbm_result.converged_steps, 10)
         << "Trajectory Gaussian MBM should track both targets";
 
     // PMBM
-    auto pmbm = test::make_pmbm<models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto pmbm = test::make_pmbm<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.1), params);
-    auto pmbm_result = test::run_tracking<decltype(pmbm), models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto pmbm_result = test::run_tracking<decltype(pmbm), models::TrajectoryGaussian<>>(
         pmbm, scenario, "GM Trajectory PMBM Tracking", 5.0, 10);
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "Trajectory Gaussian PMBM should track both targets";
 
     // GLMB
-    auto glmb = test::make_glmb<models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto glmb = test::make_glmb<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.1), params);
-    auto glmb_result = test::run_tracking<decltype(glmb), models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto glmb_result = test::run_tracking<decltype(glmb), models::TrajectoryGaussian<>>(
         glmb, scenario, "GM Trajectory GLMB Tracking", 5.0, 10);
     EXPECT_GE(glmb_result.converged_steps, 10)
         << "Trajectory Gaussian GLMB should track both targets";
 
     // JGLMB
-    auto jglmb = test::make_jglmb<models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto jglmb = test::make_jglmb<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.1), params);
-    auto jglmb_result = test::run_tracking<decltype(jglmb), models::TrajectoryGaussian<test::kTrajWindow>>(
+    auto jglmb_result = test::run_tracking<decltype(jglmb), models::TrajectoryGaussian<>>(
         jglmb, scenario, "GM Trajectory JGLMB Tracking", 5.0, 10);
     EXPECT_GE(jglmb_result.converged_steps, 10)
         << "Trajectory Gaussian JGLMB should track both targets";

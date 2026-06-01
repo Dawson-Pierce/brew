@@ -13,9 +13,9 @@ namespace brew::plot_utils {
 
 /// Plot 1D TrajectoryGaussian: state value vs time index + window overlay.
 /// plt_inds must contain exactly 1 index.
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
-                                  const brew::models::TrajectoryGaussian<MaxWindow>& tg,
+                                  const brew::models::TrajectoryGaussian<Scalar, D>& tg,
                                   const std::vector<int>& plt_inds,
                                   const Color& color) {
     if (plt_inds.size() != 1) {
@@ -65,9 +65,9 @@ void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
 
 /// Plot 2D TrajectoryGaussian: trajectory line from rearrange_states + window overlay.
 /// plt_inds must contain exactly 2 indices.
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
-                                  const brew::models::TrajectoryGaussian<MaxWindow>& tg,
+                                  const brew::models::TrajectoryGaussian<Scalar, D>& tg,
                                   const std::vector<int>& plt_inds,
                                   const Color& color) {
     if (plt_inds.size() != 2) {
@@ -113,9 +113,9 @@ void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
 
 /// Plot 3D TrajectoryGaussian: plot3 trajectory + window.
 /// plt_inds must contain exactly 3 indices.
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
-                                  const brew::models::TrajectoryGaussian<MaxWindow>& tg,
+                                  const brew::models::TrajectoryGaussian<Scalar, D>& tg,
                                   const std::vector<int>& plt_inds,
                                   const Color& color) {
     if (plt_inds.size() != 3) {
@@ -163,9 +163,9 @@ void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
 }
 
 /// Convenience: auto-dispatch based on plt_inds.size().
-template <int MaxWindow>
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_gaussian(matplot::axes_handle ax,
-                               const brew::models::TrajectoryGaussian<MaxWindow>& tg,
+                               const brew::models::TrajectoryGaussian<Scalar, D>& tg,
                                const PlotOptions& opts) {
     switch (opts.plt_inds.size()) {
         case 1:
@@ -183,8 +183,8 @@ void plot_trajectory_gaussian(matplot::axes_handle ax,
 }
 
 /// Convenience: create figure, plot, save if output_file set.
-template <int MaxWindow>
-void plot_trajectory_gaussian(const brew::models::TrajectoryGaussian<MaxWindow>& tg,
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+void plot_trajectory_gaussian(const brew::models::TrajectoryGaussian<Scalar, D>& tg,
                                const PlotOptions& opts) {
     auto fig = matplot::figure(true);
     fig->width(opts.width);

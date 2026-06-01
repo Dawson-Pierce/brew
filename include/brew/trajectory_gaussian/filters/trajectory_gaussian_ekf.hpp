@@ -14,13 +14,14 @@ namespace brew::filters {
 // @mex filter
 // @mex_name TrajectoryGaussianEKF
 // @mex_dist TrajectoryGaussian
+// @mex_setters window_size:int
 
-template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic>
+template <typename Scalar = double, int D = Eigen::Dynamic>
 class TrajectoryGaussianEKF
-    : public Filter<models::TrajectoryGaussian<MaxWindow, Scalar, D>> {
+    : public Filter<models::TrajectoryGaussian<Scalar, D>> {
 public:
     using InnerDist = models::Gaussian<Scalar, D>;
-    using Dist = models::TrajectoryGaussian<MaxWindow, Scalar, D>;
+    using Dist = models::TrajectoryGaussian<Scalar, D>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;
@@ -29,12 +30,13 @@ public:
     TrajectoryGaussianEKF() = default;
 
     [[nodiscard]] std::unique_ptr<Base> clone() const override {
-        auto c = std::make_unique<TrajectoryGaussianEKF<MaxWindow, Scalar, D>>();
+        auto c = std::make_unique<TrajectoryGaussianEKF<Scalar, D>>();
         c->dyn_obj_ = this->dyn_obj_;
         c->h_ = this->h_;
         c->H_ = this->H_;
         c->process_noise_ = this->process_noise_;
         c->measurement_noise_ = this->measurement_noise_;
+        c->window_size_ = window_size_;
         return c;
     }
 
@@ -151,13 +153,17 @@ public:
         return nu.transpose() * S.ldlt().solve(nu);
     }
 
-    [[nodiscard]] static constexpr int window_size() { return Dist::max_window_size(); }
+    void set_window_size(int n) { window_size_ = (n > 0 ? n : 1); }
+    [[nodiscard]] int window_size() const { return window_size_; }
+
+private:
+    int window_size_ = Dist::kDefaultWindow;
 };
 
 } // namespace brew::filters
 
 namespace brew::filters {
 // Concrete filter used for this model (RFS devirtualization).
-template <int MaxWindow, typename Scalar, int D>
-struct default_filter<models::TrajectoryGaussian<MaxWindow, Scalar, D>> { using type = TrajectoryGaussianEKF<MaxWindow, Scalar, D>; };
+template <typename Scalar, int D>
+struct default_filter<models::TrajectoryGaussian<Scalar, D>> { using type = TrajectoryGaussianEKF<Scalar, D>; };
 }  // namespace brew::filters

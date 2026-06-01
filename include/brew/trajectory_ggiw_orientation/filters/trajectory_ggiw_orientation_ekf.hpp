@@ -20,13 +20,13 @@ namespace brew::filters {
 // @mex filter
 // @mex_name TrajectoryGGIWOrientationEKF
 // @mex_dist TrajectoryGGIWOrientation
-// @mex_setters temporal_decay:scalar, forgetting_factor:scalar, scaling_parameter:scalar
-template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+// @mex_setters temporal_decay:scalar, forgetting_factor:scalar, scaling_parameter:scalar, window_size:int
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 class TrajectoryGGIWOrientationEKF
-    : public Filter<models::TrajectoryGGIWOrientation<MaxWindow, Scalar, D, De>> {
+    : public Filter<models::TrajectoryGGIWOrientation<Scalar, D, De>> {
 public:
     using InnerDist = models::GGIWOrientation<Scalar, D, De>;
-    using Dist = models::TrajectoryGGIWOrientation<MaxWindow, Scalar, D, De>;
+    using Dist = models::TrajectoryGGIWOrientation<Scalar, D, De>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;
@@ -35,7 +35,7 @@ public:
     TrajectoryGGIWOrientationEKF() = default;
 
     [[nodiscard]] std::unique_ptr<Base> clone() const override {
-        auto c = std::make_unique<TrajectoryGGIWOrientationEKF<MaxWindow, Scalar, D, De>>();
+        auto c = std::make_unique<TrajectoryGGIWOrientationEKF<Scalar, D, De>>();
         c->dyn_obj_ = this->dyn_obj_;
         c->h_ = this->h_;
         c->H_ = this->H_;
@@ -44,6 +44,7 @@ public:
         c->eta_ = eta_;
         c->tau_ = tau_;
         c->rho_ = rho_;
+        c->window_size_ = window_size_;
         return c;
     }
 
@@ -300,7 +301,11 @@ public:
     void set_temporal_decay(double eta) { eta_ = eta; }
     void set_forgetting_factor(double tau) { tau_ = tau; }
     void set_scaling_parameter(double rho) { rho_ = rho; }
-    [[nodiscard]] static constexpr int window_size() { return Dist::max_window_size(); }
+    void set_window_size(int n) { window_size_ = (n > 0 ? n : 1); }
+    [[nodiscard]] int window_size() const { return window_size_; }
+
+private:
+    int window_size_ = Dist::kDefaultWindow;
 
 private:
     double eta_ = 1.0;
@@ -312,6 +317,6 @@ private:
 
 namespace brew::filters {
 // Concrete filter used for this model (RFS devirtualization).
-template <int MaxWindow, typename Scalar, int D, int De>
-struct default_filter<models::TrajectoryGGIWOrientation<MaxWindow, Scalar, D, De>> { using type = TrajectoryGGIWOrientationEKF<MaxWindow, Scalar, D, De>; };
+template <typename Scalar, int D, int De>
+struct default_filter<models::TrajectoryGGIWOrientation<Scalar, D, De>> { using type = TrajectoryGGIWOrientationEKF<Scalar, D, De>; };
 }  // namespace brew::filters

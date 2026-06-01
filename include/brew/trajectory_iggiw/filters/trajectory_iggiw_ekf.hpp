@@ -24,13 +24,13 @@ namespace brew::filters {
 // @mex filter
 // @mex_name TrajectoryIGGIWEKF
 // @mex_dist TrajectoryIGGIW
-// @mex_setters eta:scalar, lambda:scalar, omega:scalar, intensity_forgetting_factor:scalar, intensity_growth:scalar, extent_forgetting_factor:scalar, centroid_power:scalar
-template <int MaxWindow, typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
+// @mex_setters eta:scalar, lambda:scalar, omega:scalar, intensity_forgetting_factor:scalar, intensity_growth:scalar, extent_forgetting_factor:scalar, centroid_power:scalar, window_size:int
+template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 class TrajectoryIGGIWEKF
-    : public Filter<models::TrajectoryIGGIW<MaxWindow, Scalar, D, De>> {
+    : public Filter<models::TrajectoryIGGIW<Scalar, D, De>> {
 public:
     using InnerDist = models::IGGIW<Scalar, D, De>;
-    using Dist = models::TrajectoryIGGIW<MaxWindow, Scalar, D, De>;
+    using Dist = models::TrajectoryIGGIW<Scalar, D, De>;
     using TrajectoryType = Dist;
     using Base = Filter<Dist>;
     using CorrectionResult = typename Base::CorrectionResult;
@@ -39,7 +39,7 @@ public:
     TrajectoryIGGIWEKF() = default;
 
     [[nodiscard]] std::unique_ptr<Base> clone() const override {
-        auto c = std::make_unique<TrajectoryIGGIWEKF<MaxWindow, Scalar, D, De>>();
+        auto c = std::make_unique<TrajectoryIGGIWEKF<Scalar, D, De>>();
         c->dyn_obj_ = this->dyn_obj_;
         c->h_ = this->h_;
         c->H_ = this->H_;
@@ -52,6 +52,7 @@ public:
         c->gamma_growth_ = gamma_growth_;
         c->delta_extent_ = delta_extent_;
         c->centroid_power_ = centroid_power_;
+        c->window_size_ = window_size_;
         return c;
     }
 
@@ -316,7 +317,11 @@ public:
         centroid_power_ = centroid_power;
     }
 
-    [[nodiscard]] static constexpr int window_size() { return Dist::max_window_size(); }
+    void set_window_size(int n) { window_size_ = (n > 0 ? n : 1); }
+    [[nodiscard]] int window_size() const { return window_size_; }
+
+private:
+    int window_size_ = Dist::kDefaultWindow;
 
 private:
     // Packed [pos_d; weight_1] x N format, matching IGGIWEKF::unpack_measurement.
@@ -422,6 +427,6 @@ private:
 
 namespace brew::filters {
 // Concrete filter used for this model (RFS devirtualization).
-template <int MaxWindow, typename Scalar, int D, int De>
-struct default_filter<models::TrajectoryIGGIW<MaxWindow, Scalar, D, De>> { using type = TrajectoryIGGIWEKF<MaxWindow, Scalar, D, De>; };
+template <typename Scalar, int D, int De>
+struct default_filter<models::TrajectoryIGGIW<Scalar, D, De>> { using type = TrajectoryIGGIWEKF<Scalar, D, De>; };
 }  // namespace brew::filters
