@@ -99,11 +99,14 @@ public:
     void predict(int /*timestep*/, double dt) override {
         if (!intensity_ || !has_filter_) return;
 
-        // Propagate surviving components and scale weights
+        // Scale surviving weights, then batch-propagate every component. The
+        // concrete filter's predict_batch builds a shared F once for LTI dynamics
+        // (per-component fallback otherwise) — numerically identical to a
+        // per-component predict() loop.
         for (std::size_t k = 0; k < intensity_->size(); ++k) {
             intensity_->weights()(static_cast<Eigen::Index>(k)) *= prob_survive_;
-            intensity_->component(k) = filter_.predict(dt, intensity_->component(k));
         }
+        filter_.predict_batch(dt, *intensity_);
 
         // Add birth components
         if (birth_model_) {

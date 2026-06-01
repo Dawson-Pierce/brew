@@ -122,9 +122,8 @@ public:
         if (poisson_intensity_) {
             for (std::size_t k = 0; k < poisson_intensity_->size(); ++k) {
                 poisson_intensity_->weights()(static_cast<Eigen::Index>(k)) *= this->prob_survive_;
-                poisson_intensity_->component(k) =
-                    this->filter_.predict(dt, poisson_intensity_->component(k));
             }
+            this->filter_.predict_batch(dt, *poisson_intensity_);
             // Birth adds to Poisson intensity.
             if (birth_model_) {
                 poisson_intensity_->add_components(*birth_model_);

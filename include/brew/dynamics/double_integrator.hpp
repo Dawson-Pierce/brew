@@ -82,6 +82,10 @@ public:
         return G;
     }
 
+    /// Linear time-invariant: get_state_mat(dt) is state-independent, so the
+    /// transition can be built once and shared across a batch of targets.
+    [[nodiscard]] bool is_lti() const override { return true; }
+
 private:
     int dims_;
 };

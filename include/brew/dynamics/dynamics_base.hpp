@@ -84,6 +84,14 @@ public:
         const ExtentMatrix& extent) const {
         return extent;
     }
+
+    /// True iff the dynamics are linear time-invariant: get_state_mat(dt, state)
+    /// is independent of `state` and propagate_state(dt, x) == get_state_mat(dt)*x.
+    /// When true, the state-transition F can be built once per dt and shared
+    /// across all targets in a batch predict (see Filter::predict_batch). Default
+    /// is the conservative false; LTI models (SingleIntegrator/DoubleIntegrator/
+    /// Singer) override to true.
+    [[nodiscard]] virtual bool is_lti() const { return false; }
 };
 
 } // namespace brew::dynamics

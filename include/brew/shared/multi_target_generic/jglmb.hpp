@@ -79,11 +79,8 @@ public:
         for (const auto& trk : this->track_tab_) {
             auto nt = trk->clone();
             const auto& last = *nt->mixture_hist.back();
-            auto predicted = std::make_unique<models::Mixture<T, MaxComponents>>();
-            for (std::size_t c = 0; c < last.size(); ++c) {
-                T pc = this->filter_.predict(dt, last.component(c));
-                predicted->add_component(pc.clone_typed(), last.weight(c));
-            }
+            auto predicted = last.clone();
+            this->filter_.predict_batch(dt, *predicted);
             nt->mixture_hist.push_back(std::move(predicted));
             surv_tab.push_back(std::move(nt));
         }

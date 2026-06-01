@@ -146,6 +146,9 @@ public:
         return InputMatrix::Zero(3 * dims_, 1);
     }
 
+    /// Linear time-invariant: get_state_mat(dt) (= F_d) is state-independent.
+    [[nodiscard]] bool is_lti() const override { return true; }
+
     Scalar beta()              const { return beta_; }
     Scalar spectral_density()  const { return q_; }
     int    dims()              const { return dims_; }

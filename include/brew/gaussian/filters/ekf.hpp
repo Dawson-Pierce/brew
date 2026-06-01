@@ -3,6 +3,7 @@
 
 #include "brew/shared/filter_base.hpp"
 #include "brew/gaussian/gaussian_model.hpp"
+#include "brew/assert.hpp"
 #include <cmath>
 #include <memory>
 #include <utility>
@@ -89,6 +90,39 @@ public:
                                            + this->measurement_noise_;
 
         return innovation.transpose() * S.ldlt().solve(innovation);
+    }
+
+    /// LTI fast path: for linear time-invariant dynamics the state transition F
+    /// depends only on dt, so build it ONCE and apply that shared F to every
+    /// component, instead of rebuilding F per target (predict() builds F twice
+    /// per component: once explicitly and once inside propagate_state). The math
+    /// is identical to predict() (same F, same F*x and F*P*F^T + Q), so results
+    /// are bit-for-bit unchanged. Falls back to the per-component loop otherwise.
+    template <int N>
+    void predict_batch(double dt, models::Mixture<Dist, N>& mix) const {
+        const std::size_t K = mix.size();
+        if (K == 0) return;
+        if (!this->dyn_obj_ || !this->dyn_obj_->is_lti()) {
+            for (std::size_t k = 0; k < K; ++k)
+                mix.component(k) = this->predict(dt, mix.component(k));
+            return;
+        }
+        const typename Base::StateMatrix F  = this->dyn_obj_->get_state_mat(dt, mix.component(0).mean());
+        // Guard the is_lti() contract (debug-only; compiles out under NDEBUG):
+        // a state-independent F must be identical regardless of which component's
+        // mean it is built from, so building it once from component(0) is exact.
+        // Catches a dynamics that wrongly reports is_lti() while reading the state.
+        BREW_ASSERT(K < 2 ||
+            (this->dyn_obj_->get_state_mat(dt, mix.component(K - 1).mean()).array() == F.array()).all(),
+            "EKF::predict_batch: dynamics reports is_lti() but get_state_mat depends on state");
+        const typename Base::StateMatrix Ft = F.transpose();
+        for (std::size_t k = 0; k < K; ++k) {
+            auto& c = mix.component(k);
+            typename Base::StateVector pm = F * c.mean();
+            typename Base::StateMatrix pc = F * c.covariance() * Ft + this->process_noise_;
+            c.mean() = std::move(pm);
+            c.covariance() = std::move(pc);
+        }
     }
 };
 

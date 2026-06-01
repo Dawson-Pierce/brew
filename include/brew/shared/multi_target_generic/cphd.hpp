@@ -151,8 +151,8 @@ public:
 
         for (std::size_t k = 0; k < intensity_->size(); ++k) {
             intensity_->weights()(static_cast<Eigen::Index>(k)) *= prob_survive_;
-            intensity_->component(k) = filter_.predict(dt, intensity_->component(k));
         }
+        filter_.predict_batch(dt, *intensity_);
 
         if (birth_model_) {
             auto birth_copy = birth_model_->clone();

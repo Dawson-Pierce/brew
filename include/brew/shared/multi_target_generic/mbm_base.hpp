@@ -331,11 +331,10 @@ protected:
     /// Build a predicted mixture from the current mixture by calling filter_.predict
     /// on each component. Weights are preserved.
     MixturePtr predict_mixture(const models::Mixture<T, MaxComponents>& src, double dt) const {
-        auto out = std::make_unique<models::Mixture<T, MaxComponents>>();
-        for (std::size_t c = 0; c < src.size(); ++c) {
-            T pc = filter_.predict(dt, src.component(c));
-            out->add_component(pc.clone_typed(), src.weight(c));
-        }
+        // Clone (components + weights) then batch-predict in place — identical to
+        // a per-component predict() loop, but lets the concrete filter share F.
+        auto out = src.clone();
+        filter_.predict_batch(dt, *out);
         return out;
     }
 

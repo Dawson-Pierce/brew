@@ -6,6 +6,8 @@
 #include <variant>
 
 #include "brew/dynamics/dynamics_base.hpp"
+#include "brew/shared/mixture.hpp"
+#include <cstddef>
 
 namespace brew::filters {
 
@@ -86,6 +88,22 @@ public:
     [[nodiscard]] virtual double gate(
         const MeasVector& measurement,
         const Dist& predicted) const = 0;
+
+    // ---- Batch prediction ----
+
+    /// Predict every component of `mix` in place. Default: per-component predict()
+    /// (exact for any filter / dynamics). Filters with a linear time-invariant
+    /// dynamics (e.g. EKF) override this with a fast path that builds the shared
+    /// F once. Templated on the mixture capacity N (the base does not otherwise
+    /// know it), so it is a non-virtual member template resolved on the concrete
+    /// filter type the RFS holds.
+    template <int N>
+    void predict_batch(double dt, models::Mixture<Dist, N>& mix) const {
+        const std::size_t K = mix.size();
+        for (std::size_t k = 0; k < K; ++k) {
+            mix.component(k) = this->predict(dt, mix.component(k));
+        }
+    }
 
 protected:
     std::shared_ptr<DynamicsType> dyn_obj_;
