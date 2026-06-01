@@ -1,0 +1,8 @@
+# Build context is the brew library root. Exclude heavy/VCS items so the COPY
+# into the image stays small.
+.git
+**/.git
+build*/
+dependencies/
+output/
+*.log

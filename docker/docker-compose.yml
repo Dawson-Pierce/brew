@@ -1,0 +1,32 @@
+# Parallel per-package verification. Each service compiles + tests one slice so
+# CI can fan out. Build context is the brew library root.
+#
+#   docker compose -f docker/docker-compose.yml build
+#   docker compose -f docker/docker-compose.yml up --abort-on-container-exit
+services:
+  verify-all:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: brew-verify
+    command: []          # all packages + full suite + hardware
+
+  verify-gaussian:
+    image: brew-verify
+    depends_on: [verify-all]
+    command: ["gaussian", "trajectory_gaussian"]
+
+  verify-ggiw:
+    image: brew-verify
+    depends_on: [verify-all]
+    command: ["ggiw", "ggiw_orientation", "trajectory_ggiw", "trajectory_ggiw_orientation"]
+
+  verify-iggiw:
+    image: brew-verify
+    depends_on: [verify-all]
+    command: ["iggiw", "trajectory_iggiw"]
+
+  verify-template-pose:
+    image: brew-verify
+    depends_on: [verify-all]
+    command: ["template_pose", "trajectory_template_pose"]
