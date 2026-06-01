@@ -29,6 +29,7 @@ namespace brew::multi_target {
 // @mex rfs
 // @mex_name GLMB
 // @mex_params req_births:int:5, req_surv:int:5, req_upd:int:5, prune_threshold:double:1e-15, max_hypotheses:int:3000, extract_threshold:double:0.5, gate_threshold:double:9.0, gating_on:bool:false
+// @mex_optional_params k_best:int
 // @mex_has cardinality, track_histories, cluster_object
 template <typename T, int MaxComponents = Eigen::Dynamic>
 class GLMB : public RFSBase {
