@@ -12,6 +12,7 @@
 
 // Multi-object (RFS) filters
 #include "brew/trajectory_template_pose/multi_target/phd.hpp"
+#include "brew/trajectory_template_pose/multi_target/mbm_base.hpp"
 #include "brew/trajectory_template_pose/multi_target/cphd.hpp"
 #include "brew/trajectory_template_pose/multi_target/glmb.hpp"
 #include "brew/trajectory_template_pose/multi_target/jglmb.hpp"
@@ -19,7 +20,7 @@
 #include "brew/trajectory_template_pose/multi_target/pmbm.hpp"
 
 // Mixture management + clustering helpers
-#include "brew/shared/fusion/merge.hpp"
+#include "brew/trajectory_template_pose/merge.hpp"
 #include "brew/shared/fusion/prune.hpp"
 #include "brew/shared/fusion/cap.hpp"
 #include "brew/clustering/dbscan.hpp"

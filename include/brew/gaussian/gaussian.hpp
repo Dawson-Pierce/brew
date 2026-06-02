@@ -11,6 +11,7 @@
 
 // Multi-object (RFS) filters
 #include "brew/gaussian/multi_target/phd.hpp"
+#include "brew/gaussian/multi_target/mbm_base.hpp"
 #include "brew/gaussian/multi_target/cphd.hpp"
 #include "brew/gaussian/multi_target/glmb.hpp"
 #include "brew/gaussian/multi_target/jglmb.hpp"
@@ -18,7 +19,7 @@
 #include "brew/gaussian/multi_target/pmbm.hpp"
 
 // Mixture management + clustering helpers
-#include "brew/shared/fusion/merge.hpp"
+#include "brew/gaussian/merge.hpp"
 #include "brew/shared/fusion/prune.hpp"
 #include "brew/shared/fusion/cap.hpp"
 #include "brew/clustering/dbscan.hpp"

@@ -30,6 +30,7 @@ add_executable(brew_tests
     test_merge.cpp
     test_phd.cpp
     test_gaussian_concrete.cpp
+    test_packages_concrete.cpp
     test_cphd.cpp
     test_assignment.cpp
     test_mbm.cpp
