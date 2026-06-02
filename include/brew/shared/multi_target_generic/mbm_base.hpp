@@ -77,7 +77,7 @@ public:
     // ---- Common configuration ----
 
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
-        filter_ = static_cast<typename filters::default_filter<T>::type&>(*filter);
+        filter_ = std::move(filter);
         has_filter_ = true;
     }
     void set_prune_threshold_hypothesis(double t) { prune_threshold_hyp_ = t; }
@@ -334,7 +334,7 @@ protected:
         // Clone (components + weights) then batch-predict in place — identical to
         // a per-component predict() loop, but lets the concrete filter share F.
         auto out = src.clone();
-        filter_.predict_batch(dt, *out);
+        filter_->predict_batch_dynamic(dt, *out);
         return out;
     }
 
@@ -349,7 +349,7 @@ protected:
         std::vector<double> w_new(src.size(), 0.0);
         double total_w = 0.0;
         for (std::size_t c = 0; c < src.size(); ++c) {
-            auto [dist, qz] = filter_.correct(meas_flat, src.component(c));
+            auto [dist, qz] = filter_->correct(meas_flat, src.component(c));
             double w = src.weight(c) * qz;
             w_new[c] = w;
             total_w += w;
@@ -381,7 +381,7 @@ protected:
     bool passes_gate(const TrackEntry& trk, const Eigen::VectorXd& z_gate) const {
         const auto& mix = trk.current_mixture();
         for (std::size_t c = 0; c < mix.size(); ++c) {
-            if (filter_.gate(z_gate, mix.component(c)) < gate_threshold_) return true;
+            if (filter_->gate(z_gate, mix.component(c)) < gate_threshold_) return true;
         }
         return false;
     }
@@ -411,7 +411,7 @@ protected:
 
     // ---- Members (protected for subclass access) ----
 
-    typename filters::default_filter<T>::type filter_{};
+    std::unique_ptr<filters::Filter<T>> filter_;
     bool has_filter_ = false;
     std::vector<std::unique_ptr<TrackEntry>> track_tab_;
     std::vector<Hypothesis> hypotheses_;

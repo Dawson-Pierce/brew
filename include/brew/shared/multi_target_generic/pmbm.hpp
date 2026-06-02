@@ -48,7 +48,7 @@ public:
         c->prob_survive_ = this->prob_survive_;
         c->clutter_rate_ = this->clutter_rate_;
         c->clutter_density_ = this->clutter_density_;
-        c->filter_ = this->filter_;
+        if (this->filter_) c->filter_ = this->filter_->clone();
         c->has_filter_ = this->has_filter_;
         if (poisson_intensity_) c->poisson_intensity_ = poisson_intensity_->clone();
         if (birth_model_) c->birth_model_ = birth_model_->clone();
@@ -123,7 +123,7 @@ public:
             for (std::size_t k = 0; k < poisson_intensity_->size(); ++k) {
                 poisson_intensity_->weights()(static_cast<Eigen::Index>(k)) *= this->prob_survive_;
             }
-            this->filter_.predict_batch(dt, *poisson_intensity_);
+            this->filter_->predict_batch_dynamic(dt, *poisson_intensity_);
             // Birth adds to Poisson intensity.
             if (birth_model_) {
                 poisson_intensity_->add_components(*birth_model_);
@@ -162,9 +162,9 @@ public:
             double total_w = 0.0;
             for (std::size_t k = 0; k < poisson_intensity_->size(); ++k) {
                 if (this->gating_on_ &&
-                    this->filter_.gate(z_gate, poisson_intensity_->component(k))
+                    this->filter_->gate(z_gate, poisson_intensity_->component(k))
                         >= this->gate_threshold_) continue;
-                auto [dist, qz] = this->filter_.correct(meas_flat,
+                auto [dist, qz] = this->filter_->correct(meas_flat,
                     poisson_intensity_->component(k));
                 double w = this->prob_detection_ * poisson_intensity_->weight(k) * qz;
                 if (w <= 0.0) continue;

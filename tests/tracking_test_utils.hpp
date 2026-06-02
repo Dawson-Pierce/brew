@@ -7,6 +7,7 @@
 #include "brew/shared/trajectory_window.hpp"
 #include "brew/ggiw_orientation/ggiw_orientation_model.hpp"
 #include "brew/gaussian/filters/ekf.hpp"
+#include "brew/gaussian/filters/ukf.hpp"
 #include "brew/ggiw/filters/ggiw_ekf.hpp"
 #include "brew/ggiw_orientation/filters/ggiw_orientation_ekf.hpp"
 #include "brew/trajectory_gaussian/filters/trajectory_gaussian_ekf.hpp"
@@ -530,6 +531,26 @@ inline std::unique_ptr<filters::EKF<>> make_ekf(const ScenarioData& scenario) {
         scenario.meas_std * scenario.meas_std * Eigen::MatrixXd::Identity(2, 2));
 
     return ekf;
+}
+
+// Same configuration as make_ekf; SingleIntegrator is LTI so the UKF predict
+// reduces to the EKF/Kalman predict. Used to prove any Filter<Gaussian> plugs
+// into an RFS via the base class.
+inline std::unique_ptr<filters::UKF<>> make_ukf(const ScenarioData& scenario) {
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    auto ukf = std::make_unique<filters::UKF<>>();
+    ukf->set_dynamics(dyn);
+
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ukf->set_measurement_jacobian(H);
+    Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+    Eigen::MatrixXd Q_in = 0.5 * Eigen::MatrixXd::Identity(G.cols(), G.cols());
+    ukf->set_process_noise(G * Q_in * G.transpose());
+    ukf->set_measurement_noise(
+        scenario.meas_std * scenario.meas_std * Eigen::MatrixXd::Identity(2, 2));
+
+    return ukf;
 }
 
 inline std::unique_ptr<filters::GGIWEKF<>> make_ggiw_ekf(const ScenarioData& scenario) {

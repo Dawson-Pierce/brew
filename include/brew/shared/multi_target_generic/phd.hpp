@@ -35,7 +35,7 @@ public:
         c->prob_survive_ = prob_survive_;
         c->clutter_rate_ = clutter_rate_;
         c->clutter_density_ = clutter_density_;
-        c->filter_ = filter_;
+        if (filter_) c->filter_ = filter_->clone();
         c->has_filter_ = has_filter_;
         if (intensity_) c->intensity_ = intensity_->clone();
         if (birth_model_) c->birth_model_ = birth_model_->clone();
@@ -52,7 +52,7 @@ public:
     // ---- Configuration ----
 
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
-        filter_ = static_cast<typename filters::default_filter<T>::type&>(*filter);
+        filter_ = std::move(filter);
         has_filter_ = true;
     }
 
@@ -106,7 +106,7 @@ public:
         for (std::size_t k = 0; k < intensity_->size(); ++k) {
             intensity_->weights()(static_cast<Eigen::Index>(k)) *= prob_survive_;
         }
-        filter_.predict_batch(dt, *intensity_);
+        filter_->predict_batch_dynamic(dt, *intensity_);
 
         // Add birth components
         if (birth_model_) {
@@ -168,9 +168,9 @@ public:
             std::vector<std::unique_ptr<T>> d_lst;
 
             for (std::size_t k = 0; k < intensity_->size(); ++k) {
-                double gate_val = filter_.gate(z_gate, intensity_->component(k));
+                double gate_val = filter_->gate(z_gate, intensity_->component(k));
                 if (gate_val < gate_threshold_) {
-                    auto [dist, qz] = filter_.correct(meas_flat, intensity_->component(k));
+                    auto [dist, qz] = filter_->correct(meas_flat, intensity_->component(k));
                     double w = qz * intensity_->weight(k);
                     w_lst.push_back(w);
                     d_lst.push_back(dist.clone_typed());
@@ -222,7 +222,7 @@ public:
     }
 
 private:
-    typename filters::default_filter<T>::type filter_{};
+    std::unique_ptr<filters::Filter<T>> filter_;
     bool has_filter_ = false;
     std::unique_ptr<models::Mixture<T, MaxComponents>> intensity_;
     std::unique_ptr<models::Mixture<T, MaxComponents>> birth_model_;

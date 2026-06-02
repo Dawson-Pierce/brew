@@ -43,7 +43,7 @@ public:
         c->prob_survive_ = this->prob_survive_;
         c->clutter_rate_ = this->clutter_rate_;
         c->clutter_density_ = this->clutter_density_;
-        c->filter_ = this->filter_;
+        if (this->filter_) c->filter_ = this->filter_->clone();
         c->has_filter_ = this->has_filter_;
         for (const auto& t : this->track_tab_) c->track_tab_.push_back(t->clone());
         c->hypotheses_ = this->hypotheses_;

@@ -94,6 +94,18 @@ TEST_F(GMTracking, Comparison) {
 #endif
 }
 
+TEST_F(GMTracking, PHDWithUKF) {
+    // Any Filter<Gaussian> plugs into an RFS through the base class. A PHD driven
+    // by a UKF (instead of the default EKF) must track the same targets; under the
+    // LTI SingleIntegrator dynamics the UKF predict equals the EKF/Kalman predict.
+    auto phd = test::make_phd<models::Gaussian<>>(
+        test::make_ukf(scenario), test::make_gm_birth(0.05), params);
+    auto result = test::run_tracking<decltype(phd), models::Gaussian<>>(
+        phd, scenario, "GM PHD-UKF Tracking", 5.0, 10);
+    EXPECT_GE(result.converged_steps, 10)
+        << "UKF-driven PHD should track both targets for most of the run";
+}
+
 TEST_F(GMTracking, JGLMBGibbs) {
     // JGLMB using the Gibbs sampler for the joint update (instead of exact Murty
     // ranked assignment) should still track both targets for most of the run.

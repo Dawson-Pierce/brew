@@ -39,7 +39,7 @@ public:
         c->prob_survive_ = this->prob_survive_;
         c->clutter_rate_ = this->clutter_rate_;
         c->clutter_density_ = this->clutter_density_;
-        c->filter_ = this->filter_;
+        if (this->filter_) c->filter_ = this->filter_->clone();
         c->has_filter_ = this->has_filter_;
         for (const auto& t : this->track_tab_) c->track_tab_.push_back(t->clone());
         c->hypotheses_ = this->hypotheses_;
@@ -83,7 +83,7 @@ public:
             auto nt = trk->clone();
             const auto& last = *nt->mixture_hist.back();
             auto predicted = last.clone();
-            this->filter_.predict_batch(dt, *predicted);
+            this->filter_->predict_batch_dynamic(dt, *predicted);
             nt->mixture_hist.push_back(std::move(predicted));
             surv_tab.push_back(std::move(nt));
         }
@@ -190,7 +190,7 @@ public:
                 if (this->gating_on_) {
                     bool gated = false;
                     for (std::size_t c = 0; c < last.size(); ++c) {
-                        if (this->filter_.gate(z_gate, last.component(c)) < this->gate_threshold_) {
+                        if (this->filter_->gate(z_gate, last.component(c)) < this->gate_threshold_) {
                             gated = true; break;
                         }
                     }
@@ -200,7 +200,7 @@ public:
                 std::vector<double> new_w(last.size(), 0.0);
                 double total_w = 0.0;
                 for (std::size_t c = 0; c < last.size(); ++c) {
-                    auto [dist, qz] = this->filter_.correct(meas_flat, last.component(c));
+                    auto [dist, qz] = this->filter_->correct(meas_flat, last.component(c));
                     double w = last.weight(c) * qz;
                     new_w[c] = w;
                     total_w += w;
@@ -226,7 +226,7 @@ public:
                 std::vector<double> new_w(birth_mix->size(), 0.0);
                 double total_w = 0.0;
                 for (std::size_t c = 0; c < birth_mix->size(); ++c) {
-                    auto [dist, qz] = this->filter_.correct(meas_flat, birth_mix->component(c));
+                    auto [dist, qz] = this->filter_->correct(meas_flat, birth_mix->component(c));
                     double w = birth_mix->weight(c) * qz;
                     new_w[c] = w;
                     total_w += w;

@@ -85,7 +85,7 @@ public:
         c->prob_survive_ = prob_survive_;
         c->clutter_rate_ = clutter_rate_;
         c->clutter_density_ = clutter_density_;
-        c->filter_ = filter_;
+        if (filter_) c->filter_ = filter_->clone();
         c->has_filter_ = has_filter_;
         for (const auto& t : track_tab_) c->track_tab_.push_back(t->clone());
         c->hypotheses_ = hypotheses_;
@@ -120,7 +120,7 @@ public:
     // ---- Configuration ----
 
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
-        filter_ = static_cast<typename filters::default_filter<T>::type&>(*filter);
+        filter_ = std::move(filter);
         has_filter_ = true;
     }
 
@@ -252,7 +252,7 @@ public:
             auto nt = trk->clone();
             const auto& last = *nt->mixture_hist.back();
             auto predicted = last.clone();
-            filter_.predict_batch(dt, *predicted);
+            filter_->predict_batch_dynamic(dt, *predicted);
             nt->mixture_hist.push_back(std::move(predicted));
             surv_tab.push_back(std::move(nt));
         }
@@ -384,7 +384,7 @@ public:
                     // Skip tracks where no component passes the gate
                     bool gated = false;
                     for (std::size_t c = 0; c < last.size(); ++c) {
-                        double gv = filter_.gate(z_gate, last.component(c));
+                        double gv = filter_->gate(z_gate, last.component(c));
                         if (gv < gate_threshold_) { gated = true; break; }
                     }
                     if (!gated) {
@@ -399,7 +399,7 @@ public:
                 std::vector<double> new_w(last.size(), 0.0);
                 double total_w = 0.0;
                 for (std::size_t c = 0; c < last.size(); ++c) {
-                    auto [dist, qz] = filter_.correct(meas_flat, last.component(c));
+                    auto [dist, qz] = filter_->correct(meas_flat, last.component(c));
                     double w = last.weight(c) * qz;
                     new_w[c] = w;
                     total_w += w;
@@ -777,7 +777,7 @@ protected:
 
     // ---- Members ----
 
-    typename filters::default_filter<T>::type filter_{};
+    std::unique_ptr<filters::Filter<T>> filter_;
     bool has_filter_ = false;
     std::vector<std::unique_ptr<TabEntry>> track_tab_;
     std::vector<Hypothesis> hypotheses_;

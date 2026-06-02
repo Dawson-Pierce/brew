@@ -105,6 +105,20 @@ public:
         }
     }
 
+    /// Polymorphic batch predict over the heap-backed (Eigen::Dynamic) mixture the
+    /// RFS use. The RFS hold a Filter<Dist> base pointer and call this ONCE per
+    /// timestep, so any concrete filter (EKF, UKF, future IMM/PF) plugs in. The
+    /// default forwards to the per-component predict_batch (exact for any filter);
+    /// filters with a fast path (EKF/UKF under LTI dynamics) override it. The inner
+    /// per-component loop stays non-virtual inside the override, so the
+    /// devirtualized-hot-loop speedup is preserved — only one virtual call is added
+    /// per timestep. (The non-virtual predict_batch<N> above still serves
+    /// compile-time fixed-N mixtures for C++/hardware users.)
+    virtual void predict_batch_dynamic(
+        double dt, models::Mixture<Dist, Eigen::Dynamic>& mix) const {
+        this->predict_batch(dt, mix);
+    }
+
 protected:
     std::shared_ptr<DynamicsType> dyn_obj_;
     MeasurementFunc h_;

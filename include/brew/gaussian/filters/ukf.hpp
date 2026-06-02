@@ -3,6 +3,7 @@
 
 #include "brew/shared/filter_base.hpp"
 #include "brew/gaussian/gaussian_model.hpp"
+#include "brew/gaussian/filters/gaussian_lti_predict.hpp"
 #include "brew/assert.hpp"
 #include <Eigen/Dense>
 #include <cmath>
@@ -28,10 +29,12 @@ namespace brew::filters {
 /// causes catastrophic cancellation for large-magnitude states — avoid it unless
 /// you specifically want near-mean (derivative-like) behavior on a small state.
 ///
-/// NOTE: not yet exposed to MATLAB as a MEX filter. The RFS hot path is devirtualized
-/// around default_filter<Gaussian> == EKF (set_filter downcasts to EKF), so a UKF
-/// cannot be dropped into a PHD/GLMB until the RFS is generalized over the filter
-/// type. It is fully usable as a standalone single-object filter today.
+/// Pluggable into any RFS (PHD/GLMB/...) through the Filter<Gaussian> base, and
+/// usable standalone for single-object estimation / navigation.
+// @mex filter
+// @mex_name UKF
+// @mex_dist Gaussian
+// @mex_setters alpha:scalar, beta:scalar, kappa:scalar
 template <typename Scalar = double, int D = Eigen::Dynamic>
 class UKF : public Filter<models::Gaussian<Scalar, D>> {
 public:
@@ -70,6 +73,15 @@ public:
         double dt,
         const Dist& prev) const override {
 
+        // LTI shortcut: for a linear model the unscented transform is exact, so
+        // skip the sigma points and use the Kalman predict directly (identical to
+        // the EKF). Same math used by the batch path; ideal for navigation.
+        if (this->dyn_obj_ && this->dyn_obj_->is_lti()) {
+            const StateMatrix F = this->dyn_obj_->get_state_mat(dt, prev.mean());
+            return Dist(F * prev.mean(),
+                        F * prev.covariance() * F.transpose() + this->process_noise_);
+        }
+
         const int n = static_cast<int>(prev.mean().size());
         const SigmaSet s = sigma_points(prev.mean(), prev.covariance());
 
@@ -94,6 +106,22 @@ public:
         }
 
         return Dist(std::move(mean), std::move(cov));
+    }
+
+    /// Batch predict over the dynamic mixture (RFS entry point). Under LTI the
+    /// unscented transform is exact and equals the Kalman predict, so reuse the
+    /// shared LTI batch (build F once, no sigma points) — same fast path as the
+    /// EKF. Otherwise fall back to the per-component sigma-point predict.
+    void predict_batch_dynamic(
+        double dt, models::Mixture<Dist, Eigen::Dynamic>& mix) const override {
+        if (mix.size() == 0) return;
+        if (this->dyn_obj_ && this->dyn_obj_->is_lti()) {
+            detail::gaussian_lti_batch_predict(dt, *this->dyn_obj_, this->process_noise_, mix);
+        } else {
+            const std::size_t K = mix.size();
+            for (std::size_t k = 0; k < K; ++k)
+                mix.component(k) = this->predict(dt, mix.component(k));
+        }
     }
 
     [[nodiscard]] CorrectionResult correct(

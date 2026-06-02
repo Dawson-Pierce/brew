@@ -43,7 +43,7 @@ public:
         c->prob_survive_ = prob_survive_;
         c->clutter_rate_ = clutter_rate_;
         c->clutter_density_ = clutter_density_;
-        c->filter_ = filter_;
+        if (filter_) c->filter_ = filter_->clone();
         c->has_filter_ = has_filter_;
         if (intensity_) c->intensity_ = intensity_->clone();
         if (birth_model_) c->birth_model_ = birth_model_->clone();
@@ -63,7 +63,7 @@ public:
     // ---- Configuration ----
 
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
-        filter_ = static_cast<typename filters::default_filter<T>::type&>(*filter);
+        filter_ = std::move(filter);
         has_filter_ = true;
     }
 
@@ -152,7 +152,7 @@ public:
         for (std::size_t k = 0; k < intensity_->size(); ++k) {
             intensity_->weights()(static_cast<Eigen::Index>(k)) *= prob_survive_;
         }
-        filter_.predict_batch(dt, *intensity_);
+        filter_->predict_batch_dynamic(dt, *intensity_);
 
         if (birth_model_) {
             auto birth_copy = birth_model_->clone();
@@ -215,8 +215,8 @@ public:
             }
 
             for (int k = 0; k < J; ++k) {
-                if (filter_.gate(z_gate, intensity_->component(k)) < gate_threshold_) {
-                    auto [dist, qz] = filter_.correct(meas_flat, intensity_->component(k));
+                if (filter_->gate(z_gate, intensity_->component(k)) < gate_threshold_) {
+                    auto [dist, qz] = filter_->correct(meas_flat, intensity_->component(k));
                     delta(k, j) = prob_detection_ * intensity_->weight(k) * qz;
                     corrected_dists[k][j] = dist.clone_typed();
                 }
@@ -406,7 +406,7 @@ private:
         return result;
     }
 
-    typename filters::default_filter<T>::type filter_{};
+    std::unique_ptr<filters::Filter<T>> filter_;
     bool has_filter_ = false;
     std::unique_ptr<models::Mixture<T, MaxComponents>> intensity_;
     std::unique_ptr<models::Mixture<T, MaxComponents>> birth_model_;
