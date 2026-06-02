@@ -13,7 +13,7 @@
 #include "brew/shared/mixture.hpp"
 #include "brew/shared/filter_base.hpp"
 #include "brew/shared/fusion/prune.hpp"
-#include "brew/shared/fusion/merge.hpp"
+#include "brew/gaussian/merge.hpp"
 #include "brew/shared/fusion/cap.hpp"
 #include "brew/clustering/dbscan.hpp"
 
@@ -194,7 +194,7 @@ public:
     void cleanup() override {
         if (!intensity_) return;
         fusion::prune(*intensity_, prune_threshold_);
-        fusion::merge(*intensity_, merge_threshold_);
+        merge(*intensity_, merge_threshold_);
         fusion::cap(*intensity_, static_cast<std::size_t>(max_components_));
 
         this->push_history(extracted_mixtures_, extract());

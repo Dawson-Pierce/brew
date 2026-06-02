@@ -11,6 +11,7 @@
 #include "brew/trajectory_ggiw_orientation/trajectory_ggiw_orientation_model.hpp"
 #include "brew/trajectory_iggiw/trajectory_iggiw_model.hpp"
 #include "brew/trajectory_template_pose/trajectory_template_pose_model.hpp"
+#include "brew/shared/fusion/trajectory_mahal.hpp"
 
 #include <Eigen/Dense>
 #include <algorithm>
@@ -345,30 +346,6 @@ void merge(models::Mixture<models::IGGIW<Scalar, D, De>, N>& mix, double thresho
     }
 
     mix = std::move(result);
-}
-
-// ---- Helper: Mahalanobis distance for full-state trajectories (same-size only) ----
-
-inline double trajectory_mahal_dist(const Eigen::VectorXd& mi, const Eigen::MatrixXd& Pi,
-                                    const Eigen::VectorXd& mj, const Eigen::MatrixXd& Pj) {
-    if (mi.size() != mj.size()) return std::numeric_limits<double>::infinity();
-
-    Eigen::MatrixXd C = 0.5 * (Pi + Pj);
-    C = 0.5 * (C + C.transpose());
-
-    Eigen::LLT<Eigen::MatrixXd> llt(C);
-    if (llt.info() != Eigen::Success) {
-        const double eps_reg = 1e-9 * std::max(1.0, C.trace() / C.rows());
-        C += eps_reg * Eigen::MatrixXd::Identity(C.rows(), C.cols());
-        llt.compute(C);
-        if (llt.info() != Eigen::Success) {
-            // Fallback to pseudoinverse
-            const Eigen::VectorXd diff = mi - mj;
-            return diff.transpose() * C.completeOrthogonalDecomposition().pseudoInverse() * diff;
-        }
-    }
-    const Eigen::VectorXd y = llt.matrixL().solve(mi - mj);
-    return y.squaredNorm();
 }
 
 // ---- Trajectory<Gaussian<>> merge: full-state Mahalanobis, keep longer/heavier ----

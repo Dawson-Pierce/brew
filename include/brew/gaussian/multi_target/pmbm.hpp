@@ -4,7 +4,7 @@
 #include "brew/gaussian/multi_target/mbm_base.hpp"
 #include "brew/assignment/murty.hpp"
 #include "brew/shared/fusion/prune.hpp"
-#include "brew/shared/fusion/merge.hpp"
+#include "brew/gaussian/merge.hpp"
 #include "brew/shared/fusion/cap.hpp"
 
 #include <Eigen/Dense>
@@ -328,7 +328,7 @@ public:
         // Poisson cleanup.
         if (poisson_intensity_) {
             fusion::prune(*poisson_intensity_, prune_poisson_threshold_);
-            fusion::merge(*poisson_intensity_, merge_poisson_threshold_);
+            merge(*poisson_intensity_, merge_poisson_threshold_);
             fusion::cap(*poisson_intensity_,
                         static_cast<std::size_t>(max_poisson_components_));
         }
