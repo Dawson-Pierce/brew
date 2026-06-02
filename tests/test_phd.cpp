@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "brew/shared/multi_target_generic/phd.hpp"
+#include "brew/gaussian/multi_target/phd.hpp"   // concrete per-package PHD
 #include "brew/gaussian/filters/ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
@@ -84,6 +85,56 @@ TEST(PHD, Clone) {
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::make_unique<models::Mixture<models::Gaussian<>>>());
+
+    auto cloned = phd.clone();
+    ASSERT_NE(cloned, nullptr);
+}
+
+TEST(GaussianPHDConcrete, PredictCorrectCleanup) {
+    // The per-package concrete gaussian::PHD — templated on Scalar/D/size, NOT the
+    // model — must behave like the generic multi_target::PHD<Gaussian>.
+    auto ekf = std::make_unique<filters::EKF<>>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    ekf->set_dynamics(dyn);
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ekf->set_measurement_jacobian(H);
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * (0.1 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    }
+    ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
+
+    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    Eigen::VectorXd birth_mean(4);
+    birth_mean << 0.0, 0.0, 0.0, 0.0;
+    birth->add_component(
+        std::make_unique<models::Gaussian<>>(birth_mean, 10.0 * Eigen::MatrixXd::Identity(4, 4)), 0.1);
+    auto intensity = birth->clone();
+
+    gaussian::PHD<> phd;                       // concrete, default Scalar=double, D=Dynamic
+    phd.set_filter(std::move(ekf));
+    phd.set_birth_model(std::move(birth));
+    phd.set_intensity(std::move(intensity));
+    phd.set_prob_detection(0.9);
+    phd.set_prob_survive(0.99);
+    phd.set_clutter_rate(1.0);
+    phd.set_clutter_density(1e-4);
+    phd.set_prune_threshold(1e-5);
+    phd.set_merge_threshold(4.0);
+    phd.set_max_components(20);
+    phd.set_extract_threshold(0.4);
+    phd.set_gate_threshold(16.0);
+
+    phd.predict(0, 1.0);
+    EXPECT_GE(phd.intensity().size(), 2u);
+    Eigen::MatrixXd meas(2, 1);
+    meas << 0.5, 0.3;
+    phd.correct(meas);
+    EXPECT_GE(phd.intensity().size(), 1u);
+    phd.cleanup();
+    EXPECT_LE(phd.intensity().size(), 20u);
+    EXPECT_GE(phd.extracted_mixtures().size(), 1u);
 
     auto cloned = phd.clone();
     ASSERT_NE(cloned, nullptr);
