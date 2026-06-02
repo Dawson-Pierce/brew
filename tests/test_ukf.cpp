@@ -2,8 +2,11 @@
 #include "brew/gaussian/filters/ukf.hpp"
 #include "brew/gaussian/filters/ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
+#include "brew/dynamics/coordinated_turn.hpp"
 #include <algorithm>
 #include <cmath>
+#include <random>
+#include <vector>
 
 using namespace brew::filters;
 using namespace brew::models;
@@ -140,3 +143,86 @@ TEST(UKFTest, MatchesEKFAtLargeStateScale) {
     EXPECT_LT((ce.mean() - cu.mean()).cwiseAbs().maxCoeff(), 1e-5);
     EXPECT_LT((ce.covariance() - cu.covariance()).cwiseAbs().maxCoeff(), 1e-5);
 }
+
+namespace {
+// Run a Gaussian filter over a fixed turn truth/measurement sequence; return the
+// steady-state (2nd-half) position RMSE and the final turn-rate estimate.
+struct CTRun { double pos_rmse; double omega_est; };
+template <typename Filt>
+CTRun run_coordinated_turn(Filt& filt,
+                           const std::vector<Eigen::VectorXd>& truth,
+                           const std::vector<Eigen::VectorXd>& meas,
+                           double dt, const Eigen::VectorXd& m0,
+                           const Eigen::MatrixXd& P0) {
+    Gaussian est(m0, P0);
+    double sse = 0.0;
+    int cnt = 0;
+    const std::size_t half = meas.size() / 2;
+    for (std::size_t k = 0; k < meas.size(); ++k) {
+        est = filt.predict(dt, est);
+        auto corrected = filt.correct(meas[k], est);
+        est = corrected.distribution;
+        if (k >= half) {
+            const double ex = est.mean()(0) - truth[k](0);
+            const double ey = est.mean()(1) - truth[k](1);
+            sse += ex * ex + ey * ey;
+            ++cnt;
+        }
+    }
+    return { std::sqrt(sse / std::max(cnt, 1)), est.mean()(4) };
+}
+}  // namespace
+
+TEST(UKFTest, CoordinatedTurnUnknownRate) {
+    // Nonlinear unknown-turn-rate model [x,y,vx,vy,omega]: the UKF tracks a turning
+    // target and recovers omega from position-only measurements, starting from a
+    // wrong (zero) turn-rate guess. The EKF's transition Jacobian F(omega) does not
+    // couple omega to the measured position, so it cannot recover the turn rate —
+    // a clean demonstration of the UKF's value on a genuinely nonlinear model.
+    using brew::dynamics::CoordinatedTurn;
+    auto dyn = std::make_shared<CoordinatedTurn<>>();
+    const double dt = 1.0;
+    const double true_omega = 0.08;
+
+    // Truth + position measurements (shared by both filters).
+    Eigen::VectorXd x(5);
+    x << 0, 0, 10, 0, true_omega;
+    std::mt19937 rng(42);
+    std::normal_distribution<double> nz(0.0, std::sqrt(0.5));
+    std::vector<Eigen::VectorXd> truth, meas;
+    for (int k = 0; k < 40; ++k) {
+        x = dyn->propagate_state(dt, x);
+        truth.push_back(x);
+        Eigen::VectorXd z(2);
+        z << x(0) + nz(rng), x(1) + nz(rng);
+        meas.push_back(z);
+    }
+
+    Eigen::MatrixXd H(2, 5);
+    H.setZero();
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(5, 5);
+    Q(2, 2) = Q(3, 3) = 0.01; Q(4, 4) = 1e-3;
+    Eigen::MatrixXd R = 0.5 * Eigen::MatrixXd::Identity(2, 2);
+    Eigen::VectorXd m0(5);
+    m0 << 0, 0, 10, 0, 0.0;                       // omega guessed as 0 (wrong)
+    Eigen::MatrixXd P0 = Eigen::MatrixXd::Identity(5, 5);
+    P0(4, 4) = 0.5;                               // large initial omega uncertainty
+
+    UKF<> ukf;
+    ukf.set_dynamics(dyn); ukf.set_measurement_jacobian(H);
+    ukf.set_process_noise(Q); ukf.set_measurement_noise(R);
+    auto u = run_coordinated_turn(ukf, truth, meas, dt, m0, P0);
+
+    EKF<> ekf;
+    ekf.set_dynamics(dyn); ekf.set_measurement_jacobian(H);
+    ekf.set_process_noise(Q); ekf.set_measurement_noise(R);
+    auto e = run_coordinated_turn(ekf, truth, meas, dt, m0, P0);
+
+    EXPECT_LT(u.pos_rmse, 3.0) << "UKF should track the turning target (rmse=" << u.pos_rmse << ")";
+    EXPECT_NEAR(u.omega_est, true_omega, 0.05) << "UKF should converge the turn rate (got " << u.omega_est << ")";
+    EXPECT_LT(std::abs(u.omega_est - true_omega), std::abs(e.omega_est - true_omega))
+        << "UKF turn-rate error should beat the EKF (UKF=" << u.omega_est
+        << ", EKF=" << e.omega_est << ", truth=" << true_omega << ")";
+}
+
