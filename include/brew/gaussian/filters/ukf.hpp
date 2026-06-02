@@ -28,7 +28,7 @@ namespace brew::filters {
 /// causes catastrophic cancellation for large-magnitude states — avoid it unless
 /// you specifically want near-mean (derivative-like) behavior on a small state.
 ///
-/// NOTE: not yet registered as an @mex filter. The RFS hot path is devirtualized
+/// NOTE: not yet exposed to MATLAB as a MEX filter. The RFS hot path is devirtualized
 /// around default_filter<Gaussian> == EKF (set_filter downcasts to EKF), so a UKF
 /// cannot be dropped into a PHD/GLMB until the RFS is generalized over the filter
 /// type. It is fully usable as a standalone single-object filter today.
