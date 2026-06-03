@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/shared/multi_target_generic/mbm.hpp"
+#include "brew/gaussian/gaussian.hpp"
 #include "brew/gaussian/filters/ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
@@ -19,14 +19,13 @@ TEST(MBM, GaussianPredictCorrectCleanup) {
     }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    // Birth model
     auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
     Eigen::VectorXd birth_mean(4);
     birth_mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd birth_cov = 10.0 * Eigen::MatrixXd::Identity(4, 4);
     birth->add_component(std::make_unique<models::Gaussian<>>(birth_mean, birth_cov), 0.1);
 
-    multi_target::MBM<models::Gaussian<>> mbm;
+    gaussian::MBM<> mbm;
     mbm.set_filter(std::move(ekf));
     mbm.set_birth_model(std::move(birth), 0.1);
     mbm.set_prob_detection(0.9);
@@ -40,17 +39,14 @@ TEST(MBM, GaussianPredictCorrectCleanup) {
     mbm.set_gate_threshold(16.0);
     mbm.set_k_best(5);
 
-    // Predict
     mbm.predict(0, 1.0);
     EXPECT_GE(mbm.hypotheses().size(), 1u);
 
-    // Correct with one measurement near origin
     Eigen::MatrixXd meas(2, 1);
     meas << 0.5, 0.3;
     mbm.correct(meas);
     EXPECT_GE(mbm.hypotheses().size(), 1u);
 
-    // Cleanup
     mbm.cleanup();
     EXPECT_GE(mbm.extracted_mixtures().size(), 1u);
 }
@@ -73,7 +69,7 @@ TEST(MBM, Clone) {
     m.setZero();
     birth->add_component(std::make_unique<models::Gaussian<>>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
 
-    multi_target::MBM<models::Gaussian<>> mbm;
+    gaussian::MBM<> mbm;
     mbm.set_filter(std::move(ekf));
     mbm.set_birth_model(std::move(birth), 0.1);
 
@@ -102,7 +98,7 @@ TEST(MBM, MultipleHypothesesGenerated) {
     birth->add_component(std::make_unique<models::Gaussian<>>(b1, birth_cov), 0.1);
     birth->add_component(std::make_unique<models::Gaussian<>>(b2, birth_cov), 0.1);
 
-    multi_target::MBM<models::Gaussian<>> mbm;
+    gaussian::MBM<> mbm;
     mbm.set_filter(std::move(ekf));
     mbm.set_birth_model(std::move(birth), 0.1);
     mbm.set_prob_detection(0.9);
@@ -116,12 +112,10 @@ TEST(MBM, MultipleHypothesesGenerated) {
 
     mbm.predict(0, 1.0);
 
-    // Two measurements: should generate multiple hypotheses (different associations)
     Eigen::MatrixXd meas(2, 2);
     meas << 1.0, 49.0,
             1.0, 1.0;
     mbm.correct(meas);
 
-    // With 2 Bernoullis and 2 measurements, k_best=5 should produce multiple hypotheses
     EXPECT_GE(mbm.hypotheses().size(), 2u);
 }

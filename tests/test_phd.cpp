@@ -1,13 +1,13 @@
 #include <gtest/gtest.h>
-#include "brew/shared/multi_target_generic/phd.hpp"
-#include "brew/gaussian/multi_target/phd.hpp"   // concrete per-package PHD
+#include "brew/gaussian/gaussian.hpp"
+#include "brew/gaussian/multi_target/phd.hpp"
 #include "brew/gaussian/filters/ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
 
 TEST(PHD, GaussianPredictCorrectCleanup) {
-    // Setup filter
+
     auto ekf = std::make_unique<filters::EKF<>>();
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
     ekf->set_dynamics(dyn);
@@ -22,18 +22,15 @@ TEST(PHD, GaussianPredictCorrectCleanup) {
     }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    // Birth model: one component at origin
     auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
     Eigen::VectorXd birth_mean(4);
     birth_mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd birth_cov = 10.0 * Eigen::MatrixXd::Identity(4, 4);
     birth->add_component(std::make_unique<models::Gaussian<>>(birth_mean, birth_cov), 0.1);
 
-    // Initial intensity = copy of birth
     auto intensity = birth->clone();
 
-    // PHD setup
-    multi_target::PHD<models::Gaussian<>> phd;
+    gaussian::PHD<> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::move(intensity));
@@ -47,17 +44,14 @@ TEST(PHD, GaussianPredictCorrectCleanup) {
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(16.0);
 
-    // Predict
     phd.predict(0, 1.0);
-    EXPECT_GE(phd.intensity().size(), 2u); // survived + birth
+    EXPECT_GE(phd.intensity().size(), 2u);
 
-    // Correct with one measurement near origin
     Eigen::MatrixXd meas(2, 1);
     meas << 0.5, 0.3;
     phd.correct(meas);
     EXPECT_GE(phd.intensity().size(), 1u);
 
-    // Cleanup (prune + merge + cap + extract)
     phd.cleanup();
     EXPECT_LE(phd.intensity().size(), 20u);
     EXPECT_GE(phd.extracted_mixtures().size(), 1u);
@@ -81,7 +75,7 @@ TEST(PHD, Clone) {
     m.setZero();
     birth->add_component(std::make_unique<models::Gaussian<>>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
 
-    multi_target::PHD<models::Gaussian<>> phd;
+    gaussian::PHD<> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::make_unique<models::Mixture<models::Gaussian<>>>());
@@ -91,8 +85,7 @@ TEST(PHD, Clone) {
 }
 
 TEST(GaussianPHDConcrete, PredictCorrectCleanup) {
-    // The per-package concrete gaussian::PHD — templated on Scalar/D/size, NOT the
-    // model — must behave like the generic multi_target::PHD<Gaussian>.
+
     auto ekf = std::make_unique<filters::EKF<>>();
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
     ekf->set_dynamics(dyn);
@@ -112,7 +105,7 @@ TEST(GaussianPHDConcrete, PredictCorrectCleanup) {
         std::make_unique<models::Gaussian<>>(birth_mean, 10.0 * Eigen::MatrixXd::Identity(4, 4)), 0.1);
     auto intensity = birth->clone();
 
-    gaussian::PHD<> phd;                       // concrete, default Scalar=double, D=Dynamic
+    gaussian::PHD<> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::move(intensity));

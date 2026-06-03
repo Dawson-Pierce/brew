@@ -15,6 +15,10 @@
 
 namespace brew::gaussian {
 
+// @mex rfs
+// @mex_name JGLMB
+// @mex_params req_surv:int:5, req_upd:int:5, prune_threshold:double:1e-15, max_hypotheses:int:3000, extract_threshold:double:0.5, gate_threshold:double:9.0, gating_on:bool:false, use_gibbs:bool:false
+// @mex_has cardinality, track_histories, cluster_object
 template <typename Scalar = double, int D = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class JGLMB : public GLMB<Scalar, D, MaxComponents> {
     using T = models::Gaussian<Scalar, D>;

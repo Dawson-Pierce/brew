@@ -12,9 +12,8 @@
 #include "brew/template_pose/template_pose_model.hpp"
 #include "brew/shared/mixture.hpp"
 #include "brew/template_pose/filters/tm_ekf.hpp"
-#include "brew/shared/multi_target_generic/phd.hpp"
+#include "brew/template_pose/template_pose.hpp"
 #include "brew/shared/fusion/prune.hpp"
-#include "brew/shared/fusion/merge.hpp"
 #include "brew/clustering/dbscan.hpp"
 #include "brew/template_matching/point_cloud.hpp"
 #include "brew/template_matching/point_to_plane_icp.hpp"
@@ -41,8 +40,6 @@
 
 using namespace brew;
 
-// ---- Configuration (inlined — edit and recompile) --------------------------
-
 struct TemplateSpec {
     std::string file;
     int num_template_points;
@@ -53,12 +50,12 @@ struct TargetSpec {
     int template_index;
     int birth_time;
     int death_time;
-    Eigen::VectorXd initial_state;        // [x,y,z,vx,vy,vz]
-    Eigen::Vector3d angular_velocity;     // rad/s axis-angle rate
+    Eigen::VectorXd initial_state;
+    Eigen::Vector3d angular_velocity;
 };
 
 struct Config {
-    // --- Simulation ---
+
     struct {
         int num_steps          = 30;
         double dt              = 0.2;
@@ -66,13 +63,11 @@ struct Config {
         double point_noise_std = 0.01;
     } simulation;
 
-    // --- STL templates ---
     std::vector<TemplateSpec> templates = {
         {"A.stl", 1000, 5000},
         {"B.stl", 1000, 5000},
     };
 
-    // --- Truth targets ---
     std::vector<TargetSpec> targets = {
         {
             0, 0, 29,
@@ -86,7 +81,6 @@ struct Config {
         },
     };
 
-    // --- Sensor (bounding-box field of view) ---
     struct {
         Eigen::Vector3d bbox_min           = Eigen::Vector3d(-75.0, 0.0, -75.0);
         Eigen::Vector3d bbox_max           = Eigen::Vector3d(75.0, 150.0, 75.0);
@@ -95,14 +89,12 @@ struct Config {
         double cos_visibility_threshold    = -0.3;
     } sensor;
 
-    // --- ICP ---
     struct {
         int max_iterations = 25;
         double tolerance   = 1.0e-12;
         double sigma_sq    = 0.1;
     } icp;
 
-    // --- TM-EKF filter ---
     struct {
         double process_noise           = 0.5;
         double measurement_noise_pos   = 0.1;
@@ -110,7 +102,6 @@ struct Config {
         double rotation_process_noise  = 0.05;
     } filter;
 
-    // --- PHD multi-target filter ---
     struct {
         double prob_detection     = 0.95;
         double prob_survive       = 0.99;
@@ -123,24 +114,20 @@ struct Config {
         double gate_threshold     = 100.0;
     } phd;
 
-    // --- Birth model ---
     struct {
         double weight       = 0.001;
         double cov_position = 1500.0;
         double cov_velocity = 500.0;
-        // Rotation birth covariance set to pi^2 so the first correction's
-        // Kalman gain on rotation is effectively 1 (rotation snaps to ICP).
+
         double cov_rotation = M_PI * M_PI;
         Eigen::VectorXd mean = Eigen::VectorXd::Zero(6);
     } birth;
 
-    // --- DBSCAN clustering ---
     struct {
         double epsilon = 8.0;
         int min_points = 3;
     } clustering;
 
-    // --- Visualization ---
     struct {
         std::string output_dir = "output/spacecraft_example";
         int fig_width          = 1100;
@@ -151,8 +138,6 @@ struct Config {
         float view_elevation   = 30.0f;
     } visualization;
 };
-
-// ---- Geometry helpers -------------------------------------------------------
 
 static Eigen::Matrix3d axis_angle_to_rotation(const Eigen::Vector3d& axis,
                                                double angle) {
@@ -187,8 +172,6 @@ static Eigen::MatrixXd transform_3d(const Eigen::MatrixXd& pts,
     out.colwise() += t;
     return out;
 }
-
-// ---- Visibility / ray tracing -----------------------------------------------
 
 static bool ray_triangle_intersect(
     const Eigen::Vector3d& origin, const Eigen::Vector3d& dir,
@@ -233,12 +216,10 @@ static bool is_point_visible(
     return true;
 }
 
-// ---- Truth target -----------------------------------------------------------
-
 struct TruthTarget3D {
     int birth_time, death_time;
     int template_index;
-    std::vector<Eigen::VectorXd>  states;     // [x,y,z,vx,vy,vz]
+    std::vector<Eigen::VectorXd>  states;
     std::vector<Eigen::Matrix3d>  rotations;
 };
 
@@ -265,8 +246,6 @@ static TruthTarget3D make_truth_target(
     return tgt;
 }
 
-// ---- Measurement generation with bounding-box sensor FOV -------------------
-
 static Eigen::MatrixXd generate_measurements(
     const std::vector<TruthTarget3D>& targets,
     const std::vector<Eigen::MatrixXd>& mesh_triangles,
@@ -292,7 +271,6 @@ static Eigen::MatrixXd generate_measurements(
         const Eigen::MatrixXd& body_tris = mesh_triangles[ti];
         int num_tris = static_cast<int>(body_tris.cols()) / 3;
 
-        // Cumulative area for face-weighted sampling
         std::vector<double> cum_area(num_tris);
         for (int t = 0; t < num_tris; ++t) {
             Eigen::Vector3d e1 = body_tris.col(3*t+1) - body_tris.col(3*t);
@@ -335,7 +313,6 @@ static Eigen::MatrixXd generate_measurements(
                                   world_tris, num_tris, cos_thresh))
                 continue;
 
-            // Bounding-box sensor FOV mask
             if (world_pt(0) < bbox_min(0) || world_pt(0) > bbox_max(0) ||
                 world_pt(1) < bbox_min(1) || world_pt(1) > bbox_max(1) ||
                 world_pt(2) < bbox_min(2) || world_pt(2) > bbox_max(2))
@@ -373,8 +350,6 @@ static Eigen::MatrixXd generate_measurements(
     return Z;
 }
 
-// ---- Rotation error ---------------------------------------------------------
-
 static double rotation_error_3d(const Eigen::Matrix3d& R_est,
                                 const Eigen::Matrix3d& R_truth) {
     Eigen::Vector3d x_est   = R_est.col(0);
@@ -382,13 +357,9 @@ static double rotation_error_3d(const Eigen::Matrix3d& R_est,
     return std::acos(std::clamp(x_est.dot(x_truth), -1.0, 1.0));
 }
 
-// =============================================================================
-// main
-// =============================================================================
 int main(int argc, char* argv[]) {
     Config config;
 
-    // Optional override: argv[1] = num_steps
     if (argc > 1) {
         try {
             config.simulation.num_steps = std::stoi(argv[1]);
@@ -412,16 +383,12 @@ int main(int argc, char* argv[]) {
 
     const std::string output_dir = config.visualization.output_dir;
 
-    // --- Load templates into TemplateLibrary --------------------------------
-    // The library owns the point clouds + PCA axes/centroid. body_triangles is
-    // kept in parallel (by template id) for truth generation and visualization.
     auto lib = std::make_shared<template_matching::TemplateLibrary>();
     std::vector<Eigen::MatrixXd> body_triangles;
     std::vector<Eigen::Vector3d> template_centroids;
 
     for (const auto& tspec : config.templates) {
-        // Compute centroid from a dense sampling so the centered template
-        // is well-balanced regardless of sparse sampling artifacts.
+
         auto dense = measurement_sampling::sample_stl_vsp(
             tspec.file, tspec.num_dense_points);
         Eigen::Vector3d centroid = dense.points().rowwise().mean();
@@ -441,10 +408,8 @@ int main(int argc, char* argv[]) {
                   << ": " << lib->get(id)->num_points() << " pts\n";
     }
 
-    // --- Dynamics ------------------------------------------------------------
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(3);
 
-    // --- ICP -----------------------------------------------------------------
     template_matching::IcpParams icp_params;
     icp_params.max_iterations = config.icp.max_iterations;
     icp_params.tolerance      = config.icp.tolerance;
@@ -453,7 +418,6 @@ int main(int argc, char* argv[]) {
     auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
 
-    // --- TM-EKF --------------------------------------------------------------
     auto ekf = std::make_unique<filters::TmEkf<>>();
     ekf->set_dynamics(dyn);
     ekf->set_process_noise(
@@ -469,9 +433,8 @@ int main(int argc, char* argv[]) {
     ekf->set_icp(inner_icp);
     ekf->set_template_library(lib);
 
-    // --- Truth targets -------------------------------------------------------
     std::vector<TruthTarget3D> truth_targets;
-    std::vector<Eigen::MatrixXd> target_mesh_tris;   // per-target body tris
+    std::vector<Eigen::MatrixXd> target_mesh_tris;
 
     for (const auto& tgt_cfg : config.targets) {
         int ti    = tgt_cfg.template_index;
@@ -486,10 +449,8 @@ int main(int argc, char* argv[]) {
         target_mesh_tris.push_back(body_triangles[ti]);
     }
 
-    // --- Generate measurements -----------------------------------------------
     std::mt19937 rng(seed);
 
-    // Sensor at origin (observing spacecraft from ground/another spacecraft)
     Eigen::Vector3d sensor_pos(0.0, 0.0, 0.0);
 
     std::vector<Eigen::MatrixXd> measurements(num_steps);
@@ -501,7 +462,6 @@ int main(int argc, char* argv[]) {
             meas_candidates, meas_points, cos_vis_thresh);
     }
 
-    // --- Birth model ---------------------------------------------------------
     auto birth = std::make_unique<models::Mixture<models::TemplatePose<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
     birth_cov.topLeftCorner(3, 3)     = config.birth.cov_position
@@ -521,8 +481,7 @@ int main(int argc, char* argv[]) {
             w_b);
     }
 
-    // --- PHD filter ----------------------------------------------------------
-    multi_target::PHD<models::TemplatePose<>> phd;
+    template_pose::PHD<> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose<>>>());
@@ -539,7 +498,6 @@ int main(int argc, char* argv[]) {
         config.clustering.epsilon,
         config.clustering.min_points));
 
-    // --- Run filter ----------------------------------------------------------
     std::cout << "\n=== Non-Cooperative Spacecraft TM-PHD ===\n";
     std::cout << "Sensor bbox: [" << bbox_min.transpose() << "] -> ["
               << bbox_max.transpose() << "]\n\n";
@@ -587,7 +545,6 @@ int main(int argc, char* argv[]) {
         }
         std::cout << "\n";
 
-        // --- Per-timestep visualization --------------------------------------
 #ifdef BREW_ENABLE_PLOTTING
         {
             std::filesystem::create_directories(output_dir);
@@ -604,12 +561,11 @@ int main(int argc, char* argv[]) {
             auto ax = fig->current_axes();
             ax->hold(true);
 
-            // -- Draw bounding box edges in dashed gray --
             {
                 double x0 = bbox_min(0), x1 = bbox_max(0);
                 double y0 = bbox_min(1), y1 = bbox_max(1);
                 double z0 = bbox_min(2), z1 = bbox_max(2);
-                // 12 edges of the box
+
                 std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> edges = {
                     {{x0,y0,z0},{x1,y0,z0}}, {{x0,y1,z0},{x1,y1,z0}},
                     {{x0,y0,z1},{x1,y0,z1}}, {{x0,y1,z1},{x1,y1,z1}},
@@ -625,7 +581,6 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            // -- Measurement points (red) --
             {
                 const auto& m = measurements[k];
                 if (m.cols() > 0) {
@@ -639,7 +594,6 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            // -- Truth wireframes (black) --
             for (std::size_t t = 0; t < truth_targets.size(); ++t) {
                 const auto& tgt = truth_targets[t];
                 if (k < tgt.birth_time || k > tgt.death_time) continue;
@@ -667,13 +621,11 @@ int main(int argc, char* argv[]) {
                 wl->line_width(0.3f);
             }
 
-            // -- Estimated wireframes (colored) --
             for (std::size_t i = 0; i < latest.size(); ++i) {
                 const auto& est = latest.component(i);
                 Eigen::Vector3d est_pos = est.mean().head(3);
                 Eigen::Matrix3d est_R   = est.rotation();
 
-                // Find which template this estimate uses via its template_id.
                 const Eigen::MatrixXd* tri_ptr = nullptr;
                 int n_tris = 0;
                 int ti = est.template_id();
@@ -700,7 +652,6 @@ int main(int argc, char* argv[]) {
                 wl->color(c);
                 wl->line_width(0.3f);
 
-                // Estimated position marker
                 std::vector<double> epx = {est_pos(0)};
                 std::vector<double> epy = {est_pos(1)};
                 std::vector<double> epz = {est_pos(2)};
@@ -711,7 +662,6 @@ int main(int argc, char* argv[]) {
                 ep->marker_face(true);
             }
 
-            // -- Truth position markers (black X) --
             for (std::size_t t = 0; t < truth_targets.size(); ++t) {
                 const auto& tgt = truth_targets[t];
                 if (k < tgt.birth_time || k > tgt.death_time) continue;

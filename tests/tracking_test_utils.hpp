@@ -13,12 +13,12 @@
 #include "brew/trajectory_gaussian/filters/trajectory_gaussian_ekf.hpp"
 #include "brew/trajectory_ggiw/filters/trajectory_ggiw_ekf.hpp"
 #include "brew/trajectory_ggiw_orientation/filters/trajectory_ggiw_orientation_ekf.hpp"
-#include "brew/shared/multi_target_generic/phd.hpp"
-#include "brew/shared/multi_target_generic/cphd.hpp"
-#include "brew/shared/multi_target_generic/mbm.hpp"
-#include "brew/shared/multi_target_generic/pmbm.hpp"
-#include "brew/shared/multi_target_generic/glmb.hpp"
-#include "brew/shared/multi_target_generic/jglmb.hpp"
+#include "brew/gaussian/gaussian.hpp"
+#include "brew/ggiw/ggiw.hpp"
+#include "brew/ggiw_orientation/ggiw_orientation.hpp"
+#include "brew/trajectory_gaussian/trajectory_gaussian.hpp"
+#include "brew/trajectory_ggiw/trajectory_ggiw.hpp"
+#include "brew/trajectory_ggiw_orientation/trajectory_ggiw_orientation.hpp"
 #include "brew/clustering/dbscan.hpp"
 #include <Eigen/Dense>
 #include <random>
@@ -46,12 +46,7 @@
 
 namespace brew::test {
 
-/// Compile-time trajectory window used by the trajectory-ekf test factories.
-/// Tests that need a different window should pass it explicitly via the templated
-/// factory overloads below.
 inline constexpr int kTrajWindow = 10;
-
-// ---- Truth target ----
 
 struct TruthTarget {
     int birth_time;
@@ -74,8 +69,6 @@ inline TruthTarget make_linear_target(
     }
     return t;
 }
-
-// ---- Scenario data ----
 
 struct ScenarioData {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -103,8 +96,6 @@ struct ScenarioData {
         return count;
     }
 };
-
-// ---- Internal measurement generators ----
 
 namespace detail {
 
@@ -193,7 +184,7 @@ inline Eigen::MatrixXd generate_extended_measurements(
     int idx = timestep - target.birth_time;
     Eigen::VectorXd truth_pos = target.states[idx].head(2);
 
-    int num_meas = 3 + static_cast<int>(rng() % 5); // 3-7 measurements
+    int num_meas = 3 + static_cast<int>(rng() % 5);
     Eigen::MatrixXd meas(2, num_meas);
 
     for (int j = 0; j < num_meas; ++j) {
@@ -206,9 +197,7 @@ inline Eigen::MatrixXd generate_extended_measurements(
     return meas;
 }
 
-} // namespace detail
-
-// ---- Scenario factories ----
+}
 
 inline ScenarioData make_two_point_targets_scenario() {
     ScenarioData s;
@@ -305,17 +294,14 @@ inline ScenarioData make_variable_targets_scenario() {
 
     auto dyn = dynamics::SingleIntegrator<>(2);
 
-    // Target A: born at k=0, dies at k=24
     Eigen::VectorXd x0_a(4);
     x0_a << 0.0, 0.0, 2.0, 1.0;
     s.targets.push_back(make_linear_target(x0_a, 0, 24, s.dt, dyn));
 
-    // Target B: born at k=5, dies at k=28
     Eigen::VectorXd x0_b(4);
     x0_b << 50.0, 0.0, -1.0, 1.5;
     s.targets.push_back(make_linear_target(x0_b, 5, 28, s.dt, dyn));
 
-    // Target C: born at k=10, dies at k=19
     Eigen::VectorXd x0_c(4);
     x0_c << 25.0, 30.0, 0.5, -1.0;
     s.targets.push_back(make_linear_target(x0_c, 10, 19, s.dt, dyn));
@@ -329,8 +315,6 @@ inline ScenarioData make_variable_targets_scenario() {
 
     return s;
 }
-
-// ---- Unified scenario factory (two-step: base + measurements) ----
 
 inline ScenarioData make_base_scenario() {
     ScenarioData s;
@@ -393,8 +377,6 @@ inline void generate_scenario_extended_measurements(ScenarioData& s, unsigned se
     }
 }
 
-// ---- Position extraction (dispatches by type) ----
-
 template <typename T, typename = void>
 struct has_get_last_state : std::false_type {};
 
@@ -411,7 +393,6 @@ struct is_ggiw_type<T,
     std::void_t<decltype(std::declval<const T&>().V())>
 > : std::true_type {};
 
-// For trajectory model types (which expose InnerType), check the inner type
 template <typename T>
 struct is_ggiw_type<T,
     std::void_t<decltype(std::declval<const typename T::InnerType&>().V())>
@@ -428,7 +409,6 @@ struct is_orientation_type<T,
     std::void_t<decltype(std::declval<const T&>().basis())>
 > : std::true_type {};
 
-// For trajectory model types (which expose InnerType), check the inner type
 template <typename T>
 struct is_orientation_type<T,
     std::void_t<decltype(std::declval<const typename T::InnerType&>().basis())>
@@ -451,8 +431,6 @@ inline Eigen::VectorXd extract_position(const T& component) {
     }
 }
 
-// ---- Error computation ----
-
 template <typename T>
 inline double closest_estimate_error(
     const models::Mixture<T>& estimates,
@@ -466,8 +444,6 @@ inline double closest_estimate_error(
     }
     return min_err;
 }
-
-// ---- Logging ----
 
 inline void print_tracking_header(const std::string& title) {
     std::cout << "\n=== " << title << " ===\n";
@@ -497,8 +473,6 @@ inline void print_tracking_step(int step, int n_meas, int n_comp, int n_est,
               << "\n";
 }
 
-// ---- Scenario params ----
-
 struct ScenarioParams {
     double p_detect;
     double p_survive = 0.99;
@@ -513,8 +487,6 @@ inline ScenarioParams make_default_params(const ScenarioData& s) {
     p.p_detect = s.p_detect;
     return p;
 }
-
-// ---- EKF factory functions ----
 
 inline std::unique_ptr<filters::EKF<>> make_ekf(const ScenarioData& scenario) {
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
@@ -533,9 +505,6 @@ inline std::unique_ptr<filters::EKF<>> make_ekf(const ScenarioData& scenario) {
     return ekf;
 }
 
-// Same configuration as make_ekf; SingleIntegrator is LTI so the UKF predict
-// reduces to the EKF/Kalman predict. Used to prove any Filter<Gaussian> plugs
-// into an RFS via the base class.
 inline std::unique_ptr<filters::UKF<>> make_ukf(const ScenarioData& scenario) {
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
     auto ukf = std::make_unique<filters::UKF<>>();
@@ -627,8 +596,6 @@ inline std::unique_ptr<filters::TrajectoryGGIWEKF<>> make_trajectory_ggiw_ekf(
 
     return ekf;
 }
-
-// ---- Birth model factory functions ----
 
 inline std::unique_ptr<models::Mixture<models::Gaussian<>>>
 make_gm_birth(double weight = 0.1)
@@ -765,15 +732,27 @@ make_trajectory_ggiw_orientation_birth(double weight = 0.1, int window = kTrajWi
     return birth;
 }
 
-// ---- RFS estimator factory functions ----
+template <typename M> struct rfs_types_for;
+#define BREW_RFS_TYPES_FOR(MODEL, NS)                                            \
+    template <> struct rfs_types_for<MODEL> {                                    \
+        using PHD = NS::PHD<>;   using CPHD = NS::CPHD<>;  using MBM = NS::MBM<>; \
+        using PMBM = NS::PMBM<>; using GLMB = NS::GLMB<>;  using JGLMB = NS::JGLMB<>; \
+    };
+BREW_RFS_TYPES_FOR(models::Gaussian<>, gaussian)
+BREW_RFS_TYPES_FOR(models::GGIW<>, ggiw)
+BREW_RFS_TYPES_FOR(models::GGIWOrientation<>, ggiw_orientation)
+BREW_RFS_TYPES_FOR(models::TrajectoryGaussian<>, trajectory_gaussian)
+BREW_RFS_TYPES_FOR(models::TrajectoryGGIW<>, trajectory_ggiw)
+BREW_RFS_TYPES_FOR(models::TrajectoryGGIWOrientation<>, trajectory_ggiw_orientation)
+#undef BREW_RFS_TYPES_FOR
 
 template <typename T>
-inline multi_target::PHD<T> make_phd(
+inline typename rfs_types_for<T>::PHD make_phd(
     std::unique_ptr<filters::Filter<T>> filter,
     std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
-    multi_target::PHD<T> phd;
+    typename rfs_types_for<T>::PHD phd;
     phd.set_filter(std::move(filter));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::make_unique<models::Mixture<T>>());
@@ -796,12 +775,12 @@ inline multi_target::PHD<T> make_phd(
 }
 
 template <typename T>
-inline multi_target::CPHD<T> make_cphd(
+inline typename rfs_types_for<T>::CPHD make_cphd(
     std::unique_ptr<filters::Filter<T>> filter,
     std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
-    multi_target::CPHD<T> cphd;
+    typename rfs_types_for<T>::CPHD cphd;
     cphd.set_filter(std::move(filter));
     cphd.set_birth_model(std::move(birth));
     cphd.set_intensity(std::make_unique<models::Mixture<T>>());
@@ -825,8 +804,6 @@ inline multi_target::CPHD<T> make_cphd(
     return cphd;
 }
 
-/// Convert a legacy-style birth mixture (one component per birth location, weight = p_B)
-/// into a vector of single-component spatial mixtures with explicit birth probabilities.
 template <typename T>
 inline std::vector<std::pair<std::unique_ptr<models::Mixture<T>>, double>>
 legacy_birth_to_terms(std::unique_ptr<models::Mixture<T>> birth)
@@ -842,12 +819,12 @@ legacy_birth_to_terms(std::unique_ptr<models::Mixture<T>> birth)
 }
 
 template <typename T>
-inline multi_target::MBM<T> make_mbm(
+inline typename rfs_types_for<T>::MBM make_mbm(
     std::unique_ptr<filters::Filter<T>> filter,
     std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
-    multi_target::MBM<T> mbm;
+    typename rfs_types_for<T>::MBM mbm;
     mbm.set_filter(std::move(filter));
     mbm.set_birth_terms(legacy_birth_to_terms<T>(std::move(birth)));
     mbm.set_prob_detection(params.p_detect);
@@ -870,12 +847,12 @@ inline multi_target::MBM<T> make_mbm(
 }
 
 template <typename T>
-inline multi_target::PMBM<T> make_pmbm(
+inline typename rfs_types_for<T>::PMBM make_pmbm(
     std::unique_ptr<filters::Filter<T>> filter,
     std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
-    multi_target::PMBM<T> pmbm;
+    typename rfs_types_for<T>::PMBM pmbm;
     pmbm.set_filter(std::move(filter));
     pmbm.set_birth_model(std::move(birth));
     pmbm.set_poisson_intensity(std::make_unique<models::Mixture<T>>());
@@ -903,12 +880,12 @@ inline multi_target::PMBM<T> make_pmbm(
 }
 
 template <typename T>
-inline multi_target::GLMB<T> make_glmb(
+inline typename rfs_types_for<T>::GLMB make_glmb(
     std::unique_ptr<filters::Filter<T>> filter,
     std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
-    multi_target::GLMB<T> glmb;
+    typename rfs_types_for<T>::GLMB glmb;
     glmb.set_filter(std::move(filter));
     glmb.set_birth_terms(legacy_birth_to_terms<T>(std::move(birth)));
     glmb.set_prob_detection(params.p_detect);
@@ -931,12 +908,12 @@ inline multi_target::GLMB<T> make_glmb(
 }
 
 template <typename T>
-inline multi_target::JGLMB<T> make_jglmb(
+inline typename rfs_types_for<T>::JGLMB make_jglmb(
     std::unique_ptr<filters::Filter<T>> filter,
     std::unique_ptr<models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
-    multi_target::JGLMB<T> jglmb;
+    typename rfs_types_for<T>::JGLMB jglmb;
     jglmb.set_filter(std::move(filter));
     jglmb.set_birth_terms(legacy_birth_to_terms<T>(std::move(birth)));
     jglmb.set_prob_detection(params.p_detect);
@@ -955,8 +932,6 @@ inline multi_target::JGLMB<T> make_jglmb(
 
     return jglmb;
 }
-
-// ---- Plotting ----
 
 #ifdef BREW_ENABLE_PLOTTING
 
@@ -998,19 +973,17 @@ inline void accumulate_plot_step(
     }
 }
 
-// Plot common elements (measurements, truth, per-step estimates) onto given axes.
 inline void plot_common_elements(
     matplot::axes_handle ax,
     const TrackingPlotData& pd)
 {
-    // Measurements (light gray dots)
+
     if (!pd.meas_all_x.empty()) {
         auto mp = ax->plot(pd.meas_all_x, pd.meas_all_y, ".");
         mp->color({0.f, 0.7f, 0.7f, 0.7f});
         mp->marker_size(4.0f);
     }
 
-    // Truth trajectories (black dotted, thin)
     for (std::size_t t = 0; t < pd.truth_x.size(); ++t) {
         if (!pd.truth_x[t].empty()) {
             auto tl = ax->plot(pd.truth_x[t], pd.truth_y[t], ":");
@@ -1020,8 +993,6 @@ inline void plot_common_elements(
     }
 }
 
-/// Plot track trajectory lines from ancestry bookkeeping (MBM/PMBM track_histories).
-/// Each track is drawn as a colored line connecting its historical states.
 inline void plot_track_histories(
     matplot::axes_handle ax,
     const std::map<int, std::vector<Eigen::VectorXd>>& histories,
@@ -1044,11 +1015,6 @@ inline void plot_track_histories(
     }
 }
 
-/// Generic 2D distribution plot: auto-dispatches based on distribution type.
-/// Gaussian -> covariance ellipse, GGIW -> extent ellipse,
-/// GGIWOrientation -> extent ellipse + principal axes,
-/// TrajectoryGaussian -> trajectory line, TrajectoryGGIW -> trajectory + extent,
-/// TrajectoryGGIWOrientation -> trajectory + extent + principal axes.
 template <typename T>
 inline void plot_distribution_2d(
     matplot::axes_handle ax,
@@ -1071,8 +1037,6 @@ inline void plot_distribution_2d(
     }
 }
 
-/// Plot all extracted mixtures (every timestep) with per-component coloring.
-/// Use for PHD/CPHD where per-timestep evolution is the primary visual.
 template <typename MixtureContainer>
 inline void plot_all_extracted(
     matplot::axes_handle ax,
@@ -1087,9 +1051,6 @@ inline void plot_all_extracted(
     }
 }
 
-/// Plot only the final extracted mixture with per-component coloring.
-/// Use for MBM/PMBM (track histories show temporal evolution) and
-/// trajectory distributions (the distribution itself encodes history).
 template <typename MixtureContainer>
 inline void plot_final_extracted(
     matplot::axes_handle ax,
@@ -1104,14 +1065,8 @@ inline void plot_final_extracted(
     }
 }
 
-// ---- Plot helper functions for test files ----
-
 inline std::string output_dir() { return "output"; }
 
-/// Populate a single subplot axes with the appropriate plot elements for an estimator.
-/// MBM/PMBM (has track_histories): track history lines + final extracted distributions.
-/// Trajectory PHD/CPHD (is_trajectory=true): final extracted (trajectory encodes history).
-/// Plain PHD/CPHD: all extracted distributions across all timesteps.
 template <typename Estimator>
 inline void populate_estimator_axes(
     matplot::axes_handle ax,
@@ -1138,7 +1093,6 @@ inline void populate_estimator_axes(
     ax->ylabel("y");
 }
 
-/// Create a figure for comparison layout.
 inline matplot::figure_handle create_comparison_figure(int width = 2400, int height = 1200) {
     std::filesystem::create_directories(output_dir());
     auto fig = matplot::figure(true);
@@ -1147,7 +1101,6 @@ inline matplot::figure_handle create_comparison_figure(int width = 2400, int hei
     return fig;
 }
 
-/// Create a subplot axes at the given index in a rows x cols grid.
 inline matplot::axes_handle comparison_subplot(
     matplot::figure_handle fig, int rows, int cols, int index)
 {
@@ -1187,9 +1140,7 @@ inline void plot_cardinality_comparison(
     brew::plot_utils::save_figure(fig, output_dir() + "/" + filename);
 }
 
-#endif // BREW_ENABLE_PLOTTING
-
-// ---- Tracking result and generic tracking loop ----
+#endif
 
 struct TrackingResult {
     int converged_steps = 0;
@@ -1197,7 +1148,7 @@ struct TrackingResult {
     TrackingPlotData plot_data;
     explicit TrackingResult(int num_targets) : plot_data(num_targets) {}
 #else
-    explicit TrackingResult(int /*num_targets*/) {}
+    explicit TrackingResult(int ) {}
 #endif
 };
 
@@ -1246,8 +1197,6 @@ inline TrackingResult run_tracking(
     return result;
 }
 
-// ---- CPHD tracking loop (also collects estimated cardinality) ----
-
 struct CPHDTrackingResult {
     int converged_steps = 0;
     std::vector<double> cardinality;
@@ -1255,7 +1204,7 @@ struct CPHDTrackingResult {
     TrackingPlotData plot_data;
     explicit CPHDTrackingResult(int num_targets) : plot_data(num_targets) {}
 #else
-    explicit CPHDTrackingResult(int /*num_targets*/) {}
+    explicit CPHDTrackingResult(int ) {}
 #endif
 };
 
@@ -1305,4 +1254,4 @@ inline CPHDTrackingResult run_tracking_cphd(
     return result;
 }
 
-} // namespace brew::test
+}

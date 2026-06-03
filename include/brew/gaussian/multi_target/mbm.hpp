@@ -14,6 +14,10 @@
 
 namespace brew::gaussian {
 
+// @mex rfs
+// @mex_name MBM
+// @mex_params prune_threshold_hypothesis:double:1e-3, prune_threshold_bernoulli:double:1e-3, max_hypotheses:int:100, extract_threshold:double:0.5, gate_threshold:double:9.0, k_best:int:5, gating_on:bool:false
+// @mex_has track_histories, cluster_object
 template <typename Scalar = double, int D = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class MBM : public MBMBase<Scalar, D, MaxComponents> {
     using T = models::Gaussian<Scalar, D>;

@@ -1,4 +1,4 @@
-# Shared base classes, generic containers, generic RFS templates, fusion primitives.
+# Shared base classes, generic containers, and fusion primitives.
 # Header-only: exposes the whole include tree + Eigen to everything that links it.
 add_library(brew_shared INTERFACE)
 target_include_directories(brew_shared INTERFACE ${CMAKE_SOURCE_DIR}/include)

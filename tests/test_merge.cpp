@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
-#include "brew/shared/fusion/merge.hpp"
+#include "brew/gaussian/merge.hpp"
+#include "brew/ggiw/merge.hpp"
+#include "brew/trajectory_gaussian/merge.hpp"
+#include "brew/trajectory_ggiw/merge.hpp"
 
 using namespace brew;
 
@@ -13,12 +16,12 @@ TEST(MergeGaussian, TwoClose) {
     mix.add_component(std::make_unique<models::Gaussian<>>(m1, cov), 0.5);
     mix.add_component(std::make_unique<models::Gaussian<>>(m2, cov), 0.3);
 
-    fusion::merge(mix, 4.0);
+    gaussian::merge(mix, 4.0);
 
     EXPECT_EQ(mix.size(), 1u);
-    // Merged weight should be sum
+
     EXPECT_NEAR(mix.weight(0), 0.8, 1e-10);
-    // Merged mean should be weighted average
+
     EXPECT_NEAR(mix.component(0).mean()(0), (0.5 * 0.0 + 0.3 * 0.1) / 0.8, 1e-10);
 }
 
@@ -32,7 +35,7 @@ TEST(MergeGaussian, TwoFar) {
     mix.add_component(std::make_unique<models::Gaussian<>>(m1, cov), 0.5);
     mix.add_component(std::make_unique<models::Gaussian<>>(m2, cov), 0.3);
 
-    fusion::merge(mix, 4.0);
+    gaussian::merge(mix, 4.0);
 
     EXPECT_EQ(mix.size(), 2u);
 }
@@ -48,7 +51,7 @@ TEST(MergeGGIW, TwoClose) {
     mix.add_component(std::make_unique<models::GGIW<>>(10.0, 5.0, m1, cov, 10.0, V), 0.6);
     mix.add_component(std::make_unique<models::GGIW<>>(12.0, 6.0, m2, cov, 11.0, V), 0.4);
 
-    fusion::merge(mix, 4.0);
+    ggiw::merge(mix, 4.0);
 
     EXPECT_EQ(mix.size(), 1u);
     EXPECT_NEAR(mix.weight(0), 1.0, 1e-10);
@@ -65,7 +68,7 @@ TEST(MergeTrajectoryGaussian, SameSize) {
     mix.add_component(std::make_unique<models::TrajectoryGaussian<>>(4, models::Gaussian<>(m1, cov), W), 0.5);
     mix.add_component(std::make_unique<models::TrajectoryGaussian<>>(4, models::Gaussian<>(m2, cov), W), 0.3);
 
-    fusion::merge(mix, 4.0);
+    trajectory_gaussian::merge(mix, 4.0);
 
     EXPECT_EQ(mix.size(), 1u);
     EXPECT_NEAR(mix.weight(0), 0.8, 1e-10);
@@ -83,7 +86,7 @@ TEST(MergeTrajectoryGGIW, SameSize) {
     mix.add_component(std::make_unique<models::TrajectoryGGIW<>>(4, models::GGIW<>(10.0, 5.0, m1, cov, 10.0, V), W), 0.5);
     mix.add_component(std::make_unique<models::TrajectoryGGIW<>>(4, models::GGIW<>(12.0, 6.0, m2, cov, 11.0, V), W), 0.3);
 
-    fusion::merge(mix, 4.0);
+    trajectory_ggiw::merge(mix, 4.0);
 
     EXPECT_EQ(mix.size(), 1u);
     EXPECT_NEAR(mix.weight(0), 0.8, 1e-10);

@@ -17,6 +17,11 @@
 
 namespace brew::gaussian {
 
+// @mex rfs
+// @mex_name PMBM
+// @mex_params prune_poisson_threshold:double:1e-4, merge_poisson_threshold:double:4.0, max_poisson_components:int:100, prune_threshold_hypothesis:double:1e-3, prune_threshold_bernoulli:double:1e-3, recycle_threshold:double:0.1, max_hypotheses:int:100, extract_threshold:double:0.5, gate_threshold:double:9.0, k_best:int:5, gating_on:bool:false
+// @mex_init set_poisson_intensity
+// @mex_has cardinality, track_histories, cluster_object
 template <typename Scalar = double, int D = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class PMBM : public MBMBase<Scalar, D, MaxComponents> {
     using T = models::Gaussian<Scalar, D>;

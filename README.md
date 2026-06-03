@@ -17,8 +17,8 @@ with it. Include a package's umbrella header to pull in its whole stack:
 ```
 include/brew/
   shared/        base classes (filter_base, rfs_base, base_single_model),
-                 generic containers (mixture, bernoulli, trajectory), the generic
-                 RFS templates (shared/multi_target_generic/), fusion primitives
+                 generic containers (mixture, bernoulli, trajectory_window),
+                 fusion primitives (prune, cap, trajectory_mahal)
   dynamics/  clustering/  template_matching/  assignment/  metrics/   (standalone subsystems)
   gaussian/  ggiw/  ggiw_orientation/  iggiw/  template_pose/           (model packages)
   trajectory_gaussian/  trajectory_ggiw/  trajectory_ggiw_orientation/
@@ -65,7 +65,7 @@ ekf->set_dynamics(dyn);
 auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
 // ... add birth components ...
 
-multi_target::PHD<models::Gaussian<>> tracker;
+gaussian::PHD<> tracker;
 tracker.set_filter(std::move(ekf));
 tracker.set_birth_model(std::move(birth));
 tracker.prob_detection_ = 0.9;

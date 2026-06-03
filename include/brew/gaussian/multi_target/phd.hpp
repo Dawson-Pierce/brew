@@ -25,6 +25,11 @@
 
 namespace brew::gaussian {
 
+// @mex rfs
+// @mex_name PHD
+// @mex_params prune_threshold:double:1e-4, merge_threshold:double:4.0, max_components:int:100, extract_threshold:double:0.5, gate_threshold:double:9.0
+// @mex_init set_intensity
+// @mex_has birth_weights, cluster_object
 template <typename Scalar = double, int D = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class PHD : public multi_target::RFSBase {
     using T = models::Gaussian<Scalar, D>;

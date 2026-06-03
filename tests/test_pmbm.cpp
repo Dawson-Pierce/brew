@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/shared/multi_target_generic/pmbm.hpp"
+#include "brew/gaussian/gaussian.hpp"
 #include "brew/gaussian/filters/ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
@@ -19,17 +19,15 @@ TEST(PMBM, GaussianPredictCorrectCleanup) {
     }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    // Birth model (added to Poisson each predict step)
     auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
     Eigen::VectorXd birth_mean(4);
     birth_mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd birth_cov = 10.0 * Eigen::MatrixXd::Identity(4, 4);
     birth->add_component(std::make_unique<models::Gaussian<>>(birth_mean, birth_cov), 0.1);
 
-    // Initial Poisson intensity
     auto poisson = std::make_unique<models::Mixture<models::Gaussian<>>>();
 
-    multi_target::PMBM<models::Gaussian<>> pmbm;
+    gaussian::PMBM<> pmbm;
     pmbm.set_filter(std::move(ekf));
     pmbm.set_birth_model(std::move(birth));
     pmbm.set_poisson_intensity(std::move(poisson));
@@ -44,24 +42,20 @@ TEST(PMBM, GaussianPredictCorrectCleanup) {
     pmbm.set_gate_threshold(16.0);
     pmbm.set_k_best(5);
 
-    // Predict
     pmbm.predict(0, 1.0);
     EXPECT_GE(pmbm.poisson_intensity().size(), 1u)
         << "Poisson should have birth components after predict";
 
-    // Correct with one measurement near origin
     Eigen::MatrixXd meas(2, 1);
     meas << 0.5, 0.3;
     pmbm.correct(meas);
 
-    // Cleanup
     pmbm.cleanup();
     EXPECT_GE(pmbm.extracted_mixtures().size(), 1u);
 
-    // Cardinality estimation should be available after cleanup
     EXPECT_GE(pmbm.cardinality().size(), 1);
     EXPECT_GE(pmbm.estimated_cardinality(), 0.0);
-    // PMF should sum to ~1
+
     EXPECT_NEAR(pmbm.cardinality().sum(), 1.0, 1e-6);
 }
 
@@ -85,7 +79,7 @@ TEST(PMBM, Clone) {
 
     auto poisson = std::make_unique<models::Mixture<models::Gaussian<>>>();
 
-    multi_target::PMBM<models::Gaussian<>> pmbm;
+    gaussian::PMBM<> pmbm;
     pmbm.set_filter(std::move(ekf));
     pmbm.set_birth_model(std::move(birth));
     pmbm.set_poisson_intensity(std::move(poisson));
@@ -117,7 +111,7 @@ TEST(PMBM, PoissonSpawnsNewTracks) {
 
     auto poisson = std::make_unique<models::Mixture<models::Gaussian<>>>();
 
-    multi_target::PMBM<models::Gaussian<>> pmbm;
+    gaussian::PMBM<> pmbm;
     pmbm.set_filter(std::move(ekf));
     pmbm.set_birth_model(std::move(birth));
     pmbm.set_poisson_intensity(std::move(poisson));
@@ -133,12 +127,10 @@ TEST(PMBM, PoissonSpawnsNewTracks) {
     pmbm.predict(0, 1.0);
     EXPECT_EQ(static_cast<int>(pmbm.track_tab().size()), 0) << "No Bernoulli tracks before first correction";
 
-    // Two measurements near both birth locations
     Eigen::MatrixXd meas(2, 2);
     meas << 1.0, 49.0,
             1.0, 1.0;
     pmbm.correct(meas);
 
-    // Should have spawned new Bernoulli tracks from Poisson
     EXPECT_GT(static_cast<int>(pmbm.track_tab().size()), 0) << "Measurements should spawn new Bernoulli tracks from Poisson";
 }
