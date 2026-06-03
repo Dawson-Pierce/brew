@@ -19,14 +19,6 @@
 
 namespace brew::template_matching {
 
-/// Fixed-size 6-DoF pose produced by ICP for a template-matching filter.
-///
-/// `R_ref` is the reference rotation against which the filter's rotation
-/// innovation is computed. For tracking components this equals the predicted
-/// rotation; for cold-start components it equals `R` itself, which zeroes
-/// the rotation innovation and causes the EKF to adopt ICP's rotation as
-/// the posterior state — the cold-start-vs-tracking branch lives entirely
-/// in this struct, not in the EKF math.
 struct IcpPseudoMeasurement {
     Eigen::Vector3d t;
     Eigen::Matrix3d R;
@@ -34,21 +26,16 @@ struct IcpPseudoMeasurement {
     double log_likelihood;
     int iterations;
 
-    /// Log_SO3(R · R_ref^T). Zero at cold start.
     [[nodiscard]] Eigen::Vector3d rotation_innovation() const {
         return so3::log(Eigen::Matrix3d(R * R_ref.transpose()));
     }
 
-    /// Posterior rotation given the Kalman-update delta in so(3).
     [[nodiscard]] Eigen::Matrix3d apply_rotation_delta(
         const Eigen::Vector3d& delta_rot) const {
         return so3::exp(delta_rot) * R_ref;
     }
 };
 
-/// Owns the ICP algorithms + template library + per-id PCA-ICP cache used by
-/// both TmEkf and TrajectoryTmEkf. Filters compose this object instead of
-/// duplicating its state and methods.
 class TmIcpRunner {
 public:
     TmIcpRunner() = default;
@@ -67,22 +54,6 @@ public:
         return static_cast<bool>(template_library_);
     }
 
-    /// Run ICP and produce the fixed-size pseudo-measurement.
-    ///
-    /// Cold start (`cold_start == true`): PCA-ICP seeded from the library's
-    /// precomputed PCA axes/centroid. `R_ref` is set to the ICP rotation so
-    /// the downstream rotation innovation is zero.
-    ///
-    /// Tracking (`cold_start == false`): base ICP seeded with `R_pred` and
-    /// the cluster centroid. `R_ref = R_pred`.
-    ///
-    /// Divergence guard: point-to-plane ICP's 6x6 linearized solve can go
-    /// rank-deficient on degenerate correspondences, sending the translation
-    /// update to absurd values. If ICP lands further than
-    /// `max(5 × cluster_diameter, 50m)` from the cluster centroid — or
-    /// produces non-finite output — the pseudo-measurement is clamped to
-    /// `(cluster_centroid, R_pred)` with a floored log-likelihood so the
-    /// filter's state doesn't get corrupted and the PHD weight collapses.
     [[nodiscard]] IcpPseudoMeasurement run(
         const PointCloud& meas,
         int template_id,
@@ -100,7 +71,6 @@ public:
             icp_result = icp_->align(*entry.cloud, meas, R_pred, t_init);
         }
 
-        // Divergence guard
         const Eigen::Vector3d bbox_min = meas.points().rowwise().minCoeff();
         const Eigen::Vector3d bbox_max = meas.points().rowwise().maxCoeff();
         const double cluster_diag = (bbox_max - bbox_min).norm();
@@ -131,9 +101,7 @@ public:
     }
 
 private:
-    /// Lazily construct (and cache) a PcaIcp wrapper for the given template id,
-    /// seeded with the library's precomputed PCA axes/centroid. The cache
-    /// avoids rebuilding the 8 PCA candidate rotations per call.
+
     [[nodiscard]] const PcaIcp& get_or_build_pca_icp(
         int id, const TemplateLibrary::Entry& entry) const {
         auto it = icp_cache_.find(id);
@@ -150,4 +118,4 @@ private:
     mutable std::unordered_map<int, std::shared_ptr<PcaIcp>> icp_cache_;
 };
 
-} // namespace brew::template_matching
+}

@@ -13,8 +13,6 @@
 
 namespace brew::template_matching::so3 {
 
-/// Log map: SO(3) → so(3). Returns the axis-angle 3-vector whose norm is the
-/// rotation angle. Handles the near-identity and near-π edge cases.
 [[nodiscard]] inline Eigen::Vector3d log(const Eigen::Matrix3d& R) {
     const double cos_angle = std::clamp((R.trace() - 1.0) / 2.0, -1.0, 1.0);
     const double angle = std::acos(cos_angle);
@@ -24,8 +22,7 @@ namespace brew::template_matching::so3 {
     }
 
     if (angle > M_PI - 1e-6) {
-        // Near π: sin(angle) ≈ 0, so the skew-symmetric extraction fails.
-        // Recover the rotation axis from R + I (eigenvector with eigenvalue +1).
+
         Eigen::Matrix3d M = R + Eigen::Matrix3d::Identity();
         Eigen::Vector3d axis = M.col(0);
         for (int i = 1; i < 3; ++i) {
@@ -43,7 +40,6 @@ namespace brew::template_matching::so3 {
     return axis;
 }
 
-/// Exp map: so(3) → SO(3). Rodrigues formula.
 [[nodiscard]] inline Eigen::Matrix3d exp(const Eigen::Vector3d& phi) {
     const double angle = phi.norm();
     if (angle < 1e-10) {
@@ -61,4 +57,4 @@ namespace brew::template_matching::so3 {
            + (1.0 - std::cos(angle)) * K * K;
 }
 
-} // namespace brew::template_matching::so3
+}

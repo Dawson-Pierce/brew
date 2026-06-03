@@ -15,14 +15,11 @@
 
 namespace brew::multi_target::detail {
 
-/// One subset-enumeration result: total cost and the original indices selected.
 struct SubsetSolution {
     double cost;
-    std::vector<int> indices;  // sorted ascending, into the original cost vector
+    std::vector<int> indices;
 };
 
-/// Enumerate up to k subsets of {0..N-1} in ascending order of sum-of-selected-costs.
-/// Costs must be non-negative for the monotone heap expansion to remain correct.
 inline std::vector<SubsetSolution> k_shortest_subsets(
     const Eigen::VectorXd& costs, int k)
 {
@@ -38,8 +35,8 @@ inline std::vector<SubsetSolution> k_shortest_subsets(
 
     struct Node {
         double sum;
-        int last;                         // last sorted index included (-1 = none)
-        std::vector<int> chosen_sorted;   // sorted indices chosen so far, ascending
+        int last;
+        std::vector<int> chosen_sorted;
         bool operator>(const Node& o) const { return sum > o.sum; }
     };
     std::priority_queue<Node, std::vector<Node>, std::greater<Node>> pq;
@@ -66,7 +63,6 @@ inline std::vector<SubsetSolution> k_shortest_subsets(
     return result;
 }
 
-/// Numerically-stable log(sum(exp(v_i))).
 inline double log_sum_exp(const std::vector<double>& v) {
     if (v.empty()) return -std::numeric_limits<double>::infinity();
     double m = v[0];
@@ -85,8 +81,6 @@ struct has_get_last_state<U,
     std::void_t<decltype(std::declval<const U&>().get_last_state())>
 > : std::true_type {};
 
-/// Extract a plain state vector from a distribution (trajectory's last state if
-/// trajectory-typed, else the component mean).
 template <typename U>
 Eigen::VectorXd get_state_vector(const U& dist) {
     if constexpr (has_get_last_state<U>::value) {
@@ -96,4 +90,4 @@ Eigen::VectorXd get_state_vector(const U& dist) {
     }
 }
 
-}  // namespace brew::multi_target::detail
+}

@@ -15,12 +15,8 @@ void plot_ggiw_orientation_2d(matplot::axes_handle ax,
         throw std::invalid_argument("plot_ggiw_orientation_2d: plt_inds must have 2 elements");
     }
 
-    // Draw the base GGIW ellipse + confidence interval
     plot_ggiw_2d(ax, g, plt_inds, color, confidence);
 
-    // Draw principal axes as directional rays from center outward.
-    // Each eigenvector is drawn from center to center + scale*eigvec,
-    // producing an asymmetric cross that reveals the heading angle.
     if (g.basis().size() > 0 && g.has_eigenvalues()) {
         const double cx = g.mean()(plt_inds[0]);
         const double cy = g.mean()(plt_inds[1]);
@@ -36,7 +32,6 @@ void plot_ggiw_orientation_2d(matplot::axes_handle ax,
             double ux = basis(0, k);
             double uy = basis(1, k);
 
-            // Ray from center outward along the eigenvector direction
             std::vector<double> lx = { cx, cx + scale * ux };
             std::vector<double> ly = { cy, cy + scale * uy };
 
@@ -73,4 +68,4 @@ void plot_ggiw_orientation(const brew::models::GGIWOrientation<>& g,
     }
 }
 
-} // namespace brew::plot_utils
+}

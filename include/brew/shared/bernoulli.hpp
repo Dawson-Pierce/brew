@@ -4,9 +4,6 @@
 
 namespace brew::models {
 
-/// Bernoulli component for multi-Bernoulli filters (MBM, PMBM).
-/// Wraps a spatial distribution T with an existence probability.
-/// T must provide: std::unique_ptr<T> clone_typed() const.
 template <typename T>
 class Bernoulli {
 public:
@@ -24,8 +21,6 @@ public:
         result->id_ = id_;
         return result;
     }
-
-    // ---- Accessors ----
 
     [[nodiscard]] double existence_probability() const { return existence_prob_; }
     void set_existence_probability(double r) { existence_prob_ = r; }
@@ -45,4 +40,4 @@ private:
     int id_ = -1;
 };
 
-} // namespace brew::models
+}

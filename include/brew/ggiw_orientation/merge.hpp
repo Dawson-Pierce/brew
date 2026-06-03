@@ -3,6 +3,7 @@
 // Component merge for the `ggiw_orientation` package -- owns ONLY the GGIWOrientation merge
 // (no cross-model overload set). In namespace brew::ggiw_orientation so the package's
 // concrete RFS resolve an unqualified merge(...) here.
+
 #include "brew/shared/mixture.hpp"
 #include "brew/ggiw_orientation/ggiw_orientation_model.hpp"
 #include <Eigen/Dense>
@@ -14,7 +15,6 @@
 #include <vector>
 
 namespace brew::ggiw_orientation {
-
 
 template <typename Scalar, int D, int De, int N>
 void merge(models::Mixture<models::GGIWOrientation<Scalar, D, De>, N>& mix, double threshold) {
@@ -100,4 +100,4 @@ void merge(models::Mixture<models::GGIWOrientation<Scalar, D, De>, N>& mix, doub
     mix = std::move(result);
 }
 
-}  // namespace brew::ggiw_orientation
+}

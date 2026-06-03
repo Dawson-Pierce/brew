@@ -104,4 +104,4 @@ std::vector<Eigen::VectorXd> MahalanobisDBSCAN::get_unclustered(
     return noise;
 }
 
-} // namespace brew::clustering
+}

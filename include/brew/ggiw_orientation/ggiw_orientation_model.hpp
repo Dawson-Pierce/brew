@@ -8,10 +8,6 @@
 
 namespace brew::models {
 
-/// GGIW distribution with eigenvector basis tracking for stable orientation.
-/// After each correction the IW shape matrix V is decomposed via eigendecomposition;
-/// the rotation basis (eigenvectors) and eigenvalues are stored so that subsequent
-/// corrections can align the new eigenvectors to the previous ones.
 // @mex model
 // @mex_name GGIWOrientation
 // @mex_fields alpha:scalar, beta:scalar, mean:vec, covariance:mat, v:scalar, V:mat
@@ -31,7 +27,7 @@ public:
                            T v, ExtentMatrix V)
         : Base(alpha, beta, std::move(mean), std::move(covariance), v, std::move(V))
     {
-        // Decompose V to initialize basis and eigenvalues
+
         if (this->V().size() > 0) {
             Eigen::SelfAdjointEigenSolver<ExtentMatrix> es(this->V());
             basis_ = es.eigenvectors();
@@ -58,7 +54,6 @@ public:
         return c;
     }
 
-    // ---- Basis tracking accessors ----
     [[nodiscard]] const ExtentMatrix& basis() const { return basis_; }
     [[nodiscard]] ExtentMatrix& basis() { return basis_; }
     void set_basis(const ExtentMatrix& b) { basis_ = b; }
@@ -68,9 +63,9 @@ public:
     [[nodiscard]] bool has_eigenvalues() const { return eigenvalues_.size() > 0; }
 
 private:
-    ExtentMatrix basis_;          ///< Eigenvector matrix (rotation) from eigendecomposition of V
-    ExtentMatrix eigenvalues_;    ///< Diagonal eigenvalue matrix
+    ExtentMatrix basis_;
+    ExtentMatrix eigenvalues_;
     bool has_eigenvalues_ = false;
 };
 
-} // namespace brew::models
+}

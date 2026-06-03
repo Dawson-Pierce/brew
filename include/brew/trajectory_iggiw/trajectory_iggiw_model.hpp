@@ -5,9 +5,6 @@
 
 namespace brew::models {
 
-/// Concrete IGGIW trajectory model: a windowed trajectory of IGGIW states.
-/// Its own first-class type (not a Trajectory<T> instantiation); the windowed
-/// ring-buffer mechanics are inherited from TrajectoryWindow.
 // @mex model
 // @mex_name TrajectoryIGGIW
 // @mex_trajectory IGGIW
@@ -26,4 +23,4 @@ public:
     }
 };
 
-} // namespace brew::models
+}

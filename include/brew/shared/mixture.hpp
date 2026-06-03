@@ -53,8 +53,6 @@ public:
         return result;
     }
 
-    // Capacity / size
-
     [[nodiscard]] std::size_t size() const {
         if constexpr (fixed_capacity) return size_;
         else return components_.size();
@@ -65,8 +63,6 @@ public:
         return fixed_capacity ? static_cast<std::size_t>(N)
                               : std::numeric_limits<std::size_t>::max();
     }
-
-    // Component access
 
     [[nodiscard]] T& component(std::size_t i) {
         if constexpr (fixed_capacity) return components_[i];
@@ -81,13 +77,8 @@ public:
         return weights_(static_cast<Eigen::Index>(i));
     }
 
-    /// Live weight view: head(size()) for fixed-capacity, the full VectorXd for dynamic.
-    /// Uses decltype(auto) so the returned reference / block preserves its l-value
-    /// category — callers rely on `mix.weights()(i) = new_w` to write through.
     [[nodiscard]] decltype(auto) weights() { return weights_live_view(); }
     [[nodiscard]] decltype(auto) weights() const { return weights_live_view(); }
-
-    // Component management
 
     void add_component(std::unique_ptr<T> dist, double weight) {
         if constexpr (fixed_capacity) {
@@ -102,7 +93,6 @@ public:
         }
     }
 
-    /// By-value overload (moves T into storage). Works in both modes.
     void add_component(T dist, double weight) {
         if constexpr (fixed_capacity) {
             assert(size_ < static_cast<std::size_t>(N) && "Mixture: capacity exceeded");
@@ -131,7 +121,6 @@ public:
         }
     }
 
-    /// Soft remove: shifts remaining components left, decrements size_.
     void remove_component(std::size_t idx) {
         if constexpr (fixed_capacity) {
             for (std::size_t i = idx; i + 1 < size_; ++i) {
@@ -188,8 +177,6 @@ public:
         return result;
     }
 
-    // Direct access to underlying storage (advanced)
-
     [[nodiscard]] const Storage& components() const { return components_; }
     [[nodiscard]] Storage& components() { return components_; }
 
@@ -211,7 +198,7 @@ private:
 
     Storage components_{};
     WeightVector weights_{};
-    std::size_t size_ = 0;  // only tracked when fixed_capacity
+    std::size_t size_ = 0;
 };
 
-} // namespace brew::models
+}

@@ -5,7 +5,6 @@
 
 namespace brew::clustering {
 
-/// DBSCAN clustering using Mahalanobis distance.
 // @mex clustering
 // @mex_name MahalanobisDBSCAN
 // @mex_args epsilon:double, min_pts:int
@@ -14,7 +13,6 @@ class MahalanobisDBSCAN {
 public:
     MahalanobisDBSCAN(double epsilon = 1.0, int min_pts = 3);
 
-    /// Cluster columns of Z using Mahalanobis distance with covariance S.
     [[nodiscard]] std::vector<Eigen::MatrixXd> cluster(
         const Eigen::MatrixXd& Z,
         const Eigen::MatrixXd& S) const;
@@ -32,4 +30,4 @@ private:
         const Eigen::MatrixXd& S_inv) const;
 };
 
-} // namespace brew::clustering
+}

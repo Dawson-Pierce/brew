@@ -15,9 +15,6 @@ DBSCAN::DBSCAN(double epsilon, int min_pts,
 std::vector<int> DBSCAN::run_dbscan(const Eigen::MatrixXd& Z) const {
     const int n = static_cast<int>(Z.cols());
 
-    // Metric matrix: the selected rows (default: all rows), each optionally
-    // scaled by sqrt(scales[d]) so the plain Euclidean norm below evaluates
-    // sqrt(sum_d scales[d] * (z_i,d - z_j,d)^2) -- a weighted distance.
     const bool need_copy = !dims_.empty() || !scales_.empty();
     Eigen::MatrixXd Zsub;
     if (!dims_.empty()) {
@@ -37,7 +34,7 @@ std::vector<int> DBSCAN::run_dbscan(const Eigen::MatrixXd& Z) const {
     }
     const Eigen::MatrixXd& Zm = need_copy ? Zsub : Z;
 
-    std::vector<int> labels(n, -2); // -2 = unvisited, -1 = noise
+    std::vector<int> labels(n, -2);
     int cluster_id = 0;
 
     auto range_query = [&](int idx) -> std::vector<int> {
@@ -55,7 +52,7 @@ std::vector<int> DBSCAN::run_dbscan(const Eigen::MatrixXd& Z) const {
 
         auto neighbors = range_query(i);
         if (static_cast<int>(neighbors.size()) < min_pts_) {
-            labels[i] = -1; // noise
+            labels[i] = -1;
             continue;
         }
 
@@ -125,4 +122,4 @@ std::vector<Eigen::VectorXd> DBSCAN::get_unclustered(const Eigen::MatrixXd& Z) c
     return noise;
 }
 
-} // namespace brew::clustering
+}

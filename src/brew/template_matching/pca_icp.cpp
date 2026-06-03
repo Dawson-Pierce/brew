@@ -17,11 +17,10 @@ Eigen::Matrix3d PcaIcp::pca_axes(const Eigen::MatrixXd& points) {
 
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(cov);
     Eigen::Matrix3d axes;
-    axes.col(0) = solver.eigenvectors().col(2);  // largest eigenvalue
+    axes.col(0) = solver.eigenvectors().col(2);
     axes.col(1) = solver.eigenvectors().col(1);
-    axes.col(2) = solver.eigenvectors().col(0);  // smallest
+    axes.col(2) = solver.eigenvectors().col(0);
 
-    // Ensure right-handed
     if (axes.determinant() < 0) {
         axes.col(2) = -axes.col(2);
     }
@@ -54,16 +53,13 @@ IcpResult PcaIcp::align(
     const PointCloud& source,
     const PointCloud& target,
     const Eigen::Matrix3d& R_init,
-    const Eigen::Vector3d& /*t_init*/) const {
+    const Eigen::Vector3d& ) const {
 
-    // Compute target PCA
     Eigen::Matrix3d tgt_axes = pca_axes(target.points());
     Eigen::Vector3d tgt_centroid = target.points().rowwise().mean();
 
-    // Generate 8 PCA rotation candidates
     auto candidates = pca_candidates(src_axes_, tgt_axes);
 
-    // Score each candidate with a cheap RMSE on a subset of source points
     const int step = std::max(1, source.num_points() / 100);
     std::array<double, 8> costs{};
     for (int c = 0; c < 8; ++c) {
@@ -81,9 +77,6 @@ IcpResult PcaIcp::align(
         costs[c] = cost;
     }
 
-    // Sort candidates by cost and try the top few with full ICP,
-    // keeping the result with the lowest RMSE. This resolves 180° ambiguities
-    // that PCA scoring alone can't distinguish with partial measurements.
     std::array<int, 8> order = {0, 1, 2, 3, 4, 5, 6, 7};
     std::sort(order.begin(), order.end(),
         [&](int a, int b) { return costs[a] < costs[b]; });
@@ -93,7 +86,7 @@ IcpResult PcaIcp::align(
     cold_params.trim_fraction = 1.0;
     inner_->set_params(cold_params);
 
-    const int n_tries = 3;  // try top 3 to resolve 180° ambiguity with partial views
+    const int n_tries = 3;
     IcpResult best_result;
     best_result.rmse = std::numeric_limits<double>::max();
     for (int i = 0; i < n_tries; ++i) {
@@ -125,4 +118,4 @@ std::unique_ptr<IcpBase> PcaIcp::clone() const {
     return cloned;
 }
 
-} // namespace brew::template_matching
+}

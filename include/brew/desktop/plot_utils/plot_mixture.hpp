@@ -17,17 +17,14 @@
 
 namespace brew::plot_utils {
 
-/// Plot a Gaussian mixture. Each component gets a distinct color from the MATLAB lines palette.
 void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::Gaussian<>>& mix,
                   const PlotOptions& opts);
 
-/// Plot a GGIW mixture.
 void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::GGIW<>>& mix,
                   const PlotOptions& opts);
 
-/// Plot a GGIWOrientation mixture (with principal axes).
 void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::GGIWOrientation<>>& mix,
                   const PlotOptions& opts);
@@ -38,13 +35,12 @@ inline std::vector<std::vector<double>> to_colormap_argb(const std::vector<Color
     std::vector<std::vector<double>> cmap;
     cmap.reserve(colors.size());
     for (const auto& c : colors)
-        cmap.push_back({c[1], c[2], c[3]});  // RGB from ARGB
+        cmap.push_back({c[1], c[2], c[3]});
     return cmap;
 }
 
-} // namespace detail
+}
 
-/// Plot a TrajectoryGaussian mixture (color order reversed to match MATLAB).
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::TrajectoryGaussian<Scalar, D>>& mix,
@@ -52,7 +48,6 @@ void plot_mixture(matplot::axes_handle ax,
     const int n = static_cast<int>(mix.size());
     auto colors = lines_colors(n);
 
-    // Reverse color order to match MATLAB behavior
     for (int i = 0; i < n; ++i) {
         PlotOptions comp_opts = opts;
         comp_opts.color = colors[n - 1 - i];
@@ -65,7 +60,6 @@ void plot_mixture(matplot::axes_handle ax,
     }
 }
 
-/// Plot a TrajectoryGGIW mixture (color order reversed to match MATLAB).
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::TrajectoryGGIW<Scalar, D, De>>& mix,
@@ -73,7 +67,6 @@ void plot_mixture(matplot::axes_handle ax,
     const int n = static_cast<int>(mix.size());
     auto colors = lines_colors(n);
 
-    // Reverse color order to match MATLAB behavior
     for (int i = 0; i < n; ++i) {
         PlotOptions comp_opts = opts;
         comp_opts.color = colors[n - 1 - i];
@@ -86,7 +79,6 @@ void plot_mixture(matplot::axes_handle ax,
     }
 }
 
-/// Plot a TrajectoryGGIWOrientation mixture (color order reversed, with principal axes).
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::TrajectoryGGIWOrientation<Scalar, D, De>>& mix,
@@ -94,7 +86,6 @@ void plot_mixture(matplot::axes_handle ax,
     const int n = static_cast<int>(mix.size());
     auto colors = lines_colors(n);
 
-    // Reverse color order to match MATLAB behavior
     for (int i = 0; i < n; ++i) {
         PlotOptions comp_opts = opts;
         comp_opts.color = colors[n - 1 - i];
@@ -103,7 +94,6 @@ void plot_mixture(matplot::axes_handle ax,
     }
 }
 
-/// Convenience overloads: create figure, plot, save.
 void plot_mixture(const brew::models::Mixture<brew::models::Gaussian<>>& mix,
                   const PlotOptions& opts);
 void plot_mixture(const brew::models::Mixture<brew::models::GGIW<>>& mix,
@@ -156,5 +146,4 @@ void plot_mixture(const brew::models::Mixture<brew::models::TrajectoryGGIWOrient
     }
 }
 
-} // namespace brew::plot_utils
-
+}

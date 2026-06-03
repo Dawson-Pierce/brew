@@ -38,9 +38,6 @@
 
 namespace brew::models {
 
-/// Windowed trajectory of inner distribution T, plus an independent state history.
-/// MaxWindow controls the ring-buffer window size (required compile-time constant);
-/// state history is runtime-bounded.
 template <typename T>
 class TrajectoryWindow {
 public:
@@ -50,7 +47,6 @@ public:
     using Matrix = typename T::Matrix;
     static constexpr int InnerDim = Vector::RowsAtCompileTime;
 
-    // Window size is a runtime value; the stacked state is therefore always dynamic.
     using StackedVector = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     using StackedMatrix = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
@@ -73,7 +69,7 @@ public:
         stacked_covariance_.block(0, 0, state_dim_, state_dim_) = initial.covariance();
         history_[0] = initial;
         window_size_ = 1;
-        // Seed the state history with the initial state, respecting max_history_.
+
         push_state_history(std::move(initial));
     }
 
@@ -83,15 +79,11 @@ public:
 
     [[nodiscard]] std::unique_ptr<TrajectoryWindow> clone_typed() const { return clone(); }
 
-    // Window metadata
-
-    /// Live step count in the window (advanced by advance_window).
     [[nodiscard]] int window_size() const { return window_size_; }
     [[nodiscard]] int max_window_size() const { return max_window_; }
     [[nodiscard]] int stacked_size() const { return state_dim * window_size_; }
     [[nodiscard]] bool is_full() const { return window_size_ == max_window_; }
 
-    /// Set the (runtime) maximum window size; resets the live window to empty.
     void set_max_window_size(int n) {
         max_window_ = (n > 0 ? n : 1);
         history_.assign(max_window_, T{});
@@ -108,16 +100,10 @@ public:
         return current().is_extended();
     }
 
-    // Stacked state access
-    // The stored stacked_mean_/covariance_ are always at full max size,
-    // zero-padded beyond the live window.
-
     [[nodiscard]] const StackedVector& mean() const { return stacked_mean_; }
     [[nodiscard]] StackedVector& mean() { return stacked_mean_; }
     [[nodiscard]] const StackedMatrix& covariance() const { return stacked_covariance_; }
     [[nodiscard]] StackedMatrix& covariance() { return stacked_covariance_; }
-
-    // Per-step block views
 
     [[nodiscard]] auto mean_at(int i) { return stacked_mean_.segment(i * state_dim, state_dim); }
     [[nodiscard]] auto mean_at(int i) const { return stacked_mean_.segment(i * state_dim, state_dim); }
@@ -129,9 +115,6 @@ public:
         return stacked_covariance_.block(i * state_dim, j * state_dim, state_dim, state_dim);
     }
 
-    // Window state access (the bounded ring-buffer of T values inside the window).
-    // These are the filter's working set; for the full-lifetime record use state_history().
-
     [[nodiscard]] const WindowStorage& history() const { return history_; }
     [[nodiscard]] WindowStorage& history() { return history_; }
 
@@ -141,13 +124,6 @@ public:
     [[nodiscard]] const T& history_at(int i) const { return history_[i]; }
     [[nodiscard]] T& history_at(int i) { return history_[i]; }
 
-    // State-history access (independent, full-lifetime record).
-
-    /// Cap the state history.
-    /// Semantics:
-    ///   0           - disable recording (existing entries are cleared)
-    ///   N > 0       - keep only the N most recent states (trims immediately)
-    ///   SIZE_MAX    - unbounded (default)
     void set_max_history(std::size_t n) {
         max_history_ = n;
         if (n == 0) {
@@ -161,21 +137,6 @@ public:
     [[nodiscard]] const std::vector<T>& state_history() const { return state_history_; }
     [[nodiscard]] std::vector<T>& state_history() { return state_history_; }
 
-    // Ring-buffer advance
-
-    /// Make room for a new step at the end of the window. After this returns,
-    /// `last_index()` points at a zeroed slot ready to be filled with a prediction.
-    ///
-    /// Window behaviour:
-    /// - not full: increments window_size_; last slot zeroed.
-    /// - full: slides stacked_mean_/covariance_/history_ left by one inner-state block,
-    ///   last slot zeroed, window_size_ unchanged (== MaxWindow).
-    /// Returns true if a slide occurred (oldest window slot was dropped).
-    ///
-    /// State history behaviour: on every call except the very first post-construction,
-    /// pushes the current (last-finalized) window state to state_history_, trimming
-    /// front entries to respect max_history_. The first call is a no-op for history
-    /// because the constructor already seeded it with the initial state.
     bool advance_window() {
         if (advance_count_ > 0 && window_size_ > 0) {
             push_state_history(current());
@@ -184,7 +145,6 @@ public:
 
         const int sd = state_dim;
 
-        // Grow / bump counter (below cap)
         if (window_size_ < max_window_) {
             ++window_size_;
             mean_at(window_size_ - 1).setZero();
@@ -196,7 +156,6 @@ public:
             return false;
         }
 
-        // At cap: slide window left by one block (drop oldest), zero new tail slot
         const int kept = (max_window_ - 1) * sd;
         stacked_mean_.head(kept) = stacked_mean_.tail(kept).eval();
         stacked_mean_.tail(sd).setZero();
@@ -211,15 +170,11 @@ public:
         return true;
     }
 
-    /// Explicit commit: push current() to state_history_. Useful after the final
-    /// correct() when no further advance_window will occur to flush the last state.
     void commit_current_to_state_history() {
         if (window_size_ > 0) push_state_history(current());
     }
 
     [[nodiscard]] int last_index() const { return window_size_ - 1; }
-
-    // Convenience: extract last-step views
 
     [[nodiscard]] Vector get_last_state() const {
         return mean_at(window_size_ - 1);
@@ -229,7 +184,6 @@ public:
         return cov_at(li, li);
     }
 
-    /// Returns (state_dim x window_size) matrix of window-slot means (from history_).
     [[nodiscard]] Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic> mean_history() const {
         const int ws = window_size_;
         if (ws == 0 || state_dim <= 0) {
@@ -242,7 +196,6 @@ public:
         return result;
     }
 
-    /// Returns (state_dim x window_size) matrix of stacked-state per-step blocks.
     [[nodiscard]] Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic> rearrange_states() const {
         const int ws = window_size_;
         if (state_dim <= 0 || ws == 0) {
@@ -255,8 +208,6 @@ public:
         return result;
     }
 
-    /// Returns (state_dim x M) matrix of full-lifetime state-history means
-    /// (one column per recorded state in state_history()).
     [[nodiscard]] Eigen::Matrix<Scalar, InnerDim, Eigen::Dynamic> state_history_means() const {
         const int m = static_cast<int>(state_history_.size());
         if (m == 0 || state_dim <= 0) {
@@ -284,17 +235,15 @@ private:
     int window_size_ = 0;
     int max_window_ = kDefaultWindow;
 
-    // Independent full-lifetime record.
     std::vector<T> state_history_{};
     std::size_t max_history_ = std::numeric_limits<std::size_t>::max();
     int advance_count_ = 0;
 };
 
-// Type trait for detecting TrajectoryWindow<T, M>
 template <typename U>
 struct is_trajectory : std::false_type {};
 
 template <typename U>
 struct is_trajectory<TrajectoryWindow<U>> : std::true_type {};
 
-} // namespace brew::models
+}

@@ -32,7 +32,6 @@ std::vector<Eigen::MatrixXd> CCWatershed::cluster(const Eigen::MatrixXd& Z) cons
 
     const int r_close = std::max(closing_radius_, 0);
 
-    // --- 1. Dilated mask: cell is in_dilated if any on-cell lies within r_close ---
     std::vector<char> in_dilated(N, 0);
     if (r_close == 0) {
         for (int j = 0; j < nlon; ++j)
@@ -52,7 +51,6 @@ std::vector<Eigen::MatrixXd> CCWatershed::cluster(const Eigen::MatrixXd& Z) cons
         }
     }
 
-    // --- 2. Connected components on the dilated mask -> region labels ---
     std::vector<int> region(N, -1);
     int n_regions = 0;
     std::vector<int> stack;
@@ -84,7 +82,6 @@ std::vector<Eigen::MatrixXd> CCWatershed::cluster(const Eigen::MatrixXd& Z) cons
         }
     }
 
-    // --- 3. Local maxima within the on-mask, sorted descending ---
     std::vector<int> maxima;
     for (int j = 0; j < nlon; ++j) {
         for (int i = 0; i < nlat; ++i) {
@@ -106,7 +103,6 @@ std::vector<Eigen::MatrixXd> CCWatershed::cluster(const Eigen::MatrixXd& Z) cons
         return Z(a % nlat, a / nlat) > Z(b % nlat, b / nlat);
     });
 
-    // --- 4. Thin maxima by min_seed_dist (Chebyshev box), strongest first ---
     std::vector<int> label(N, -1);
     std::vector<char> blocked(N, 0);
     std::vector<int> seeds;
@@ -124,7 +120,6 @@ std::vector<Eigen::MatrixXd> CCWatershed::cluster(const Eigen::MatrixXd& Z) cons
                 blocked[static_cast<std::size_t>(lin(ii, jj))] = 1;
     }
 
-    // --- 5. Priority flood from seeds, constrained to the seed's region ---
     std::priority_queue<std::pair<double, int>> pq;
     std::vector<char> queued(N, 0);
     auto push_nbrs = [&](int cell) {
@@ -167,10 +162,6 @@ std::vector<Eigen::MatrixXd> CCWatershed::cluster(const Eigen::MatrixXd& Z) cons
         push_nbrs(cell);
     }
 
-    // --- 6. Fallback: only for regions that produced NO seed. Seeded regions
-    //     whose flood couldn't reach every on-cell (e.g. through a closing
-    //     bridge across off-cells) leave those unreachable cells dropped --
-    //     not emitted as a separate "surrounding" basin alongside their seeds.
     std::vector<char> region_has_seed(static_cast<std::size_t>(n_regions), 0);
     for (int s : seeds) {
         const int rid = region[static_cast<std::size_t>(s)];
@@ -217,7 +208,6 @@ std::vector<Eigen::MatrixXd> CCWatershed::cluster(const Eigen::MatrixXd& Z) cons
         }
     }
 
-    // --- 7. Gather basins, drop small / weak, emit [lon; lat; intensity] columns ---
     std::unordered_map<int, std::vector<int>> basins;
     for (int j = 0; j < nlon; ++j)
         for (int i = 0; i < nlat; ++i) {
@@ -249,4 +239,4 @@ std::vector<Eigen::MatrixXd> CCWatershed::cluster(const Eigen::MatrixXd& Z) cons
     return result;
 }
 
-} // namespace brew::clustering
+}

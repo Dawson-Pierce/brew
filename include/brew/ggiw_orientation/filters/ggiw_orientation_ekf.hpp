@@ -1,8 +1,9 @@
 #pragma once
+
 #include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
-#include "brew/ggiw/filters/ggiw_ekf.hpp"  // for detail::sqrtm_spd
+#include "brew/ggiw/filters/ggiw_ekf.hpp"
 #include "brew/ggiw_orientation/ggiw_orientation_model.hpp"
 #include <algorithm>
 #include <cmath>
@@ -12,9 +13,6 @@
 
 namespace brew::filters {
 
-/// EKF for GGIWOrientation distributions.
-/// Same predict/gate math as GGIWEKF; correct adds eigenvector basis tracking
-/// that aligns new eigenvectors to the previous basis after each update.
 // @mex filter
 // @mex_name GGIWOrientationEKF
 // @mex_dist GGIWOrientation
@@ -46,16 +44,13 @@ public:
         double dt,
         const Dist& prev) const override {
 
-        // Kinematic prediction
         const auto F = this->dyn_obj_->get_state_mat(dt, prev.mean());
         Eigen::VectorXd next_mean = this->dyn_obj_->propagate_state(dt, prev.mean());
         Eigen::MatrixXd next_cov = F * prev.covariance() * F.transpose() + this->process_noise_;
 
-        // Gamma prediction (forgetting factor decay)
         double next_alpha = prev.alpha() / eta_;
         double next_beta = prev.beta() / eta_;
 
-        // IW prediction (exponential dof decay + extent propagation)
         const int d = prev.extent_dim();
         const double dof_floor = 2.0 * d + 2.0;
         double next_v = dof_floor + std::exp(-dt / tau_) * (prev.v() - dof_floor);
@@ -63,7 +58,6 @@ public:
         double scale = (next_v - dof_floor) / std::max(prev.v() - dof_floor, 1e-12);
         Eigen::MatrixXd next_V = scale * this->dyn_obj_->propagate_extent(dt, prev.mean(), prev.V());
 
-        // Preserve basis through prediction
         Dist result(
             next_alpha, next_beta,
             std::move(next_mean), std::move(next_cov),
@@ -77,7 +71,6 @@ public:
         const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
 
-        // ---- Standard GGIW EKF correction (same math as ggiw_ekf) ----
         const int d = predicted.extent_dim();
 
         int W;
@@ -92,38 +85,31 @@ public:
 
         const Eigen::VectorXd mean_meas = Z.rowwise().mean();
 
-        // Scatter matrix
         Eigen::MatrixXd scatter = Eigen::MatrixXd::Zero(d, d);
         for (int j = 0; j < W; ++j) {
             const Eigen::VectorXd diff = Z.col(j) - mean_meas;
             scatter += diff * diff.transpose();
         }
 
-        // Expected extent
         const double dof_floor = 2.0 * d + 2.0;
         Eigen::MatrixXd X_hat = predicted.V() / (predicted.v() - dof_floor);
 
-        // Innovation
         const auto H = this->get_measurement_matrix(predicted.mean());
         const Eigen::VectorXd est_meas = this->estimate_measurement(predicted.mean());
         const Eigen::VectorXd epsilon = mean_meas - est_meas;
 
         const Eigen::MatrixXd N = epsilon * epsilon.transpose();
 
-        // Measurement innovation covariance
         Eigen::MatrixXd R_hat = rho_ * X_hat + this->measurement_noise_;
         Eigen::MatrixXd S = H * predicted.covariance() * H.transpose() + R_hat / static_cast<double>(W);
 
-        // Kalman gain
         Eigen::MatrixXd K = predicted.covariance() * H.transpose() * S.inverse();
 
-        // N_hat: transformed innovation spread through extent
         Eigen::MatrixXd sqrt_X = detail::sqrtm_spd(X_hat);
         Eigen::MatrixXd sqrt_R = detail::sqrtm_spd(R_hat);
         Eigen::MatrixXd sqrt_R_inv = sqrt_R.ldlt().solve(Eigen::MatrixXd::Identity(d, d));
         Eigen::MatrixXd N_hat = sqrt_X * sqrt_R_inv * N * sqrt_R_inv.transpose() * sqrt_X.transpose();
 
-        // Update
         double next_alpha = predicted.alpha() + W;
         double next_beta = predicted.beta() + 1.0;
         Eigen::VectorXd next_mean = predicted.mean() + K * epsilon;
@@ -133,7 +119,6 @@ public:
         double next_v = predicted.v() + W;
         Eigen::MatrixXd next_V = predicted.V() + N_hat + scatter;
 
-        // Log-likelihood (GGIW)
         const double v0 = predicted.v();
         const double v1 = next_v;
         const double a0 = predicted.alpha();
@@ -162,27 +147,23 @@ public:
           + a0 * std::log(b0) - a1 * std::log(b1)
           - (W * std::log(M_PI) + std::log(static_cast<double>(W))) * d / 2.0;
 
-        // ---- Basis tracking: SVD of corrected V ----
         Eigen::JacobiSVD<Eigen::MatrixXd> svd(next_V, Eigen::ComputeFullU | Eigen::ComputeFullV);
         Eigen::MatrixXd U_new = svd.matrixU();
         Eigen::VectorXd S_vals = svd.singularValues();
 
-        // Previous basis (defaults to identity if not yet set)
         Eigen::MatrixXd U_prev = predicted.basis();
         if (U_prev.size() == 0) {
             U_prev = Eigen::MatrixXd::Identity(d, d);
         }
 
-        // Alignment: A = U_new^T * U_prev
         Eigen::MatrixXd A = U_new.transpose() * U_prev;
 
-        // Permute columns of U_new to maximize diagonal of A (greedy matching)
         Eigen::MatrixXd U_aligned = Eigen::MatrixXd::Zero(d, d);
         Eigen::VectorXd S_aligned = Eigen::VectorXd::Zero(d);
         std::vector<bool> used(d, false);
 
         for (int k = 0; k < d; ++k) {
-            // For column k of U_prev, find the best matching column in U_new
+
             double best_val = -1.0;
             int best_col = 0;
             for (int j = 0; j < d; ++j) {
@@ -197,16 +178,13 @@ public:
             U_aligned.col(k) = U_new.col(best_col);
             S_aligned(k) = S_vals(best_col);
 
-            // Fix sign flip: negate column if correlation is negative
             if (A(best_col, k) < 0.0) {
                 U_aligned.col(k) = -U_aligned.col(k);
             }
         }
 
-        // Reconstruct V = U * S * U^T
         next_V = U_aligned * S_aligned.asDiagonal() * U_aligned.transpose();
 
-        // Build result with updated basis
         Dist result(
             next_alpha, next_beta,
             std::move(next_mean), std::move(next_cov),
@@ -236,21 +214,20 @@ public:
         return nu.transpose() * S_gate.ldlt().solve(nu);
     }
 
-    // ---- GGIW-specific parameters ----
     void set_temporal_decay(double eta) { eta_ = eta; }
     void set_forgetting_factor(double tau) { tau_ = tau; }
     void set_scaling_parameter(double rho) { rho_ = rho; }
 
 private:
-    double eta_ = 1.0;   ///< Temporal decay for gamma parameters
-    double tau_ = 1.0;   ///< Exponential decay constant for IW dof
-    double rho_ = 1.0;   ///< Scaling parameter for extent in measurement noise
+    double eta_ = 1.0;
+    double tau_ = 1.0;
+    double rho_ = 1.0;
 };
 
-} // namespace brew::filters
+}
 
 namespace brew::filters {
-// Concrete filter used for this model (RFS devirtualization).
+
 template <typename Scalar, int D, int De>
 struct default_filter<models::GGIWOrientation<Scalar, D, De>> { using type = GGIWOrientationEKF<Scalar, D, De>; };
-}  // namespace brew::filters
+}

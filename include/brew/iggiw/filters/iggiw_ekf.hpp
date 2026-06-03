@@ -1,4 +1,5 @@
 #pragma once
+
 #include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
@@ -12,7 +13,6 @@
 
 namespace brew::filters {
 
-/// Extended Kalman Filter for IGGIW distributions.
 // @mex filter
 // @mex_name IGGIWEKF
 // @mex_dist IGGIW
@@ -103,12 +103,6 @@ public:
         const double eps = std::numeric_limits<double>::epsilon();
         const double sum_w = std::max(weights.sum(), eps);
 
-        // Intensity summary statistic uses the generalized power mean
-        //   r = ( (1/N) * sum(w_j^p) )^(1/p)
-        // so the same centroid_power knob biases the InverseGamma update
-        // toward hot spots. r = mean(w) at p = 1, and r -> max(w) as p
-        // increases — pulling beta/(alpha-1) from "average reflectivity"
-        // toward "peak reflectivity" in lock-step with the centroid.
         double r;
         if (centroid_power_ == 1.0) {
             r = std::max(weights.mean(), eps);
@@ -119,11 +113,6 @@ public:
             r = std::max(r, eps);
         }
 
-        // Centroid uses w^p instead of w so the user can dial how much
-        // the per-cell intensity dominates the location average:
-        //   p = 1  -> standard intensity-weighted centroid (default)
-        //   p > 1  -> centroid pulled harder toward hot spots
-        //   p < 1  -> centroid closer to the geometric (unweighted) mean
         const Eigen::VectorXd weights_p =
             (centroid_power_ == 1.0)
                 ? weights
@@ -131,9 +120,6 @@ public:
         const double sum_wp = std::max(weights_p.sum(), eps);
         const Eigen::VectorXd z_bar = (positions * weights_p) / sum_wp;
 
-        // Z_meas keeps the linear-weight spread around z_bar so the extent
-        // estimate still reflects the full intensity-weighted distribution
-        // of cells (only the centroid is sharpened by p).
         Eigen::MatrixXd Z_meas = Eigen::MatrixXd::Zero(d, d);
         for (int j = 0; j < n; ++j) {
             const Eigen::VectorXd dz = positions.col(j) - z_bar;
@@ -196,8 +182,6 @@ public:
 
         const double eps = std::numeric_limits<double>::epsilon();
 
-        // Match the w^p centroid used in correct() so the gate compares
-        // against the same point estimate the update will move toward.
         const Eigen::VectorXd weights_p =
             (centroid_power_ == 1.0)
                 ? weights
@@ -266,11 +250,6 @@ public:
         delta_extent_ = delta_extent;
     }
 
-    /// Exponent applied to per-cell intensities when computing the
-    /// measurement centroid: z_bar = (positions * w^p) / sum(w^p).
-    /// p = 1 reproduces the standard intensity-weighted centroid.
-    /// p > 1 pulls the centroid harder toward hot spots; p < 1 relaxes
-    /// it toward the geometric mean of the detection cells.
     void set_centroid_power(double centroid_power) {
         if (!(centroid_power > 0.0) || !std::isfinite(centroid_power)) {
             throw std::invalid_argument("centroid_power must be positive and finite.");
@@ -396,7 +375,7 @@ private:
 }
 
 namespace brew::filters {
-// Concrete filter used for this model (RFS devirtualization).
+
 template <typename Scalar, int D, int De>
 struct default_filter<models::IGGIW<Scalar, D, De>> { using type = IGGIWEKF<Scalar, D, De>; };
-}  // namespace brew::filters
+}

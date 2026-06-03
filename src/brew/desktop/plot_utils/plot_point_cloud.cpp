@@ -80,4 +80,4 @@ void plot_point_cloud(const brew::template_matching::PointCloud& cloud,
     }
 }
 
-} // namespace brew::plot_utils
+}

@@ -80,4 +80,4 @@ std::vector<Eigen::MatrixXd> GridCC::cluster(const Eigen::MatrixXd& Z) const {
     return result;
 }
 
-} // namespace brew::clustering
+}

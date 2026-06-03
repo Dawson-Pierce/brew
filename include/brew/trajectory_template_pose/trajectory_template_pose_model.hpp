@@ -5,9 +5,6 @@
 
 namespace brew::models {
 
-/// Concrete TemplatePose trajectory model: a windowed trajectory of TemplatePose states.
-/// Its own first-class type (not a Trajectory<T> instantiation); the windowed
-/// ring-buffer mechanics are inherited from TrajectoryWindow.
 // @mex model
 // @mex_name TrajectoryTemplatePose
 // @mex_trajectory TemplatePose
@@ -26,4 +23,4 @@ public:
     }
 };
 
-} // namespace brew::models
+}

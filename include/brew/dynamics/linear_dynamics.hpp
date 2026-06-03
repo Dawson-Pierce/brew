@@ -4,8 +4,6 @@
 
 namespace brew::dynamics {
 
-/// Linear dynamics model: propagate_state = F*x + G*u.
-/// Subclasses only need to define get_state_mat() and get_input_mat().
 template <typename Scalar = double, int D = Eigen::Dynamic>
 class LinearDynamics : public DynamicsBase<Scalar, D> {
 public:
@@ -26,4 +24,4 @@ public:
     }
 };
 
-} // namespace brew::dynamics
+}

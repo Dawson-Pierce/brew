@@ -6,8 +6,6 @@
 
 namespace brew::plot_utils {
 
-// --- Gaussian mixture ---
-
 void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::Gaussian<>>& mix,
                   const PlotOptions& opts) {
@@ -21,7 +19,6 @@ void plot_mixture(matplot::axes_handle ax,
         plot_gaussian(ax, mix.component(i), comp_opts);
     }
 
-    // For 3D plots, set combined colormap so each component surface gets its own color
     if (opts.plt_inds.size() == 3) {
         ax->colormap(detail::to_colormap_argb(colors));
     }
@@ -40,8 +37,6 @@ void plot_mixture(const brew::models::Mixture<brew::models::Gaussian<>>& mix,
         save_figure(fig, opts.output_file);
     }
 }
-
-// --- GGIW mixture ---
 
 void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::GGIW<>>& mix,
@@ -75,8 +70,6 @@ void plot_mixture(const brew::models::Mixture<brew::models::GGIW<>>& mix,
     }
 }
 
-// --- GGIWOrientation mixture ---
-
 void plot_mixture(matplot::axes_handle ax,
                   const brew::models::Mixture<brew::models::GGIWOrientation<>>& mix,
                   const PlotOptions& opts) {
@@ -105,4 +98,4 @@ void plot_mixture(const brew::models::Mixture<brew::models::GGIWOrientation<>>& 
     }
 }
 
-} // namespace brew::plot_utils
+}

@@ -1,8 +1,9 @@
 #pragma once
+
 #include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
-#include "brew/ggiw/filters/ggiw_ekf.hpp"  // for detail::sqrtm_spd
+#include "brew/ggiw/filters/ggiw_ekf.hpp"
 #include "brew/trajectory_ggiw_orientation/trajectory_ggiw_orientation_model.hpp"
 #include "brew/ggiw_orientation/ggiw_orientation_model.hpp"
 #include <algorithm>
@@ -13,10 +14,6 @@
 
 namespace brew::filters {
 
-/// EKF for Trajectory<GGIWOrientation<>> distributions.
-/// Same trajectory predict/gate math as TrajectoryGGIWEKF; correct adds
-/// eigenvector basis tracking that aligns new eigenvectors to the previous
-/// basis after each update.
 // @mex filter
 // @mex_name TrajectoryGGIWOrientationEKF
 // @mex_dist TrajectoryGGIWOrientation
@@ -55,19 +52,16 @@ public:
         Dist result = prev;
         const int sd = prev.state_dim;
 
-        // Gaussian (kinematic) prediction
         Eigen::VectorXd prev_last_state = prev.get_last_state();
         Eigen::VectorXd next_state = this->dyn_obj_->propagate_state(dt, prev_last_state);
         Eigen::MatrixXd F = this->dyn_obj_->get_state_mat(dt, prev_last_state);
 
-        // Gamma prediction (measurement rate decay)
         const auto& prev_ggiw = prev.current();
         const double prev_alpha = prev_ggiw.alpha();
         const double prev_beta = prev_ggiw.beta();
         double next_alpha = prev_alpha / eta_;
         double next_beta = prev_beta / eta_;
 
-        // IW prediction (extent decay, propagated through rotation if applicable)
         const double prev_v = prev_ggiw.v();
         const auto& prev_V = prev_ggiw.V();
         const int d = static_cast<int>(prev_V.rows());
@@ -76,13 +70,11 @@ public:
         double scale = (next_v - dof_floor) / std::max(prev_v - dof_floor, 1e-12);
         Eigen::MatrixXd next_V = scale * this->dyn_obj_->propagate_extent(dt, prev_last_state, prev_V);
 
-        // Advance ring buffer (slides if at cap); new tail slot zeroed
         result.advance_window();
 
         const int last = result.last_index();
         const int prev_last = last - 1;
 
-        // Stacked covariance: fill new last row/col and auto-cov
         if (prev_last >= 0) {
             for (int k = 0; k < last; ++k) {
                 result.cov_at(last, k) = F * result.cov_at(prev_last, k);
@@ -95,7 +87,6 @@ public:
             result.cov_at(last, last) = this->process_noise_;
         }
 
-        // Stacked mean + predicted GGIWOrientation marginal (basis preserved)
         result.mean_at(last) = next_state;
         InnerDist new_ggiw(
             next_alpha, next_beta,
@@ -126,7 +117,6 @@ public:
         const auto& prev_V = pred_ggiw.V();
         const int d = static_cast<int>(prev_V.rows());
 
-        // Measurement parsing: d×W point set; centroid & scatter
         int W;
         Eigen::MatrixXd Z;
         if (measurement.size() > d && measurement.size() % d == 0) {
@@ -147,7 +137,6 @@ public:
         const double dof_floor = 2.0 * d + 2.0;
         Eigen::MatrixXd X_hat = prev_V / (prev_v - dof_floor);
 
-        // Gaussian (kinematic) update on the live stacked slice
         Eigen::VectorXd est_meas = this->estimate_measurement(prev_state);
         Eigen::MatrixXd H = this->get_measurement_matrix(prev_state);
 
@@ -170,7 +159,6 @@ public:
         Eigen::VectorXd new_mean_live = mean_live + K * epsilon;
         Eigen::MatrixXd new_P_live = P_live - K * H_dot * P_live;
 
-        // IW update: V += N_hat + scatter
         Eigen::MatrixXd sqrt_X = detail::sqrtm_spd(X_hat);
         Eigen::MatrixXd sqrt_R = detail::sqrtm_spd(R_hat);
         Eigen::MatrixXd sqrt_R_inv = sqrt_R.ldlt().solve(Eigen::MatrixXd::Identity(d, d));
@@ -179,11 +167,9 @@ public:
         double next_v = prev_v + W;
         Eigen::MatrixXd next_V = prev_V + N_hat + scatter;
 
-        // Gamma update: alpha += W, beta += 1
         double next_alpha = prev_alpha + W;
         double next_beta = prev_beta + 1.0;
 
-        // Likelihood
         const double v0 = prev_v;
         const double v1 = next_v;
         const double a0 = prev_alpha;
@@ -214,9 +200,6 @@ public:
 
         double likelihood = std::exp(log_likelihood);
 
-        // Basis tracking: SVD corrected V, align columns/signs to previous basis
-        // Greedy column matching on |U_new^T U_prev| to resolve the sign/ordering ambiguity
-        // of the eigendecomposition and keep the rotation consistent across updates.
         Eigen::JacobiSVD<Eigen::MatrixXd> svd(next_V, Eigen::ComputeFullU | Eigen::ComputeFullV);
         Eigen::MatrixXd U_new = svd.matrixU();
         Eigen::VectorXd S_vals = svd.singularValues();
@@ -247,16 +230,13 @@ public:
             U_aligned.col(k) = U_new.col(best_col);
             S_aligned(k) = S_vals(best_col);
 
-            // Fix sign flip
             if (A(best_col, k) < 0.0) {
                 U_aligned.col(k) = -U_aligned.col(k);
             }
         }
 
-        // Reconstruct V = U Σ U^T from the aligned basis.
         next_V = U_aligned * S_aligned.asDiagonal() * U_aligned.transpose();
 
-        // Write corrected slice back; refresh history + aligned basis on last entry
         Dist result = predicted;
         result.mean().head(live) = new_mean_live;
         result.covariance().topLeftCorner(live, live) = new_P_live;
@@ -313,10 +293,10 @@ private:
     double rho_ = 1.0;
 };
 
-} // namespace brew::filters
+}
 
 namespace brew::filters {
-// Concrete filter used for this model (RFS devirtualization).
+
 template <typename Scalar, int D, int De>
 struct default_filter<models::TrajectoryGGIWOrientation<Scalar, D, De>> { using type = TrajectoryGGIWOrientationEKF<Scalar, D, De>; };
-}  // namespace brew::filters
+}

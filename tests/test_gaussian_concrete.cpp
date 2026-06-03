@@ -1,4 +1,5 @@
 // Compile-smoke + clone for the concrete gaussian RFS (MBMBase abstract -> only via inheritance asserts).
+
 #include <gtest/gtest.h>
 #include "brew/gaussian/gaussian.hpp"
 #include "brew/gaussian/multi_target/mbm_base.hpp"

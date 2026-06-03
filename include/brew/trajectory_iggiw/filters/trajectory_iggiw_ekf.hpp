@@ -1,4 +1,5 @@
 #pragma once
+
 #include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
@@ -13,14 +14,6 @@
 
 namespace brew::filters {
 
-/// EKF for Trajectory<IGGIW<>> distributions.
-///
-/// Same intensity-and-extent math as IGGIWEKF (Inverse-Gamma on per-cell
-/// intensity, Inverse-Wishart on extent, Gaussian on kinematics), but
-/// maintains a stacked window of past kinematic states so the trajectory
-/// is smoothed by each correction. Measurement format and hyperparameter
-/// semantics match IGGIWEKF exactly, including the centroid_power knob
-/// that controls how aggressively hot spots pull the location estimate.
 // @mex filter
 // @mex_name TrajectoryIGGIWEKF
 // @mex_dist TrajectoryIGGIW
@@ -65,7 +58,6 @@ public:
         const Eigen::VectorXd next_state = this->dyn_obj_->propagate_state(dt, prev_last_state);
         const Eigen::MatrixXd F = this->dyn_obj_->get_state_mat(dt, prev_last_state);
 
-        // ---- IG predict on the marginal intensity Inverse-Gamma ----
         const auto& prev_iggiw = prev.current();
         const double eps = std::numeric_limits<double>::epsilon();
 
@@ -76,7 +68,6 @@ public:
         double next_alpha = std::max(1.0 + delta_gamma_ * (alpha_prev - 1.0), 1.0 + eps);
         double next_beta  = std::max(gamma_bar * (next_alpha - 1.0), eps);
 
-        // ---- IW predict on the extent ----
         const int d = prev_iggiw.extent_dim();
         const double dof_floor = 2.0 * d + 2.0;
         const double v_prev = std::max(prev_iggiw.v(), dof_floor + eps);
@@ -90,7 +81,6 @@ public:
         Eigen::MatrixXd next_V = X_bar * (next_v - dof_floor);
         next_V = 0.5 * (next_V + next_V.transpose());
 
-        // ---- Advance ring buffer and fill the new stacked slot ----
         result.advance_window();
         const int last = result.last_index();
         const int prev_last = last - 1;
@@ -128,7 +118,6 @@ public:
         const auto& pred_iggiw = predicted.current();
         const int d = pred_iggiw.extent_dim();
 
-        // ---- Unpack packed [pos_d; weight_1] x N measurement ----
         Eigen::MatrixXd positions;
         Eigen::VectorXd weights;
         unpack_measurement(measurement, d, positions, weights);
@@ -144,10 +133,6 @@ public:
         const double eps = std::numeric_limits<double>::epsilon();
         const double sum_w = std::max(weights.sum(), eps);
 
-        // Intensity summary uses the generalized power mean
-        //   r = ( (1/N) * sum(w_j^p) )^(1/p)
-        // so centroid_power biases both location and intensity together.
-        // r = mean(w) at p = 1 and -> max(w) as p grows.
         double r;
         if (centroid_power_ == 1.0) {
             r = std::max(weights.mean(), eps);
@@ -158,7 +143,6 @@ public:
             r = std::max(r, eps);
         }
 
-        // ---- Centroid: w^p tunes hot-spot bias (p == 1 -> linear) ----
         const Eigen::VectorXd weights_p =
             (centroid_power_ == 1.0)
                 ? weights
@@ -166,7 +150,6 @@ public:
         const double sum_wp = std::max(weights_p.sum(), eps);
         const Eigen::VectorXd z_bar = (positions * weights_p) / sum_wp;
 
-        // ---- Z_meas keeps linear weights so extent reflects full spread ----
         Eigen::MatrixXd Z_meas = Eigen::MatrixXd::Zero(d, d);
         for (int j = 0; j < n; ++j) {
             const Eigen::VectorXd dz = positions.col(j) - z_bar;
@@ -175,13 +158,11 @@ public:
         Z_meas /= sum_w;
         Z_meas = 0.5 * (Z_meas + Z_meas.transpose());
 
-        // ---- Expected extent ----
         const double dof_floor = 2.0 * d + 2.0;
         const double v_safe = std::max(pred_iggiw.v(), dof_floor + eps);
         Eigen::MatrixXd X_hat = pred_iggiw.V() / (v_safe - dof_floor);
         X_hat = 0.5 * (X_hat + X_hat.transpose());
 
-        // ---- Stacked Kalman update on the live window slice ----
         const Eigen::VectorXd prev_state = predicted.get_last_state();
         const Eigen::VectorXd z_hat = this->estimate_measurement(prev_state);
         const Eigen::MatrixXd H = this->get_measurement_matrix(prev_state);
@@ -208,23 +189,19 @@ public:
         Eigen::MatrixXd new_P_live = P_live - K * H_dot * P_live;
         new_P_live = 0.5 * (new_P_live + new_P_live.transpose());
 
-        // ---- IG update on intensity ----
         const double next_alpha = pred_iggiw.alpha() + eta_;
         const double next_beta  = pred_iggiw.beta()  + eta_ * r;
 
-        // ---- IW update on extent ----
         const double next_v = pred_iggiw.v() + omega_;
         Eigen::MatrixXd next_V = pred_iggiw.V() + omega_ * Z_meas;
         next_V = 0.5 * (next_V + next_V.transpose());
 
-        // ---- Likelihood (same decomposition as IGGIWEKF) ----
         const double log_likelihood =
             log_intensity_marginal(r, pred_iggiw.alpha(), pred_iggiw.beta())
           + log_gaussian(z_bar, z_hat, S)
           + log_wishart_extent(Z_meas, X_hat, omega_);
         const double likelihood = std::exp(log_likelihood);
 
-        // ---- Write back into the stacked trajectory ----
         Dist result = predicted;
         result.mean().head(live) = new_mean_live;
         result.covariance().topLeftCorner(live, live) = new_P_live;
@@ -279,8 +256,6 @@ public:
         return nu.transpose() * S.ldlt().solve(nu);
     }
 
-    // ---- Setters (validated, mirror IGGIWEKF) ----
-
     void set_eta(double eta) {
         if (!(eta > 0.0) || !std::isfinite(eta))
             throw std::invalid_argument("eta must be positive and finite.");
@@ -324,7 +299,7 @@ private:
     int window_size_ = Dist::kDefaultWindow;
 
 private:
-    // Packed [pos_d; weight_1] x N format, matching IGGIWEKF::unpack_measurement.
+
     static void unpack_measurement(
         const Eigen::VectorXd& measurement, int d,
         Eigen::MatrixXd& positions, Eigen::VectorXd& weights) {
@@ -344,8 +319,6 @@ private:
         throw std::invalid_argument(
             "TrajectoryIGGIWEKF measurement must be length d or packed length (d+1)*N.");
     }
-
-    // ---- Log-likelihood helpers (mirror IGGIWEKF) ----
 
     static double logdet_spd(const Eigen::MatrixXd& A) {
         Eigen::LDLT<Eigen::MatrixXd> ldlt(A);
@@ -423,10 +396,10 @@ private:
     double centroid_power_ = 1.0;
 };
 
-} // namespace brew::filters
+}
 
 namespace brew::filters {
-// Concrete filter used for this model (RFS devirtualization).
+
 template <typename Scalar, int D, int De>
 struct default_filter<models::TrajectoryIGGIW<Scalar, D, De>> { using type = TrajectoryIGGIWEKF<Scalar, D, De>; };
-}  // namespace brew::filters
+}

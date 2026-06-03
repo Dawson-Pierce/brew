@@ -16,7 +16,7 @@ protected:
 };
 
 TEST_F(GMTracking, Comparison) {
-    // PHD
+
     auto phd = test::make_phd<models::Gaussian<>>(
         test::make_ekf(scenario), test::make_gm_birth(0.05), params);
     auto phd_result = test::run_tracking<decltype(phd), models::Gaussian<>>(
@@ -24,7 +24,6 @@ TEST_F(GMTracking, Comparison) {
     EXPECT_GE(phd_result.converged_steps, 10)
         << "PHD should track both targets for most of the run";
 
-    // CPHD
     auto cphd = test::make_cphd<models::Gaussian<>>(
         test::make_ekf(scenario), test::make_gm_birth(0.05), params);
     auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::Gaussian<>>(
@@ -32,7 +31,6 @@ TEST_F(GMTracking, Comparison) {
     EXPECT_GE(cphd_result.converged_steps, 10)
         << "CPHD should track both targets for most of the run";
 
-    // MBM
     auto mbm = test::make_mbm<models::Gaussian<>>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
     auto mbm_result = test::run_tracking<decltype(mbm), models::Gaussian<>>(
@@ -40,7 +38,6 @@ TEST_F(GMTracking, Comparison) {
     EXPECT_GE(mbm_result.converged_steps, 10)
         << "MBM should track both targets for most of the run";
 
-    // PMBM
     auto pmbm = test::make_pmbm<models::Gaussian<>>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
     auto pmbm_result = test::run_tracking<decltype(pmbm), models::Gaussian<>>(
@@ -48,7 +45,6 @@ TEST_F(GMTracking, Comparison) {
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "PMBM should track both targets for most of the run";
 
-    // GLMB
     auto glmb = test::make_glmb<models::Gaussian<>>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
     auto glmb_result = test::run_tracking<decltype(glmb), models::Gaussian<>>(
@@ -56,7 +52,6 @@ TEST_F(GMTracking, Comparison) {
     EXPECT_GE(glmb_result.converged_steps, 10)
         << "GLMB should track both targets for most of the run";
 
-    // JGLMB
     auto jglmb = test::make_jglmb<models::Gaussian<>>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
     auto jglmb_result = test::run_tracking<decltype(jglmb), models::Gaussian<>>(
@@ -65,7 +60,7 @@ TEST_F(GMTracking, Comparison) {
         << "JGLMB should track both targets for most of the run";
 
 #ifdef BREW_ENABLE_PLOTTING
-    // 2x3 comparison figure
+
     auto fig = test::create_comparison_figure();
 
     auto ax1 = test::comparison_subplot(fig, 2, 3, 0);
@@ -88,16 +83,13 @@ TEST_F(GMTracking, Comparison) {
 
     brew::plot_utils::save_figure(fig, test::output_dir() + "/gm_comparison.png");
 
-    // Cardinality figure
     test::plot_cardinality_comparison(scenario, cphd_result.cardinality,
         "GM CPHD - Estimated Cardinality", "gm_cphd_cardinality.png");
 #endif
 }
 
 TEST_F(GMTracking, PHDWithUKF) {
-    // Any Filter<Gaussian> plugs into an RFS through the base class. A PHD driven
-    // by a UKF (instead of the default EKF) must track the same targets; under the
-    // LTI SingleIntegrator dynamics the UKF predict equals the EKF/Kalman predict.
+
     auto phd = test::make_phd<models::Gaussian<>>(
         test::make_ukf(scenario), test::make_gm_birth(0.05), params);
     auto result = test::run_tracking<decltype(phd), models::Gaussian<>>(
@@ -107,8 +99,7 @@ TEST_F(GMTracking, PHDWithUKF) {
 }
 
 TEST_F(GMTracking, JGLMBGibbs) {
-    // JGLMB using the Gibbs sampler for the joint update (instead of exact Murty
-    // ranked assignment) should still track both targets for most of the run.
+
     auto jglmb = test::make_jglmb<models::Gaussian<>>(
         test::make_ekf(scenario), test::make_gm_birth(0.1), params);
     jglmb.set_use_gibbs(true);

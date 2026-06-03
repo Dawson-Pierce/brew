@@ -25,11 +25,10 @@ IcpResult PointToPointIcp::align(
     result.translation = t;
 
     for (int iter = 0; iter < params_.max_iterations; ++iter) {
-        // Transform source points
+
         Eigen::MatrixXd src_transformed = R * source.points();
         src_transformed.colwise() += t;
 
-        // Find correspondences
         std::vector<std::pair<int,int>> corr;
         if (params_.reverse_correspondences) {
             for (auto [ti, si] : find_correspondences(
@@ -44,7 +43,6 @@ IcpResult PointToPointIcp::align(
 
         const int N = static_cast<int>(corr.size());
 
-        // Compute centroids of matched points
         Eigen::Vector3d centroid_src = Eigen::Vector3d::Zero();
         Eigen::Vector3d centroid_tgt = Eigen::Vector3d::Zero();
         for (const auto& [si, ti] : corr) {
@@ -54,30 +52,25 @@ IcpResult PointToPointIcp::align(
         centroid_src /= N;
         centroid_tgt /= N;
 
-        // Build cross-covariance matrix
         Eigen::Matrix3d W = Eigen::Matrix3d::Zero();
         for (const auto& [si, ti] : corr) {
             W += (src_transformed.col(si) - centroid_src) *
                  (target.points().col(ti) - centroid_tgt).transpose();
         }
 
-        // SVD
         Eigen::JacobiSVD<Eigen::Matrix3d> svd(W, Eigen::ComputeFullU | Eigen::ComputeFullV);
         Eigen::Matrix3d U = svd.matrixU();
         Eigen::Matrix3d V = svd.matrixV();
 
-        // Handle reflection
         Eigen::Matrix3d D = Eigen::Matrix3d::Identity();
         D(2, 2) = (V * U.transpose()).determinant();
 
         Eigen::Matrix3d delta_R = V * D * U.transpose();
         Eigen::Vector3d delta_t = centroid_tgt - delta_R * centroid_src;
 
-        // Update cumulative transform
         R = delta_R * R;
         t = delta_R * t + delta_t;
 
-        // Compute RMSE
         double sum_sq = 0.0;
         Eigen::MatrixXd src_new = R * source.points();
         src_new.colwise() += t;
@@ -86,7 +79,6 @@ IcpResult PointToPointIcp::align(
         }
         double rmse = std::sqrt(sum_sq / N);
 
-        // Check convergence
         double delta_rmse = std::abs(rmse - result.rmse);
         result.rotation = R;
         result.translation = t;
@@ -99,9 +91,6 @@ IcpResult PointToPointIcp::align(
         }
     }
 
-    // Compute final likelihood using reverse correspondences (target→source).
-    // This gives p(measurement | template, pose): each measurement point finds
-    // its nearest template point, independent of template point count.
     Eigen::MatrixXd src_final = R * source.points();
     src_final.colwise() += t;
     auto final_corr = find_correspondences(
@@ -122,7 +111,6 @@ double PointToPointIcp::log_likelihood(
     Eigen::MatrixXd src_transformed = R * source.points();
     src_transformed.colwise() += t;
 
-    // Reverse correspondences: each target (measurement) point finds nearest source (template)
     auto correspondences = find_correspondences(
         target.points(), src_transformed, params_.max_correspondence_dist);
 
@@ -130,4 +118,4 @@ double PointToPointIcp::log_likelihood(
         target.points(), src_transformed, correspondences);
 }
 
-} // namespace brew::template_matching
+}

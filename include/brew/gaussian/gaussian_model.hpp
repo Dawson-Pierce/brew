@@ -8,8 +8,6 @@
 
 namespace brew::models {
 
-/// Gaussian distribution with mean and covariance.
-/// Pure parameter holder — merge/filter operations live elsewhere.
 // @mex model
 // @mex_name Gaussian
 // @mex_fields mean:vec, covariance:mat
@@ -32,7 +30,6 @@ public:
         return std::make_unique<Gaussian<T, D>>(mean_, covariance_);
     }
 
-    // ---- Data access ----
     [[nodiscard]] const Vector& mean() const { return mean_; }
     [[nodiscard]] Vector& mean() { return mean_; }
 
@@ -44,4 +41,4 @@ private:
     Matrix covariance_;
 };
 
-} // namespace brew::models
+}

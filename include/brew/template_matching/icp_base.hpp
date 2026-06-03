@@ -26,12 +26,11 @@ struct IcpParams {
     double tolerance = 1e-6;
     double max_correspondence_dist = std::numeric_limits<double>::max();
     double sigma_sq = 1.0;
-    double trim_fraction = 1.0; ///< Fraction of best correspondences to keep (0, 1]
-    bool use_target_centroid_init = false; ///< Override t_init with target centroid
-    bool reverse_correspondences = true;  ///< true: target→source (better tracking with partial overlap)
+    double trim_fraction = 1.0;
+    bool use_target_centroid_init = false;
+    bool reverse_correspondences = true;
 };
 
-/// Abstract base for ICP variants.
 class IcpBase {
 public:
     virtual ~IcpBase() = default;
@@ -45,7 +44,6 @@ public:
         const Eigen::Matrix3d& R_init = Eigen::Matrix3d::Identity(),
         const Eigen::Vector3d& t_init = Eigen::Vector3d::Zero()) const = 0;
 
-    /// Compute log-likelihood of the alignment (stays in log space).
     [[nodiscard]] virtual double log_likelihood(
         const PointCloud& source,
         const PointCloud& target,
@@ -57,9 +55,6 @@ public:
 protected:
     IcpParams params_;
 
-    /// Brute-force nearest-neighbor correspondences with optional trimming.
-    /// Returns vector of (source_idx, target_idx) pairs, sorted by distance,
-    /// trimmed to the best trim_fraction of matches within max_dist.
     [[nodiscard]] std::vector<std::pair<int, int>> find_correspondences(
         const Eigen::MatrixXd& source_transformed,
         const Eigen::MatrixXd& target,
@@ -92,7 +87,6 @@ protected:
             }
         }
 
-        // Trim to best fraction
         if (params_.trim_fraction < 1.0 && !matches.empty()) {
             std::sort(matches.begin(), matches.end(),
                 [](const Match& a, const Match& b) { return a.dist_sq < b.dist_sq; });
@@ -109,8 +103,6 @@ protected:
         return correspondences;
     }
 
-    /// Mean Gaussian log-likelihood per correspondence.
-    /// Returns log-likelihood (not exponentiated) to stay in log space.
     [[nodiscard]] double compute_log_likelihood(
         const Eigen::MatrixXd& source_transformed,
         const Eigen::MatrixXd& target,
@@ -126,10 +118,9 @@ protected:
             sum_sq += (target.col(ti) - source_transformed.col(si)).squaredNorm();
         }
 
-        // Mean log-likelihood per correspondence
         return -0.5 * d * std::log(2.0 * M_PI * params_.sigma_sq)
                - sum_sq / (2.0 * N * params_.sigma_sq);
     }
 };
 
-} // namespace brew::template_matching
+}

@@ -31,4 +31,4 @@ void plot(const template_matching::PointCloud& cloud,
     plot_utils::plot_point_cloud(cloud, opts);
 }
 
-} // namespace brew
+}

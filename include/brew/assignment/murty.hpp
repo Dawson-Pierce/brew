@@ -9,9 +9,6 @@
 
 namespace brew::assignment {
 
-/// Murty's algorithm for finding the K-best assignments.
-/// Returns up to k assignments in ascending cost order.
-/// Uses the Hungarian algorithm as the inner solver.
 [[nodiscard]] inline std::vector<AssignmentResult> murty(
     const Eigen::MatrixXd& cost_matrix, int k)
 {
@@ -23,7 +20,6 @@ namespace brew::assignment {
         return {};
     }
 
-    // A subproblem: cost matrix with some forced/excluded assignments
     struct Subproblem {
         Eigen::MatrixXd cost;
         AssignmentResult solution;
@@ -33,13 +29,11 @@ namespace brew::assignment {
         }
     };
 
-    // Priority queue: min-heap by total cost
     auto cmp = [](const Subproblem& a, const Subproblem& b) {
         return a.solution.total_cost > b.solution.total_cost;
     };
     std::priority_queue<Subproblem, std::vector<Subproblem>, decltype(cmp)> pq(cmp);
 
-    // Solve the initial (unconstrained) problem
     auto initial = hungarian(cost_matrix);
     if (initial.assignments.empty()) {
         return {};
@@ -60,18 +54,15 @@ namespace brew::assignment {
 
         if (static_cast<int>(results.size()) >= k) break;
 
-        // Generate subproblems by partitioning (Murty's method)
         const auto& assignments = best.solution.assignments;
         Eigen::MatrixXd constrained_cost = best.cost;
 
         for (std::size_t t = 0; t < assignments.size(); ++t) {
             auto [fix_row, fix_col] = assignments[t];
 
-            // Exclude this specific assignment: set cost(fix_row, fix_col) = INF
             Eigen::MatrixXd sub_cost = constrained_cost;
             sub_cost(fix_row, fix_col) = INF;
 
-            // Solve the subproblem
             auto sub_result = hungarian(sub_cost);
 
             if (!sub_result.assignments.empty() &&
@@ -83,9 +74,6 @@ namespace brew::assignment {
                 pq.push(std::move(sub));
             }
 
-            // Fix this assignment for subsequent subproblems:
-            // Row fix_row must be assigned to col fix_col.
-            // Exclude fix_row from all other columns and fix_col from all other rows.
             for (int j = 0; j < n_cols; ++j) {
                 if (j != fix_col) constrained_cost(fix_row, j) = INF;
             }
@@ -98,4 +86,4 @@ namespace brew::assignment {
     return results;
 }
 
-} // namespace brew::assignment
+}

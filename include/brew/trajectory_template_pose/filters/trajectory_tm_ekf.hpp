@@ -1,4 +1,5 @@
 #pragma once
+
 #include "brew/shared/filter_traits.hpp"
 
 #include "brew/assert.hpp"
@@ -16,11 +17,6 @@
 
 namespace brew::filters {
 
-/// Trajectory EKF for template-matching pose tracking (3D only).
-/// Stacks translational kinematic state across time (like TrajectoryGaussianEKF),
-/// while rotation lives on SO(3) and is tracked only on the current step.
-///
-/// Must have a TemplateLibrary set via set_template_library() before correct() is called.
 // @mex filter
 // @mex_name TrajectoryTmEkf
 // @mex_dist TrajectoryTemplatePose
@@ -63,9 +59,6 @@ public:
         Eigen::VectorXd prev_last_state = prev.get_last_state();
         const auto& prev_tp = prev.current();
 
-        // Dynamics: use the rotation-coupled overloads when the component has
-        // been PCA-aligned (prior rotation is meaningful), otherwise fall back
-        // to the base 3-arg overloads. Matches pre-library behavior.
         Eigen::VectorXd next_state;
         Eigen::MatrixXd F;
         if (!prev_tp.needs_pca_alignment()) {
@@ -96,7 +89,6 @@ public:
 
         result.mean_at(last) = next_state;
 
-        // Augmented covariance for the current step's TemplatePose
         const int n_rot = prev_tp.rot_dim();
         const int n_aug = sd + n_rot;
         Eigen::MatrixXd aug_cov = Eigen::MatrixXd::Zero(n_aug, n_aug);
@@ -107,8 +99,7 @@ public:
 
         Eigen::Matrix3d next_rotation = this->dyn_obj_->propagate_extent(
             dt, prev_last_state, prev_tp.rotation());
-        // with_updated_state preserves template_id / pos_indices / flag via
-        // copy — the alignment flag propagates from prev_tp automatically.
+
         result.history_at(last) = prev_tp.with_updated_state(
             next_state, std::move(aug_cov), std::move(next_rotation));
 
@@ -132,33 +123,25 @@ public:
         const int n_rot = pred_tp.rot_dim();
         const auto& pos_idx = pred_tp.pos_indices();
 
-        // Reconstruct measurement as 3×M PointCloud (column-major)
         const int M = static_cast<int>(measurement.size()) / d;
         Eigen::MatrixXd meas_mat = Eigen::Map<const Eigen::MatrixXd>(measurement.data(), d, M);
         template_matching::PointCloud meas_cloud(meas_mat);
 
-        // Stage A: run ICP. Cold-start vs tracking is encapsulated in the runner.
         const auto psm = icp_runner_.run(
             meas_cloud, pred_tp.template_id(),
             pred_tp.rotation(), pred_tp.needs_pca_alignment());
 
-        // Stage B: fixed-size EKF update using the pseudo-measurement.
-
-        // Position-selection matrix on translational state
         Eigen::MatrixXd H_pos = Eigen::MatrixXd::Zero(d, sd);
         for (int i = 0; i < d; ++i) {
             H_pos(i, pos_idx[i]) = 1.0;
         }
         Eigen::Vector3d trans_innov = psm.t - H_pos * prev_state;
 
-        // --- Augmented pose correction on current step ---
-        // Unified 6-DoF EKF: cold-start vs tracking is encapsulated in
-        // psm.R_ref (see TmEkf for the rationale). No branch needed here.
         const Eigen::MatrixXd& P_aug = pred_tp.covariance();
         const Eigen::MatrixXd& R_meas = this->measurement_noise_;
         const int n_aug = sd + n_rot;
 
-        constexpr int m_dim = d + 3;  // 6
+        constexpr int m_dim = d + 3;
         Eigen::Matrix<double, m_dim, 1> innovation;
         innovation.head<3>() = trans_innov;
         innovation.tail<3>() = psm.rotation_innovation();
@@ -184,8 +167,6 @@ public:
         const double mahal = innovation.transpose() * S_ldlt.solve(innovation);
         const double log_det_S = S_ldlt.vectorD().array().abs().log().sum();
         constexpr int innov_dim = m_dim;
-
-        // --- Stacked translational correction on the live slice ---
 
         Eigen::MatrixXd P_live = predicted.covariance().topLeftCorner(live, live);
         Eigen::VectorXd mean_live = predicted.mean().head(live);
@@ -213,9 +194,7 @@ public:
         for (int i = 0; i < predicted.window_size(); ++i) {
             result.history_at(i).mean() = result.mean_at(i);
         }
-        // `with_updated_state_aligned` copies the current-step TemplatePose
-        // (preserving template_id / pos_indices), overwrites the kinematic
-        // fields, and clears the PCA-alignment flag in one step.
+
         Eigen::VectorXd last_mean = result.mean_at(last);
         result.history_at(last) = result.history_at(last).with_updated_state_aligned(
             std::move(last_mean), std::move(next_aug_cov), next_rotation);
@@ -257,7 +236,6 @@ public:
         icp_runner_.set_icp(std::move(icp));
     }
 
-    /// Set the template library. Must be called before correct().
     void set_template_library(std::shared_ptr<template_matching::TemplateLibrary> lib) {
         icp_runner_.set_template_library(std::move(lib));
     }
@@ -273,10 +251,10 @@ private:
     template_matching::TmIcpRunner icp_runner_;
 };
 
-} // namespace brew::filters
+}
 
 namespace brew::filters {
-// Concrete filter used for this model (RFS devirtualization).
+
 template <typename Scalar, int D>
 struct default_filter<models::TrajectoryTemplatePose<Scalar, D>> { using type = TrajectoryTmEkf<Scalar, D>; };
-}  // namespace brew::filters
+}

@@ -27,9 +27,8 @@ std::vector<Eigen::MatrixXd> Watershed::cluster(const Eigen::MatrixXd& Z) const 
     auto lin = [nlat](int i, int j) { return i + j * nlat; };
     const std::size_t N = static_cast<std::size_t>(nlat) * nlon;
 
-    std::vector<int> label(N, -1);   // -1 = background / unlabeled
+    std::vector<int> label(N, -1);
 
-    // --- 1. Local maxima (no strictly-greater on-neighbor) within the mask ---
     std::vector<int> maxima;
     for (int j = 0; j < nlon; ++j) {
         for (int i = 0; i < nlat; ++i) {
@@ -48,7 +47,6 @@ std::vector<Eigen::MatrixXd> Watershed::cluster(const Eigen::MatrixXd& Z) const 
         }
     }
 
-    // --- 2. Seeds: maxima thinned by min_seed_dist, highest kept first ---
     std::sort(maxima.begin(), maxima.end(), [&](int a, int b) {
         return Z(a % nlat, a / nlat) > Z(b % nlat, b / nlat);
     });
@@ -68,8 +66,7 @@ std::vector<Eigen::MatrixXd> Watershed::cluster(const Eigen::MatrixXd& Z) const 
                 blocked[static_cast<std::size_t>(lin(ii, jj))] = 1;
     }
 
-    // --- 3. Priority flood from cores, high intensity to low ---
-    std::priority_queue<std::pair<double, int>> pq;   // (intensity, cell)
+    std::priority_queue<std::pair<double, int>> pq;
     std::vector<char> queued(N, 0);
     auto push_nbrs = [&](int cell) {
         const int i = cell % nlat, j = cell / nlat;
@@ -111,7 +108,6 @@ std::vector<Eigen::MatrixXd> Watershed::cluster(const Eigen::MatrixXd& Z) const 
         push_nbrs(cell);
     }
 
-    // --- 4. Fallback: any on-component with no surviving seed gets its own basin ---
     for (int j = 0; j < nlon; ++j) {
         for (int i = 0; i < nlat; ++i) {
             if (!on(i, j) || label[static_cast<std::size_t>(lin(i, j))] != -1) continue;
@@ -137,7 +133,6 @@ std::vector<Eigen::MatrixXd> Watershed::cluster(const Eigen::MatrixXd& Z) const 
         }
     }
 
-    // --- 5. Gather basins, drop small, emit [lon; lat; intensity] columns ---
     std::unordered_map<int, std::vector<int>> basins;
     for (int j = 0; j < nlon; ++j)
         for (int i = 0; i < nlat; ++i) {
@@ -169,4 +164,4 @@ std::vector<Eigen::MatrixXd> Watershed::cluster(const Eigen::MatrixXd& Z) const 
     return result;
 }
 
-} // namespace brew::clustering
+}

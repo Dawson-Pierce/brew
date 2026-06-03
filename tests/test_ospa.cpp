@@ -42,14 +42,14 @@ TEST(OSPA, CardinalityMismatchPenalty) {
     a << 0.0, 0.0;
     est.push_back(a);
     truth.push_back(a);
-    // Add extra truth target far away
+
     Eigen::VectorXd b(2);
     b << 100.0, 100.0;
     truth.push_back(b);
 
     double cutoff = 10.0;
     auto result = calculate_ospa(est, truth, cutoff, 2);
-    // Should have non-zero cardinality component due to mismatch
+
     EXPECT_GT(result.cardinality, 0.0);
     EXPECT_GT(result.distance, 0.0);
 }

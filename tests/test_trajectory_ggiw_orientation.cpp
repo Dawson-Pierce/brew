@@ -4,10 +4,6 @@
 
 using namespace brew;
 
-// ============================================================
-// Model tests
-// ============================================================
-
 namespace {
 constexpr int kTestWindow = 10;
 }
@@ -30,12 +26,10 @@ TEST(TrajectoryGGIWOrientationModel, ConstructAndAccessors) {
     EXPECT_EQ(g.state_dim, 4);
     EXPECT_EQ(g.window_size(), 1);
 
-    // Basis should be initialized from V decomposition
     EXPECT_EQ(g.current().basis().rows(), 2);
     EXPECT_EQ(g.current().basis().cols(), 2);
     EXPECT_TRUE(g.current().has_eigenvalues());
 
-    // Trajectory helpers
     EXPECT_EQ(g.get_last_state().size(), 4);
     EXPECT_EQ(g.get_last_cov().rows(), 4);
     EXPECT_EQ(g.mean_history().cols(), 1);
@@ -56,10 +50,6 @@ TEST(TrajectoryGGIWOrientationModel, Clone) {
     EXPECT_EQ(typed_clone->state_dim, 4);
     EXPECT_TRUE(typed_clone->current().has_eigenvalues());
 }
-
-// ============================================================
-// Filter tests
-// ============================================================
 
 class TrajectoryGGIWOrientationEKFTest : public ::testing::Test {
 protected:
@@ -93,16 +83,12 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, PredictGrowsTrajectory) {
 
     auto pred = filter.predict(1.0, tg);
 
-    // Window should grow (stacked_size() reports live elements; mean() is the
-    // full fixed-capacity stacked vector).
     EXPECT_EQ(pred.window_size(), 2);
-    EXPECT_EQ(pred.stacked_size(), 8);  // 2 time steps * 4 state dim
+    EXPECT_EQ(pred.stacked_size(), 8);
 
-    // Last state should propagate
     Eigen::VectorXd last = pred.get_last_state();
-    EXPECT_NEAR(last(0), 1.0, 1e-10);  // x += vx*dt
+    EXPECT_NEAR(last(0), 1.0, 1e-10);
 
-    // Basis should be preserved
     EXPECT_EQ(pred.current().basis().rows(), 2);
 }
 
@@ -116,7 +102,6 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, CorrectPopulatesBasis) {
 
     models::TrajectoryGGIWOrientation<>tg(4, models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
 
-    // Predict then correct
     auto pred = filter.predict(1.0, tg);
 
     Eigen::VectorXd meas(2);
@@ -124,18 +109,16 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, CorrectPopulatesBasis) {
     auto [corrected, likelihood] = filter.correct(meas, pred);
 
     EXPECT_GT(likelihood, 0.0);
-    // Alpha increases by W=1 from predicted (which was decayed from 10 by eta=1 -> still 10)
+
     EXPECT_DOUBLE_EQ(corrected.current().alpha(), pred.current().alpha() + 1.0);
     EXPECT_DOUBLE_EQ(corrected.current().beta(), pred.current().beta() + 1.0);
-    // v increases by W=1 from predicted (which was decayed during predict)
+
     EXPECT_DOUBLE_EQ(corrected.current().v(), pred.current().v() + 1.0);
 
-    // Basis should be populated from SVD alignment
     EXPECT_EQ(corrected.current().basis().rows(), 2);
     EXPECT_EQ(corrected.current().basis().cols(), 2);
     EXPECT_TRUE(corrected.current().has_eigenvalues());
 
-    // Window size unchanged by correct
     EXPECT_EQ(corrected.window_size(), pred.window_size());
 }
 
@@ -149,7 +132,6 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, MultipleStepsBasisAlignment) {
 
     models::TrajectoryGGIWOrientation<>tg(4, models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
 
-    // Step 1: predict + correct
     auto pred1 = filter.predict(1.0, tg);
     Eigen::VectorXd meas1(2);
     meas1 << 1.05, 0.05;
@@ -157,7 +139,6 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, MultipleStepsBasisAlignment) {
 
     Eigen::MatrixXd basis1 = corr1.current().basis();
 
-    // Step 2: predict + correct
     auto pred2 = filter.predict(1.0, corr1);
     Eigen::VectorXd meas2(2);
     meas2 << 2.1, 0.05;
@@ -165,15 +146,13 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, MultipleStepsBasisAlignment) {
 
     Eigen::MatrixXd basis2 = corr2.current().basis();
 
-    // Basis should remain aligned across steps
     Eigen::MatrixXd alignment = (basis2.transpose() * basis1).cwiseAbs();
     for (int k = 0; k < 2; ++k) {
         EXPECT_GT(alignment(k, k), 0.5);
     }
 
-    // Trajectory should have grown (stacked_size() reports live elements).
     EXPECT_EQ(corr2.window_size(), 3);
-    EXPECT_EQ(corr2.stacked_size(), 12);  // 3 steps * 4
+    EXPECT_EQ(corr2.stacked_size(), 12);
 }
 
 TEST_F(TrajectoryGGIWOrientationEKFTest, Gate) {
@@ -194,4 +173,3 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, Gate) {
     double gate_far = filter.gate(meas_far, tg);
     EXPECT_GT(gate_far, 100.0);
 }
-

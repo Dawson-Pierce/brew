@@ -22,11 +22,9 @@ TEST(EKFTest, PredictStep) {
     Gaussian prior(mean, cov);
     auto predicted = ekf.predict(1.0, prior);
 
-    // Mean should propagate: x=1, y=1
     EXPECT_NEAR(predicted.mean()(0), 1.0, 1e-10);
     EXPECT_NEAR(predicted.mean()(1), 1.0, 1e-10);
 
-    // Covariance should grow
     EXPECT_GT(predicted.covariance()(0, 0), cov(0, 0));
 }
 
@@ -35,7 +33,6 @@ TEST(EKFTest, CorrectStep) {
     EKF<> ekf;
     ekf.set_dynamics(dyn);
 
-    // Position-only measurement: H = [I2 02]
     Eigen::MatrixXd H(2, 4);
     H << 1, 0, 0, 0,
          0, 1, 0, 0;
@@ -52,10 +49,8 @@ TEST(EKFTest, CorrectStep) {
 
     auto [corrected, likelihood] = ekf.correct(z, predicted);
 
-    // Corrected mean should move toward measurement
     EXPECT_GT(corrected.mean()(0), 0.0);
     EXPECT_LT(corrected.mean()(0), 0.5);
 
-    // Likelihood should be positive
     EXPECT_GT(likelihood, 0.0);
 }

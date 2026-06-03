@@ -18,7 +18,6 @@ void plot_gaussian(matplot::axes_handle ax,
     const double mu = g.mean()(idx);
     const double sigma = std::sqrt(g.covariance()(idx, idx));
 
-    // Generate x range: mu +/- num_std*sigma
     auto x = linspace(mu - num_std * sigma * 2.0, mu + num_std * sigma * 2.0, 200);
     std::vector<double> y(x.size());
     for (std::size_t i = 0; i < x.size(); ++i) {
@@ -29,7 +28,6 @@ void plot_gaussian(matplot::axes_handle ax,
     line->color(color);
     line->line_width(1.5f);
 
-    // Mean marker
     ax->hold(true);
     std::vector<double> mx_vec = {mu};
     std::vector<double> my_vec = {normpdf(mu, mu, sigma)};
@@ -49,23 +47,19 @@ void plot_gaussian_2d(matplot::axes_handle ax,
         throw std::invalid_argument("plot_gaussian_2d: plt_inds must have 2 elements");
     }
 
-    // Generate ellipse points
     auto pts = generate_ellipse_points(g.mean(), g.covariance(), plt_inds, num_std);
 
-    // Extract x, y columns
     std::vector<double> x(pts.rows()), y(pts.rows());
     for (int i = 0; i < pts.rows(); ++i) {
         x[i] = pts(i, 0);
         y[i] = pts(i, 1);
     }
 
-    // Filled ellipse
     ax->hold(true);
     auto fill_h = ax->fill(x, y);
     fill_h->color({alpha, color[1], color[2], color[3]});
     fill_h->line_width(1.0f);
 
-    // Mean marker
     const double mx = g.mean()(plt_inds[0]);
     const double my = g.mean()(plt_inds[1]);
     std::vector<double> mx_vec = {mx};
@@ -89,12 +83,10 @@ void plot_gaussian_3d(matplot::axes_handle ax,
 
     auto mesh = generate_ellipsoid_mesh(g.mean(), g.covariance(), plt_inds, num_std);
 
-    // Convert to vectors of vectors for surf
     auto X = eigen_to_mat(mesh.X);
     auto Y = eigen_to_mat(mesh.Y);
     auto Z = eigen_to_mat(mesh.Z);
 
-    // Uniform CData so the surface uses a single color from the colormap
     auto C = X;
     for (auto& row : C) std::fill(row.begin(), row.end(), static_cast<double>(colormap_value));
 
@@ -103,7 +95,6 @@ void plot_gaussian_3d(matplot::axes_handle ax,
     surf->edge_color({0.0f, 0.0f, 0.0f, 0.0f});
     ax->colormap(std::vector<std::vector<double>>{{color[1], color[2], color[3]}});
 
-    // Mean marker
     ax->hold(true);
     std::vector<double> px = {g.mean()(plt_inds[0])};
     std::vector<double> py = {g.mean()(plt_inds[1])};
@@ -146,5 +137,4 @@ void plot_gaussian(const brew::models::Gaussian<>& g,
     }
 }
 
-} // namespace brew::plot_utils
-
+}

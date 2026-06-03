@@ -19,13 +19,13 @@ TEST(SingleIntegrator2D, StateMatrix) {
 TEST(SingleIntegrator2D, Propagation) {
     SingleIntegrator<> dyn(2);
     Eigen::VectorXd state(4);
-    state << 0, 0, 1, 1; // at origin, moving diagonally
+    state << 0, 0, 1, 1;
 
     auto next = dyn.propagate_state(1.0, state);
-    EXPECT_DOUBLE_EQ(next(0), 1.0); // x = 0 + 1*1
-    EXPECT_DOUBLE_EQ(next(1), 1.0); // y = 0 + 1*1
-    EXPECT_DOUBLE_EQ(next(2), 1.0); // vx unchanged
-    EXPECT_DOUBLE_EQ(next(3), 1.0); // vy unchanged
+    EXPECT_DOUBLE_EQ(next(0), 1.0);
+    EXPECT_DOUBLE_EQ(next(1), 1.0);
+    EXPECT_DOUBLE_EQ(next(2), 1.0);
+    EXPECT_DOUBLE_EQ(next(3), 1.0);
 }
 
 TEST(SingleIntegrator1D, Propagation) {
@@ -34,8 +34,8 @@ TEST(SingleIntegrator1D, Propagation) {
     state << 5.0, 2.0;
 
     auto next = dyn.propagate_state(0.5, state);
-    EXPECT_DOUBLE_EQ(next(0), 6.0); // 5 + 2*0.5
-    EXPECT_DOUBLE_EQ(next(1), 2.0); // vx constant (no input)
+    EXPECT_DOUBLE_EQ(next(0), 6.0);
+    EXPECT_DOUBLE_EQ(next(1), 2.0);
 }
 
 TEST(DoubleIntegrator2D, StateNames) {
@@ -49,9 +49,9 @@ TEST(DoubleIntegrator2D, StateNames) {
 TEST(ConstantTurn2DTest, StraightLine) {
     ConstantTurn2D<> dyn;
     Eigen::VectorXd state(5);
-    state << 0, 0, 10, 0, 0; // v=10, theta=0, omega=0
+    state << 0, 0, 10, 0, 0;
 
     auto next = dyn.propagate_state(1.0, state);
-    EXPECT_NEAR(next(0), 10.0, 1e-10); // x = v*cos(0)*dt
-    EXPECT_NEAR(next(1), 0.0, 1e-10);  // y = v*sin(0)*dt
+    EXPECT_NEAR(next(0), 10.0, 1e-10);
+    EXPECT_NEAR(next(1), 0.0, 1e-10);
 }

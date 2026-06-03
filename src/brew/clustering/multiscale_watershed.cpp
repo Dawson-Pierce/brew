@@ -29,7 +29,6 @@ std::vector<Eigen::MatrixXd> MultiScaleWatershed::cluster(const Eigen::MatrixXd&
     auto lin = [nlat](int i, int j) { return i + j * nlat; };
     const std::size_t N = static_cast<std::size_t>(nlat) * nlon;
 
-    // --- Local maxima within the mask (shared by both scales) ---
     std::vector<int> maxima;
     for (int j = 0; j < nlon; ++j) {
         for (int i = 0; i < nlat; ++i) {
@@ -51,7 +50,6 @@ std::vector<Eigen::MatrixXd> MultiScaleWatershed::cluster(const Eigen::MatrixXd&
         return Z(a % nlat, a / nlat) > Z(b % nlat, b / nlat);
     });
 
-    // Seeds: maxima thinned to separation `rr`, highest kept first.
     auto seed_thin = [&](int rr, std::vector<int>& label, int& nseed) {
         std::vector<char> blocked(N, 0);
         std::vector<int> seeds;
@@ -71,8 +69,6 @@ std::vector<Eigen::MatrixXd> MultiScaleWatershed::cluster(const Eigen::MatrixXd&
         return seeds;
     };
 
-    // Priority flood from seeds, high intensity to low. When `region` is given a
-    // basin may only grow into cells sharing the seed's region label.
     auto flood = [&](std::vector<int>& label, const std::vector<int>& seeds,
                      const std::vector<int>* region) {
         std::priority_queue<std::pair<double, int>> pq;
@@ -121,7 +117,6 @@ std::vector<Eigen::MatrixXd> MultiScaleWatershed::cluster(const Eigen::MatrixXd&
         }
     };
 
-    // Any on-cell left unlabeled gets its own basin (confined to `region`).
     auto fallback = [&](std::vector<int>& label, int& nlbl, const std::vector<int>* region) {
         for (int j = 0; j < nlon; ++j) {
             for (int i = 0; i < nlat; ++i) {
@@ -152,21 +147,18 @@ std::vector<Eigen::MatrixXd> MultiScaleWatershed::cluster(const Eigen::MatrixXd&
         }
     };
 
-    // --- Coarse pass: carve the field into systems ---
     std::vector<int> coarse(N, -1);
     int ncoarse = 0;
     std::vector<int> cseeds = seed_thin(region_dist_, coarse, ncoarse);
     flood(coarse, cseeds, nullptr);
     fallback(coarse, ncoarse, nullptr);
 
-    // --- Fine pass: split each system into cells, confined to its system ---
     std::vector<int> fine(N, -1);
     int nfine = 0;
     std::vector<int> fseeds = seed_thin(min_seed_dist_, fine, nfine);
     flood(fine, fseeds, &coarse);
     fallback(fine, nfine, &coarse);
 
-    // --- Gather fine cells, drop small / weak-cored, emit [lon; lat; intensity] ---
     std::unordered_map<int, std::vector<int>> cells;
     for (int j = 0; j < nlon; ++j)
         for (int i = 0; i < nlat; ++i) {
@@ -198,4 +190,4 @@ std::vector<Eigen::MatrixXd> MultiScaleWatershed::cluster(const Eigen::MatrixXd&
     return result;
 }
 
-} // namespace brew::clustering
+}

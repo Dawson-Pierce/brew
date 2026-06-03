@@ -1,4 +1,5 @@
 #pragma once
+
 #include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
@@ -11,7 +12,6 @@
 
 namespace brew::filters {
 
-/// Extended Kalman Filter for Gaussian distributions.
 // @mex filter
 // @mex_name EKF
 // @mex_dist Gaussian
@@ -41,7 +41,6 @@ public:
         const Dist& prev) const override {
 
         typename Base::StateMatrix F = this->dyn_obj_->get_state_mat(dt, prev.mean());
-        // const auto G = this->dyn_obj_->get_input_mat(dt, prev.mean());
 
         typename Base::StateVector predicted_mean = this->dyn_obj_->propagate_state(dt, prev.mean());
         typename Base::StateMatrix predicted_cov = F * prev.covariance() * F.transpose()
@@ -93,12 +92,6 @@ public:
         return innovation.transpose() * S.ldlt().solve(innovation);
     }
 
-    /// LTI fast path: for linear time-invariant dynamics the state transition F
-    /// depends only on dt, so build it ONCE and apply that shared F to every
-    /// component, instead of rebuilding F per target (predict() builds F twice
-    /// per component: once explicitly and once inside propagate_state). The math
-    /// is identical to predict() (same F, same F*x and F*P*F^T + Q), so results
-    /// are bit-for-bit unchanged. Falls back to the per-component loop otherwise.
     template <int N>
     void predict_batch(double dt, models::Mixture<Dist, N>& mix) const {
         if (mix.size() == 0) return;
@@ -111,19 +104,16 @@ public:
         }
     }
 
-    /// Polymorphic entry point used by the RFS (base-pointer call). Delegates to
-    /// the template predict_batch for the dynamic mixture, preserving the LTI
-    /// shared-F fast path inside this concrete override (no re-virtualization).
     void predict_batch_dynamic(
         double dt, models::Mixture<Dist, Eigen::Dynamic>& mix) const override {
         this->predict_batch(dt, mix);
     }
 };
 
-} // namespace brew::filters
+}
 
 namespace brew::filters {
-// Concrete filter used for this model (RFS devirtualization).
+
 template <typename Scalar, int D>
 struct default_filter<models::Gaussian<Scalar, D>> { using type = EKF<Scalar, D>; };
-}  // namespace brew::filters
+}

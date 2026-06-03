@@ -4,7 +4,6 @@
 
 namespace brew::template_matching {
 
-/// Linearized point-to-plane ICP.
 // @mex icp
 // @mex_name PointToPlaneIcp
 // @mex_namespace template_matching
@@ -27,9 +26,8 @@ public:
 
     [[nodiscard]] std::unique_ptr<IcpBase> clone() const override;
 
-    /// Estimate surface normals via local PCA with k nearest neighbors.
     [[nodiscard]] static Eigen::MatrixXd estimate_normals(
         const PointCloud& cloud, int k);
 };
 
-} // namespace brew::template_matching
+}

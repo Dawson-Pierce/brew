@@ -6,18 +6,15 @@ namespace brew::plot_utils {
 
 namespace {
 
-/// Rational approximation for the probit (inverse normal CDF) function.
-/// Abramowitz & Stegun 26.2.23 — accurate to ~4.5e-4.
 double probit(double p) {
     if (p <= 0.0 || p >= 1.0) {
         throw std::domain_error("probit: p must be in (0, 1)");
     }
-    // Work in the lower tail
+
     const bool lower = (p <= 0.5);
     const double t_p = lower ? p : (1.0 - p);
     const double t = std::sqrt(-2.0 * std::log(t_p));
 
-    // Rational approximation coefficients
     constexpr double c0 = 2.515517;
     constexpr double c1 = 0.802853;
     constexpr double c2 = 0.010328;
@@ -30,19 +27,17 @@ double probit(double p) {
     return lower ? -z : z;
 }
 
-} // anonymous namespace
+}
 
 double chi2inv(double p, int dof) {
     if (p <= 0.0) return 0.0;
     if (p >= 1.0) return std::numeric_limits<double>::infinity();
     if (dof <= 0) throw std::domain_error("chi2inv: dof must be positive");
 
-    // Exact formula for dof == 2
     if (dof == 2) {
         return -2.0 * std::log(1.0 - p);
     }
 
-    // Wilson-Hilferty approximation for general dof
     const double d = static_cast<double>(dof);
     const double z = probit(p);
     const double h = 2.0 / (9.0 * d);
@@ -80,24 +75,20 @@ Eigen::MatrixXd generate_ellipse_points(
         throw std::invalid_argument("generate_ellipse_points: plt_inds must have 2 elements");
     }
 
-    // Extract 2x2 sub-covariance
     Eigen::Matrix2d S;
     S(0, 0) = covariance(plt_inds[0], plt_inds[0]);
     S(0, 1) = covariance(plt_inds[0], plt_inds[1]);
     S(1, 0) = covariance(plt_inds[1], plt_inds[0]);
     S(1, 1) = covariance(plt_inds[1], plt_inds[1]);
 
-    // Eigendecomposition
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> eig(S);
     Eigen::Vector2d eigenvalues = eig.eigenvalues().cwiseMax(0.0);
     Eigen::Matrix2d eigenvectors = eig.eigenvectors();
 
-    // Scale by sqrt(eigenvalues) * scale
     Eigen::Matrix2d L = eigenvectors *
         Eigen::Vector2d(scale * std::sqrt(eigenvalues(0)),
                         scale * std::sqrt(eigenvalues(1))).asDiagonal();
 
-    // Generate unit circle
     auto theta = linspace(0.0, 2.0 * std::numbers::pi, n_points);
 
     Eigen::MatrixXd pts(n_points, 2);
@@ -142,7 +133,6 @@ EllipsoidMesh generate_ellipsoid_mesh(
         throw std::invalid_argument("generate_ellipsoid_mesh: plt_inds must have 3 elements");
     }
 
-    // Extract 3x3 sub-covariance
     Eigen::Matrix3d S;
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
@@ -150,18 +140,15 @@ EllipsoidMesh generate_ellipsoid_mesh(
         }
     }
 
-    // Eigendecomposition
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eig(S);
     Eigen::Vector3d eigenvalues = eig.eigenvalues().cwiseMax(0.0);
     Eigen::Matrix3d eigenvectors = eig.eigenvectors();
 
-    // Scale by sqrt(eigenvalues) * scale
     Eigen::Matrix3d L = eigenvectors *
         Eigen::Vector3d(scale * std::sqrt(eigenvalues(0)),
                         scale * std::sqrt(eigenvalues(1)),
                         scale * std::sqrt(eigenvalues(2))).asDiagonal();
 
-    // Generate unit sphere
     auto sphere = unit_sphere(n);
     const int rows = n + 1;
     const int cols = n + 1;
@@ -198,5 +185,4 @@ std::vector<std::vector<double>> eigen_to_mat(const Eigen::MatrixXd& m) {
     return result;
 }
 
-} // namespace brew::plot_utils
-
+}

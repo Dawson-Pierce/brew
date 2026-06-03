@@ -3,6 +3,7 @@
 // Component merge for the `trajectory_template_pose` package -- owns ONLY the TrajectoryTemplatePose merge
 // (no cross-model overload set). In namespace brew::trajectory_template_pose so the package's
 // concrete RFS resolve an unqualified merge(...) here.
+
 #include "brew/shared/mixture.hpp"
 #include "brew/trajectory_template_pose/trajectory_template_pose_model.hpp"
 #include "brew/shared/fusion/trajectory_mahal.hpp"
@@ -15,7 +16,6 @@
 #include <vector>
 
 namespace brew::trajectory_template_pose {
-
 
 template <typename Scalar, int D, int N>
 void merge(models::Mixture<models::TrajectoryTemplatePose<Scalar, D>, N>& mix, double threshold) {
@@ -89,4 +89,4 @@ void merge(models::Mixture<models::TrajectoryTemplatePose<Scalar, D>, N>& mix, d
     }
 }
 
-}  // namespace brew::trajectory_template_pose
+}

@@ -1,4 +1,5 @@
 #pragma once
+
 #include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
@@ -10,7 +11,6 @@
 
 namespace brew::filters {
 
-/// EKF for Gaussian trajectory distributions.
 // @mex filter
 // @mex_name TrajectoryGaussianEKF
 // @mex_dist TrajectoryGaussian
@@ -47,20 +47,15 @@ public:
         Dist result = prev;
         const int sd = prev.state_dim;
 
-        // Dynamics: predict the new step from prev's current last state
         Eigen::VectorXd prev_last_state = prev.get_last_state();
         Eigen::VectorXd next_state = this->dyn_obj_->propagate_state(dt, prev_last_state);
         Eigen::MatrixXd F = this->dyn_obj_->get_state_mat(dt, prev_last_state);
 
-        // Advance ring buffer (slides if at cap); new tail slot is zeroed
         result.advance_window();
 
         const int last = result.last_index();
         const int prev_last = last - 1;
 
-        // Stacked covariance: fill new last row/col and auto-cov
-        // cov[last, k]    = F * cov[prev_last, k]           for k < last
-        // cov[last, last] = F * cov[prev_last, prev_last] * F^T + Q
         if (prev_last >= 0) {
             for (int k = 0; k < last; ++k) {
                 result.cov_at(last, k) = F * result.cov_at(prev_last, k);
@@ -70,11 +65,10 @@ public:
                 F * result.cov_at(prev_last, prev_last) * F.transpose()
                 + this->process_noise_;
         } else {
-            // First step after an empty trajectory: only process noise.
+
             result.cov_at(last, last) = this->process_noise_;
         }
 
-        // Stacked mean + history marginal
         result.mean_at(last) = next_state;
         result.history_at(last) = InnerDist(
             next_state,
@@ -94,16 +88,13 @@ public:
 
         const Eigen::VectorXd prev_state = predicted.get_last_state();
 
-        // Measurement model evaluated at the last state
         Eigen::VectorXd est_meas = this->estimate_measurement(prev_state);
         Eigen::MatrixXd H = this->get_measurement_matrix(prev_state);
         const int m = static_cast<int>(H.rows());
 
-        // H_dot selects the last state block from the live stacked state.
         Eigen::MatrixXd H_dot = Eigen::MatrixXd::Zero(m, live);
         H_dot.block(0, live - sd, m, sd) = H;
 
-        // Kalman update on the live slice
         Eigen::MatrixXd P_live = predicted.covariance().topLeftCorner(live, live);
         Eigen::VectorXd mean_live = predicted.mean().head(live);
 
@@ -114,7 +105,6 @@ public:
         Eigen::VectorXd new_mean_live = mean_live + K * epsilon;
         Eigen::MatrixXd new_P_live = P_live - K * H_dot * P_live;
 
-        // Likelihood
         double log_det_S = S.ldlt().vectorD().array().log().sum();
         double mahal = epsilon.transpose() * S.ldlt().solve(epsilon);
         double log_likelihood =
@@ -122,7 +112,6 @@ public:
                     + log_det_S + mahal);
         double likelihood = std::exp(log_likelihood);
 
-        // Write corrected slice back into stacked storage; refresh history
         Dist result = predicted;
         result.mean().head(live) = new_mean_live;
         result.covariance().topLeftCorner(live, live) = new_P_live;
@@ -160,10 +149,10 @@ private:
     int window_size_ = Dist::kDefaultWindow;
 };
 
-} // namespace brew::filters
+}
 
 namespace brew::filters {
-// Concrete filter used for this model (RFS devirtualization).
+
 template <typename Scalar, int D>
 struct default_filter<models::TrajectoryGaussian<Scalar, D>> { using type = TrajectoryGaussianEKF<Scalar, D>; };
-}  // namespace brew::filters
+}

@@ -8,8 +8,6 @@
 
 namespace brew::models {
 
-/// Intensity-Gamma-Gaussian-Inverse-Wishart distribution.
-/// Pure parameter holder for kinematic state + intensity rate + extent.
 // @mex model
 // @mex_name IGGIW
 // @mex_fields alpha:scalar, beta:scalar, mean:vec, covariance:mat, v:scalar, V:mat
@@ -40,19 +38,16 @@ public:
         return std::make_unique<IGGIW<T, D, De>>(alpha_, beta_, mean_, covariance_, v_, V_);
     }
 
-    // ---- Kinematic state ----
     [[nodiscard]] const Vector& mean() const { return mean_; }
     [[nodiscard]] Vector& mean() { return mean_; }
     [[nodiscard]] const Matrix& covariance() const { return covariance_; }
     [[nodiscard]] Matrix& covariance() { return covariance_; }
 
-    // ---- Gamma on intensity rate (InverseGamma on mean intensity) ----
     [[nodiscard]] T alpha() const { return alpha_; }
     [[nodiscard]] T& alpha() { return alpha_; }
     [[nodiscard]] T beta() const { return beta_; }
     [[nodiscard]] T& beta() { return beta_; }
 
-    // ---- Inverse-Wishart (extent) ----
     [[nodiscard]] T v() const { return v_; }
     [[nodiscard]] T& v() { return v_; }
     [[nodiscard]] const ExtentMatrix& V() const { return V_; }
@@ -68,4 +63,4 @@ private:
     ExtentMatrix V_;
 };
 
-} // namespace brew::models
+}

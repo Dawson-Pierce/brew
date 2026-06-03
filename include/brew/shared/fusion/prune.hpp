@@ -4,8 +4,6 @@
 
 namespace brew::fusion {
 
-/// Remove components whose weight is below the threshold.
-/// Generic: works on any Mixture<T, N>.
 template <typename T, int N>
 void prune(models::Mixture<T, N>& mixture, double threshold) {
     for (std::size_t i = mixture.size(); i > 0; --i) {
@@ -15,4 +13,4 @@ void prune(models::Mixture<T, N>& mixture, double threshold) {
     }
 }
 
-} // namespace brew::fusion
+}

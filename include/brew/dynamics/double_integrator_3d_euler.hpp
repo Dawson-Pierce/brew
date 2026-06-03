@@ -7,8 +7,7 @@ namespace brew::dynamics {
 
 // @mex dynamics
 // @mex_name DoubleIntegrator3DEuler
-/// 3D double integrator with Euler angle state:
-/// [x,y,z, vx,vy,vz, ax,ay,az, phi,theta,psi, p,q,r, alpha_x,alpha_y,alpha_z].
+
 template <typename Scalar = double>
 class DoubleIntegrator3DEuler : public NonlinearDynamics<Scalar, 18> {
 public:
@@ -140,4 +139,4 @@ public:
     }
 };
 
-} // namespace brew::dynamics
+}

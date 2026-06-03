@@ -25,7 +25,7 @@ protected:
 };
 
 TEST_F(TrajectoryGaussianEKFTest, PredictWindowGrowth) {
-    // Initial single-state trajectory
+
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
@@ -33,37 +33,30 @@ TEST_F(TrajectoryGaussianEKFTest, PredictWindowGrowth) {
     models::TrajectoryGaussian<> tg(4, models::Gaussian<>(mean, cov), kWindow);
     EXPECT_EQ(tg.window_size(), 1);
 
-    // Predict should grow the live window (mean() is the full fixed-capacity
-    // stacked vector; stacked_size() tracks the live portion).
     auto pred1 = filter.predict(1.0, tg);
     EXPECT_EQ(pred1.window_size(), 2);
-    EXPECT_EQ(pred1.stacked_size(), 8); // 2 states * 4 dims
+    EXPECT_EQ(pred1.stacked_size(), 8);
 
-    // Mean of new state should be propagated
     EXPECT_NEAR(pred1.get_last_state()(0), 1.0, 1e-10);
-    EXPECT_NEAR(pred1.get_last_state()(2), 1.0, 1e-10); // velocity preserved
+    EXPECT_NEAR(pred1.get_last_state()(2), 1.0, 1e-10);
 
-    // Second predict
     auto pred2 = filter.predict(1.0, pred1);
     EXPECT_EQ(pred2.window_size(), 3);
     EXPECT_EQ(pred2.stacked_size(), 12);
 }
 
 TEST_F(TrajectoryGaussianEKFTest, LScanTrim) {
-    // Build a trajectory and predict past the window so the ring buffer slides.
+
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     models::TrajectoryGaussian<> tg(4, models::Gaussian<>(mean, cov), kWindow);
 
-    // l_window_ is 5. Predict 6 times starting from window=1; after slot 5 is full,
-    // further predicts slide the buffer left (oldest dropped), so window stays at 5.
     auto current = tg;
     for (int i = 0; i < 6; ++i) {
         current = filter.predict(1.0, current);
     }
 
-    // History and stacked state are both capped at l_window.
     EXPECT_EQ(current.window_size(), 5);
     EXPECT_EQ(current.mean().size(), 5 * 4);
     EXPECT_EQ(current.covariance().rows(), 5 * 4);
@@ -83,13 +76,10 @@ TEST_F(TrajectoryGaussianEKFTest, CorrectStep) {
 
     auto [corrected, likelihood] = filter.correct(meas, pred);
 
-    // Window size should stay the same after correct
     EXPECT_EQ(corrected.window_size(), pred.window_size());
 
-    // Last state should move toward measurement
     EXPECT_GT(corrected.get_last_state()(0), 0.9);
 
-    // Likelihood should be positive
     EXPECT_GT(likelihood, 0.0);
 }
 

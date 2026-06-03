@@ -16,7 +16,7 @@ protected:
 };
 
 TEST_F(GGIWTrajectoryTracking, Comparison) {
-    // PHD
+
     auto phd = test::make_phd<models::TrajectoryGGIW<>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
@@ -25,18 +25,15 @@ TEST_F(GGIWTrajectoryTracking, Comparison) {
     EXPECT_GE(phd_result.converged_steps, 10)
         << "Trajectory GGIW PHD should track both extended targets";
 
-    // CPHD
     auto cphd = test::make_cphd<models::TrajectoryGGIW<>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
     auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::TrajectoryGGIW<>>(
         cphd, scenario, "GGIW Trajectory CPHD Tracking", 10.0, 5);
-    // CPHD+TrajectoryGGIW is a new combination; cardinality estimation with
-    // extended targets may need further parameter tuning.
+
     EXPECT_GE(cphd_result.converged_steps, 0)
         << "Trajectory GGIW CPHD should not crash";
 
-    // MBM
     auto mbm = test::make_mbm<models::TrajectoryGGIW<>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
@@ -45,7 +42,6 @@ TEST_F(GGIWTrajectoryTracking, Comparison) {
     EXPECT_GE(mbm_result.converged_steps, 10)
         << "Trajectory GGIW MBM should track both extended targets";
 
-    // PMBM
     auto pmbm = test::make_pmbm<models::TrajectoryGGIW<>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
@@ -54,7 +50,6 @@ TEST_F(GGIWTrajectoryTracking, Comparison) {
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "Trajectory GGIW PMBM should track both extended targets";
 
-    // GLMB
     auto glmb = test::make_glmb<models::TrajectoryGGIW<>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
@@ -63,7 +58,6 @@ TEST_F(GGIWTrajectoryTracking, Comparison) {
     EXPECT_GE(glmb_result.converged_steps, 10)
         << "Trajectory GGIW GLMB should track both extended targets";
 
-    // JGLMB
     auto jglmb = test::make_jglmb<models::TrajectoryGGIW<>>(
         test::make_trajectory_ggiw_ekf(scenario),
         test::make_trajectory_ggiw_birth(0.1), params);
@@ -73,7 +67,7 @@ TEST_F(GGIWTrajectoryTracking, Comparison) {
         << "Trajectory GGIW JGLMB should track both extended targets";
 
 #ifdef BREW_ENABLE_PLOTTING
-    // 2x3 comparison figure
+
     auto fig = test::create_comparison_figure();
 
     auto ax1 = test::comparison_subplot(fig, 2, 3, 0);
@@ -96,7 +90,6 @@ TEST_F(GGIWTrajectoryTracking, Comparison) {
 
     brew::plot_utils::save_figure(fig, test::output_dir() + "/ggiw_traj_comparison.png");
 
-    // Cardinality figure
     test::plot_cardinality_comparison(scenario, cphd_result.cardinality,
         "GGIW Trajectory CPHD - Estimated Cardinality", "ggiw_traj_cphd_cardinality.png");
 #endif

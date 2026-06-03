@@ -16,7 +16,7 @@ protected:
 };
 
 TEST_F(GMTrajectoryTracking, Comparison) {
-    // PHD
+
     auto phd = test::make_phd<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.05), params);
@@ -25,7 +25,6 @@ TEST_F(GMTrajectoryTracking, Comparison) {
     EXPECT_GE(phd_result.converged_steps, 10)
         << "Trajectory Gaussian PHD should track both targets";
 
-    // CPHD
     auto cphd = test::make_cphd<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.05), params);
@@ -34,7 +33,6 @@ TEST_F(GMTrajectoryTracking, Comparison) {
     EXPECT_GE(cphd_result.converged_steps, 10)
         << "Trajectory Gaussian CPHD should track both targets";
 
-    // MBM
     auto mbm = test::make_mbm<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.1), params);
@@ -43,7 +41,6 @@ TEST_F(GMTrajectoryTracking, Comparison) {
     EXPECT_GE(mbm_result.converged_steps, 10)
         << "Trajectory Gaussian MBM should track both targets";
 
-    // PMBM
     auto pmbm = test::make_pmbm<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.1), params);
@@ -52,7 +49,6 @@ TEST_F(GMTrajectoryTracking, Comparison) {
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "Trajectory Gaussian PMBM should track both targets";
 
-    // GLMB
     auto glmb = test::make_glmb<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.1), params);
@@ -61,7 +57,6 @@ TEST_F(GMTrajectoryTracking, Comparison) {
     EXPECT_GE(glmb_result.converged_steps, 10)
         << "Trajectory Gaussian GLMB should track both targets";
 
-    // JGLMB
     auto jglmb = test::make_jglmb<models::TrajectoryGaussian<>>(
         test::make_trajectory_gaussian_ekf(scenario),
         test::make_trajectory_gaussian_birth(0.1), params);
@@ -71,7 +66,7 @@ TEST_F(GMTrajectoryTracking, Comparison) {
         << "Trajectory Gaussian JGLMB should track both targets";
 
 #ifdef BREW_ENABLE_PLOTTING
-    // 2x3 comparison figure
+
     auto fig = test::create_comparison_figure();
 
     auto ax1 = test::comparison_subplot(fig, 2, 3, 0);
@@ -94,7 +89,6 @@ TEST_F(GMTrajectoryTracking, Comparison) {
 
     brew::plot_utils::save_figure(fig, test::output_dir() + "/gm_traj_comparison.png");
 
-    // Cardinality figure
     test::plot_cardinality_comparison(scenario, cphd_result.cardinality,
         "GM Trajectory CPHD - Estimated Cardinality", "gm_traj_cphd_cardinality.png");
 #endif

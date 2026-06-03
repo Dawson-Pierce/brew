@@ -11,8 +11,6 @@
 
 namespace brew::plot_utils {
 
-/// Plot 1D TrajectoryGaussian: state value vs time index + window overlay.
-/// plt_inds must contain exactly 1 index.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
                                   const brew::models::TrajectoryGaussian<Scalar, D>& tg,
@@ -33,7 +31,6 @@ void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
     if (append_current) states.col(T - 1) = tg.current().mean();
     const int t0 = 0;
 
-    // Time indices
     std::vector<double> time_inds(T);
     std::vector<double> vals(T);
     for (int t = 0; t < T; ++t) {
@@ -46,7 +43,6 @@ void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
     line->color(color);
     line->line_width(1.5f);
 
-    // Window overlay: highlight the trajectory window region
     if (T > 1) {
         double t_start = static_cast<double>(t0);
         double t_end = static_cast<double>(t0 + T - 1);
@@ -63,8 +59,6 @@ void plot_trajectory_gaussian_1d(matplot::axes_handle ax,
     }
 }
 
-/// Plot 2D TrajectoryGaussian: trajectory line from rearrange_states + window overlay.
-/// plt_inds must contain exactly 2 indices.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
                                   const brew::models::TrajectoryGaussian<Scalar, D>& tg,
@@ -94,7 +88,6 @@ void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
     line->color(color);
     line->line_width(1.5f);
 
-    // Start marker
     std::vector<double> sx = {x.front()};
     std::vector<double> sy = {y.front()};
     auto start_marker = ax->plot(sx, sy);
@@ -102,7 +95,6 @@ void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
     start_marker->color(color);
     start_marker->marker_size(8.0f);
 
-    // End marker
     std::vector<double> ex = {x.back()};
     std::vector<double> ey = {y.back()};
     auto end_marker = ax->plot(ex, ey);
@@ -111,8 +103,6 @@ void plot_trajectory_gaussian_2d(matplot::axes_handle ax,
     end_marker->marker_size(8.0f);
 }
 
-/// Plot 3D TrajectoryGaussian: plot3 trajectory + window.
-/// plt_inds must contain exactly 3 indices.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
                                   const brew::models::TrajectoryGaussian<Scalar, D>& tg,
@@ -143,7 +133,6 @@ void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
     line->color(color);
     line->line_width(1.5f);
 
-    // Start marker
     std::vector<double> sx = {x.front()};
     std::vector<double> sy = {y.front()};
     std::vector<double> sz = {z.front()};
@@ -152,7 +141,6 @@ void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
     start_marker->color(color);
     start_marker->marker_size(8.0f);
 
-    // End marker
     std::vector<double> ex_v = {x.back()};
     std::vector<double> ey_v = {y.back()};
     std::vector<double> ez_v = {z.back()};
@@ -162,7 +150,6 @@ void plot_trajectory_gaussian_3d(matplot::axes_handle ax,
     end_marker->marker_size(8.0f);
 }
 
-/// Convenience: auto-dispatch based on plt_inds.size().
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_gaussian(matplot::axes_handle ax,
                                const brew::models::TrajectoryGaussian<Scalar, D>& tg,
@@ -182,7 +169,6 @@ void plot_trajectory_gaussian(matplot::axes_handle ax,
     }
 }
 
-/// Convenience: create figure, plot, save if output_file set.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_gaussian(const brew::models::TrajectoryGaussian<Scalar, D>& tg,
                                const PlotOptions& opts) {
@@ -198,5 +184,4 @@ void plot_trajectory_gaussian(const brew::models::TrajectoryGaussian<Scalar, D>&
     }
 }
 
-} // namespace brew::plot_utils
-
+}

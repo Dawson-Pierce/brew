@@ -12,32 +12,21 @@
 
 namespace brew::template_matching {
 
-/// Owns a collection of point-cloud templates indexed by integer id,
-/// with PCA axes + centroid precomputed on insertion for fast ICP warm-start.
-/// Thread-safe: add() takes an exclusive lock, reads take a shared lock.
-/// Typical usage: all adds happen at setup (single-threaded); filter hot paths
-/// are all reads and can run concurrently.
 class TemplateLibrary {
 public:
     struct Entry {
         std::shared_ptr<PointCloud> cloud;
-        Eigen::Matrix3d pca_axes;    // columns = eigenvectors, descending eigenvalue
+        Eigen::Matrix3d pca_axes;
         Eigen::Vector3d pca_centroid;
     };
 
     TemplateLibrary() = default;
 
-    // Non-copyable, non-movable (holds a mutex). Use shared_ptr to pass around.
     TemplateLibrary(const TemplateLibrary&) = delete;
     TemplateLibrary& operator=(const TemplateLibrary&) = delete;
     TemplateLibrary(TemplateLibrary&&) = delete;
     TemplateLibrary& operator=(TemplateLibrary&&) = delete;
 
-    /// Insert a cloud, returning its id (0-based index).
-    /// Precomputes PCA axes and centroid from the stored cloud. Asserts 3D
-    /// with >= 3 points. For robust PCA on asymmetric shapes, prefer the
-    /// `add(cloud, axes, centroid)` overload so you can supply axes computed
-    /// from a denser sample than the ICP template itself.
     int add(std::shared_ptr<PointCloud> cloud) {
         BREW_ASSERT(cloud && cloud->dim() == 3,
                     "TemplateLibrary only supports 3D templates");
@@ -54,15 +43,10 @@ public:
         return static_cast<int>(entries_.size()) - 1;
     }
 
-    /// Convenience: wrap a PointCloud by value.
     int add(PointCloud cloud) {
         return add(std::make_shared<PointCloud>(std::move(cloud)));
     }
 
-    /// Insert a cloud with caller-supplied PCA axes and centroid. Use this
-    /// when the PCA is estimated from a denser sample than the ICP template
-    /// itself (dense-sample PCA is more stable for asymmetric shapes, which
-    /// matters for PCA-ICP cold-start warm-starting).
     int add(std::shared_ptr<PointCloud> cloud,
             const Eigen::Matrix3d& pca_axes,
             const Eigen::Vector3d& pca_centroid) {
@@ -88,7 +72,6 @@ public:
                    pca_axes, pca_centroid);
     }
 
-    /// Shared-lock read accessors. id must be in [0, size()).
     [[nodiscard]] std::shared_ptr<PointCloud> get(int id) const {
         std::shared_lock lock(mutex_);
         BREW_ASSERT(id >= 0 && id < static_cast<int>(entries_.size()),
@@ -127,4 +110,4 @@ private:
     std::vector<Entry> entries_;
 };
 
-} // namespace brew::template_matching
+}

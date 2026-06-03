@@ -5,9 +5,6 @@
 
 namespace brew::models {
 
-/// Concrete Gaussian trajectory model: a windowed trajectory of Gaussian states.
-/// Its own first-class type (not a Trajectory<T> instantiation); the windowed
-/// ring-buffer mechanics are inherited from TrajectoryWindow.
 // @mex model
 // @mex_name TrajectoryGaussian
 // @mex_trajectory Gaussian
@@ -26,4 +23,4 @@ public:
     }
 };
 
-} // namespace brew::models
+}

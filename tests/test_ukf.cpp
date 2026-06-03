@@ -60,9 +60,7 @@ TEST(UKFTest, CorrectStep) {
 }
 
 TEST(UKFTest, MatchesEKFOnLinearModel) {
-    // For linear dynamics + linear measurement the unscented transform is exact,
-    // so the UKF must reduce to the Kalman filter and agree with the EKF to
-    // numerical precision on both predict and correct.
+
     auto dyn = std::make_shared<SingleIntegrator<>>(2);
     Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
     Eigen::MatrixXd Q = G * (0.05 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose();
@@ -104,11 +102,7 @@ TEST(UKFTest, MatchesEKFOnLinearModel) {
 }
 
 TEST(UKFTest, MatchesEKFAtLargeStateScale) {
-    // Regression for the sigma-point cancellation bug: at large state magnitude
-    // (e.g. coordinates ~1e6) the UKF must still match the EKF on a linear model.
-    // A tiny default alpha (1e-3) made n+lambda ~ 4e-6 and the weights ~1e6, which
-    // lost ~6 digits here (mean error ~2e-4); the O(1)-weight default + central-
-    // point reconstruction keep it at machine precision.
+
     auto dyn = std::make_shared<SingleIntegrator<>>(2);
     Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
     Eigen::MatrixXd Q = G * (0.05 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose();
@@ -145,8 +139,7 @@ TEST(UKFTest, MatchesEKFAtLargeStateScale) {
 }
 
 namespace {
-// Run a Gaussian filter over a fixed turn truth/measurement sequence; return the
-// steady-state (2nd-half) position RMSE and the final turn-rate estimate.
+
 struct CTRun { double pos_rmse; double omega_est; };
 template <typename Filt>
 CTRun run_coordinated_turn(Filt& filt,
@@ -171,20 +164,15 @@ CTRun run_coordinated_turn(Filt& filt,
     }
     return { std::sqrt(sse / std::max(cnt, 1)), est.mean()(4) };
 }
-}  // namespace
+}
 
 TEST(UKFTest, CoordinatedTurnUnknownRate) {
-    // Nonlinear unknown-turn-rate model [x,y,vx,vy,omega]: the UKF tracks a turning
-    // target and recovers omega from position-only measurements, starting from a
-    // wrong (zero) turn-rate guess. The EKF's transition Jacobian F(omega) does not
-    // couple omega to the measured position, so it cannot recover the turn rate —
-    // a clean demonstration of the UKF's value on a genuinely nonlinear model.
+
     using brew::dynamics::CoordinatedTurn;
     auto dyn = std::make_shared<CoordinatedTurn<>>();
     const double dt = 1.0;
     const double true_omega = 0.08;
 
-    // Truth + position measurements (shared by both filters).
     Eigen::VectorXd x(5);
     x << 0, 0, 10, 0, true_omega;
     std::mt19937 rng(42);
@@ -205,9 +193,9 @@ TEST(UKFTest, CoordinatedTurnUnknownRate) {
     Q(2, 2) = Q(3, 3) = 0.01; Q(4, 4) = 1e-3;
     Eigen::MatrixXd R = 0.5 * Eigen::MatrixXd::Identity(2, 2);
     Eigen::VectorXd m0(5);
-    m0 << 0, 0, 10, 0, 0.0;                       // omega guessed as 0 (wrong)
+    m0 << 0, 0, 10, 0, 0.0;
     Eigen::MatrixXd P0 = Eigen::MatrixXd::Identity(5, 5);
-    P0(4, 4) = 0.5;                               // large initial omega uncertainty
+    P0(4, 4) = 0.5;
 
     UKF<> ukf;
     ukf.set_dynamics(dyn); ukf.set_measurement_jacobian(H);
@@ -225,4 +213,3 @@ TEST(UKFTest, CoordinatedTurnUnknownRate) {
         << "UKF turn-rate error should beat the EKF (UKF=" << u.omega_est
         << ", EKF=" << e.omega_est << ", truth=" << true_omega << ")";
 }
-

@@ -16,7 +16,7 @@ protected:
 };
 
 TEST_F(GGIWOrientationTracking, Comparison) {
-    // PHD
+
     auto phd = test::make_phd<models::GGIWOrientation<>>(
         test::make_ggiw_orientation_ekf(scenario), test::make_ggiw_orientation_birth(0.1), params);
     auto phd_result = test::run_tracking<decltype(phd), models::GGIWOrientation<>>(
@@ -24,7 +24,6 @@ TEST_F(GGIWOrientationTracking, Comparison) {
     EXPECT_GE(phd_result.converged_steps, 10)
         << "GGIWOrientation PHD should track both extended targets";
 
-    // CPHD
     auto cphd = test::make_cphd<models::GGIWOrientation<>>(
         test::make_ggiw_orientation_ekf(scenario), test::make_ggiw_orientation_birth(0.1), params);
     auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::GGIWOrientation<>>(
@@ -32,7 +31,6 @@ TEST_F(GGIWOrientationTracking, Comparison) {
     EXPECT_GE(cphd_result.converged_steps, 0)
         << "GGIWOrientation CPHD should not crash";
 
-    // MBM
     auto mbm = test::make_mbm<models::GGIWOrientation<>>(
         test::make_ggiw_orientation_ekf(scenario), test::make_ggiw_orientation_birth(0.1), params);
     auto mbm_result = test::run_tracking<decltype(mbm), models::GGIWOrientation<>>(
@@ -40,7 +38,6 @@ TEST_F(GGIWOrientationTracking, Comparison) {
     EXPECT_GE(mbm_result.converged_steps, 10)
         << "GGIWOrientation MBM should track both extended targets";
 
-    // PMBM
     auto pmbm = test::make_pmbm<models::GGIWOrientation<>>(
         test::make_ggiw_orientation_ekf(scenario), test::make_ggiw_orientation_birth(0.1), params);
     auto pmbm_result = test::run_tracking<decltype(pmbm), models::GGIWOrientation<>>(
@@ -48,7 +45,6 @@ TEST_F(GGIWOrientationTracking, Comparison) {
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "GGIWOrientation PMBM should track both extended targets";
 
-    // GLMB
     auto glmb = test::make_glmb<models::GGIWOrientation<>>(
         test::make_ggiw_orientation_ekf(scenario), test::make_ggiw_orientation_birth(0.1), params);
     auto glmb_result = test::run_tracking<decltype(glmb), models::GGIWOrientation<>>(
@@ -56,7 +52,6 @@ TEST_F(GGIWOrientationTracking, Comparison) {
     EXPECT_GE(glmb_result.converged_steps, 10)
         << "GGIWOrientation GLMB should track both extended targets";
 
-    // JGLMB
     auto jglmb = test::make_jglmb<models::GGIWOrientation<>>(
         test::make_ggiw_orientation_ekf(scenario), test::make_ggiw_orientation_birth(0.1), params);
     auto jglmb_result = test::run_tracking<decltype(jglmb), models::GGIWOrientation<>>(
@@ -65,7 +60,7 @@ TEST_F(GGIWOrientationTracking, Comparison) {
         << "GGIWOrientation JGLMB should track both extended targets";
 
 #ifdef BREW_ENABLE_PLOTTING
-    // 2x3 comparison figure
+
     auto fig = test::create_comparison_figure();
 
     auto ax1 = test::comparison_subplot(fig, 2, 3, 0);
@@ -88,7 +83,6 @@ TEST_F(GGIWOrientationTracking, Comparison) {
 
     brew::plot_utils::save_figure(fig, test::output_dir() + "/ggiw_orientation_comparison.png");
 
-    // Cardinality figure
     test::plot_cardinality_comparison(scenario, cphd_result.cardinality,
         "GGIWOrientation CPHD - Estimated Cardinality", "ggiw_orientation_cphd_cardinality.png");
 #endif

@@ -5,7 +5,6 @@
 
 namespace brew::template_matching {
 
-/// Simple 2D/3D point cloud container. Columns are points.
 class PointCloud {
 public:
     PointCloud() = default;
@@ -24,7 +23,7 @@ public:
     [[nodiscard]] int dim() const { return static_cast<int>(points_.rows()); }
 
 private:
-    Eigen::MatrixXd points_; // d×N matrix (d = 2 or 3)
+    Eigen::MatrixXd points_;
 };
 
-} // namespace brew::template_matching
+}

@@ -1,8 +1,9 @@
 #pragma once
+
 #include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
-#include "brew/ggiw/filters/ggiw_ekf.hpp"  // for detail::sqrtm_spd
+#include "brew/ggiw/filters/ggiw_ekf.hpp"
 #include "brew/trajectory_ggiw/trajectory_ggiw_model.hpp"
 #include "brew/ggiw/ggiw_model.hpp"
 #include <algorithm>
@@ -12,7 +13,6 @@
 
 namespace brew::filters {
 
-/// EKF for GGIW trajectory distributions.
 // @mex filter
 // @mex_name TrajectoryGGIWEKF
 // @mex_dist TrajectoryGGIW
@@ -52,19 +52,16 @@ public:
         Dist result = prev;
         const int sd = prev.state_dim;
 
-        // Gaussian (kinematic) prediction
         Eigen::VectorXd prev_last_state = prev.get_last_state();
         Eigen::VectorXd next_state = this->dyn_obj_->propagate_state(dt, prev_last_state);
         Eigen::MatrixXd F = this->dyn_obj_->get_state_mat(dt, prev_last_state);
 
-        // Gamma prediction (measurement rate decay)
         const auto& prev_ggiw = prev.current();
         const double prev_alpha = prev_ggiw.alpha();
         const double prev_beta = prev_ggiw.beta();
         double next_alpha = prev_alpha / eta_;
         double next_beta = prev_beta / eta_;
 
-        // IW prediction (extent decay toward dof floor, scaled by dt/tau)
         const double prev_v = prev_ggiw.v();
         const auto& prev_V = prev_ggiw.V();
         const int d = static_cast<int>(prev_V.rows());
@@ -73,13 +70,11 @@ public:
         double scale = (next_v - dof_floor) / std::max(prev_v - dof_floor, 1e-12);
         Eigen::MatrixXd next_V = scale * this->dyn_obj_->propagate_extent(dt, prev_last_state, prev_V);
 
-        // Advance ring buffer (slides if at cap); new tail slot zeroed
         result.advance_window();
 
         const int last = result.last_index();
         const int prev_last = last - 1;
 
-        // Stacked covariance: fill new last row/col and auto-cov
         if (prev_last >= 0) {
             for (int k = 0; k < last; ++k) {
                 result.cov_at(last, k) = F * result.cov_at(prev_last, k);
@@ -92,7 +87,6 @@ public:
             result.cov_at(last, last) = this->process_noise_;
         }
 
-        // Stacked mean + predicted GGIW marginal
         result.mean_at(last) = next_state;
         result.history_at(last) = InnerDist(
             next_alpha, next_beta,
@@ -120,7 +114,6 @@ public:
         const auto& prev_V = pred_ggiw.V();
         const int d = static_cast<int>(prev_V.rows());
 
-        // Measurement parsing: interpret as d×W point set; compute centroid & scatter
         int W;
         Eigen::MatrixXd Z;
         if (measurement.size() > d && measurement.size() % d == 0) {
@@ -138,11 +131,9 @@ public:
             scatter += diff * diff.transpose();
         }
 
-        // Expected extent X_hat = V / (v - 2d - 2)
         const double dof_floor = 2.0 * d + 2.0;
         Eigen::MatrixXd X_hat = prev_V / (prev_v - dof_floor);
 
-        // Gaussian (kinematic) update on the live stacked slice
         Eigen::VectorXd est_meas = this->estimate_measurement(prev_state);
         Eigen::MatrixXd H = this->get_measurement_matrix(prev_state);
 
@@ -156,7 +147,6 @@ public:
         Eigen::VectorXd epsilon = mean_meas - est_meas;
         Eigen::MatrixXd N = epsilon * epsilon.transpose();
 
-        // Measurement noise inflated by extent (rho scales how much extent adds).
         Eigen::MatrixXd R_hat = rho_ * X_hat + this->measurement_noise_;
         Eigen::MatrixXd S = H_dot * P_live * H_dot.transpose()
                            + R_hat / static_cast<double>(W);
@@ -166,7 +156,6 @@ public:
         Eigen::VectorXd new_mean_live = mean_live + K * epsilon;
         Eigen::MatrixXd new_P_live = P_live - K * H_dot * P_live;
 
-        // IW update: V += N_hat + scatter, where N_hat = X_hat^{1/2} R_hat^{-1/2} N ...
         Eigen::MatrixXd sqrt_X = detail::sqrtm_spd(X_hat);
         Eigen::MatrixXd sqrt_R = detail::sqrtm_spd(R_hat);
         Eigen::MatrixXd sqrt_R_inv = sqrt_R.ldlt().solve(Eigen::MatrixXd::Identity(d, d));
@@ -175,11 +164,9 @@ public:
         double next_v = prev_v + W;
         Eigen::MatrixXd next_V = prev_V + N_hat + scatter;
 
-        // Gamma update (conjugate): alpha += W, beta += 1
         double next_alpha = prev_alpha + W;
         double next_beta = prev_beta + 1.0;
 
-        // Likelihood (marginal likelihood of the cluster under the predictive)
         const double v0 = prev_v;
         const double v1 = next_v;
         const double a0 = prev_alpha;
@@ -210,7 +197,6 @@ public:
 
         double likelihood = std::exp(log_likelihood);
 
-        // Write corrected slice back into stacked storage; refresh history
         Dist result = predicted;
         result.mean().head(live) = new_mean_live;
         result.covariance().topLeftCorner(live, live) = new_P_live;
@@ -265,10 +251,10 @@ private:
     double rho_ = 1.0;
 };
 
-} // namespace brew::filters
+}
 
 namespace brew::filters {
-// Concrete filter used for this model (RFS devirtualization).
+
 template <typename Scalar, int D, int De>
 struct default_filter<models::TrajectoryGGIW<Scalar, D, De>> { using type = TrajectoryGGIWEKF<Scalar, D, De>; };
-}  // namespace brew::filters
+}

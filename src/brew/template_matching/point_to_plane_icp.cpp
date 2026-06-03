@@ -19,7 +19,7 @@ Eigen::MatrixXd PointToPlaneIcp::estimate_normals(const PointCloud& cloud, int k
     k = std::min(k, N);
 
     for (int i = 0; i < N; ++i) {
-        // Find k nearest neighbors by brute force
+
         std::vector<int> indices(N);
         std::iota(indices.begin(), indices.end(), 0);
         std::partial_sort(indices.begin(), indices.begin() + k, indices.end(),
@@ -28,7 +28,6 @@ Eigen::MatrixXd PointToPlaneIcp::estimate_normals(const PointCloud& cloud, int k
                      < (cloud.points().col(b) - cloud.points().col(i)).squaredNorm();
             });
 
-        // Local PCA: build covariance of k neighbors
         Eigen::Vector3d centroid = Eigen::Vector3d::Zero();
         for (int j = 0; j < k; ++j) {
             centroid += cloud.points().col(indices[j]);
@@ -42,7 +41,6 @@ Eigen::MatrixXd PointToPlaneIcp::estimate_normals(const PointCloud& cloud, int k
         }
         cov /= k;
 
-        // Normal is eigenvector of smallest eigenvalue
         Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(cov);
         normals.col(i) = solver.eigenvectors().col(0);
     }
@@ -56,7 +54,6 @@ IcpResult PointToPlaneIcp::align(
     const Eigen::Matrix3d& R_init,
     const Eigen::Vector3d& t_init) const {
 
-    // Estimate normals from the source (template) — dense and stable
     const int k = std::min(10, source.num_points());
     Eigen::MatrixXd src_normals = estimate_normals(source, k);
 
@@ -70,12 +67,11 @@ IcpResult PointToPlaneIcp::align(
     result.translation = t;
 
     for (int iter = 0; iter < params_.max_iterations; ++iter) {
-        // Transform source points and normals
+
         Eigen::MatrixXd src_transformed = R * source.points();
         src_transformed.colwise() += t;
         Eigen::MatrixXd normals_transformed = R * src_normals;
 
-        // Find correspondences
         std::vector<std::pair<int,int>> corr;
         if (params_.reverse_correspondences) {
             for (auto [ti, si] : find_correspondences(
@@ -90,11 +86,6 @@ IcpResult PointToPlaneIcp::align(
 
         const int N = static_cast<int>(corr.size());
 
-        // Build 6×6 linear system for point-to-plane
-        // Minimize Σ (n_i · (p_i - q_i))² where n_i is the source normal
-        // at the matched template point, rotated to the current frame.
-        // Linearize R ≈ I + [α]× for small angles
-        // Variables: x = [α, β, γ, tx, ty, tz]
         Eigen::MatrixXd A(N, 6);
         Eigen::VectorXd b(N);
 
@@ -104,7 +95,6 @@ IcpResult PointToPlaneIcp::align(
             const Eigen::Vector3d& q = target.points().col(ti);
             const Eigen::Vector3d& n = normals_transformed.col(si);
 
-            // A row: [p × n, n]
             A(idx, 0) = p(1) * n(2) - p(2) * n(1);
             A(idx, 1) = p(2) * n(0) - p(0) * n(2);
             A(idx, 2) = p(0) * n(1) - p(1) * n(0);
@@ -115,26 +105,21 @@ IcpResult PointToPlaneIcp::align(
             b(idx) = n.dot(q - p);
         }
 
-        // Solve A^T A x = A^T b
         Eigen::VectorXd x = (A.transpose() * A).ldlt().solve(A.transpose() * b);
 
-        // Extract incremental rotation (small angle approximation)
         Eigen::Matrix3d delta_R;
         delta_R << 1.0,   -x(2),  x(1),
                    x(2),   1.0,  -x(0),
                   -x(1),   x(0),  1.0;
 
-        // Re-orthogonalize via SVD
         Eigen::JacobiSVD<Eigen::Matrix3d> svd(delta_R, Eigen::ComputeFullU | Eigen::ComputeFullV);
         delta_R = svd.matrixU() * svd.matrixV().transpose();
 
         Eigen::Vector3d delta_t = x.tail<3>();
 
-        // Update cumulative transform
         R = delta_R * R;
         t = delta_R * t + delta_t;
 
-        // Compute RMSE (point-to-plane)
         double sum_sq = 0.0;
         Eigen::MatrixXd src_new = R * source.points();
         src_new.colwise() += t;
@@ -157,9 +142,6 @@ IcpResult PointToPlaneIcp::align(
         }
     }
 
-    // Compute final likelihood using reverse correspondences (target→source).
-    // This gives p(measurement | template, pose): each measurement point finds
-    // its nearest template point, independent of template point count.
     Eigen::MatrixXd src_final = R * source.points();
     src_final.colwise() += t;
     auto final_corr = find_correspondences(
@@ -180,7 +162,6 @@ double PointToPlaneIcp::log_likelihood(
     Eigen::MatrixXd src_transformed = R * source.points();
     src_transformed.colwise() += t;
 
-    // Reverse correspondences: each target (measurement) point finds nearest source (template)
     auto correspondences = find_correspondences(
         target.points(), src_transformed, params_.max_correspondence_dist);
 
@@ -188,4 +169,4 @@ double PointToPlaneIcp::log_likelihood(
         target.points(), src_transformed, correspondences);
 }
 
-} // namespace brew::template_matching
+}

@@ -3,6 +3,7 @@
 // Component merge for the `trajectory_gaussian` package -- owns ONLY the TrajectoryGaussian merge
 // (no cross-model overload set). In namespace brew::trajectory_gaussian so the package's
 // concrete RFS resolve an unqualified merge(...) here.
+
 #include "brew/shared/mixture.hpp"
 #include "brew/trajectory_gaussian/trajectory_gaussian_model.hpp"
 #include "brew/shared/fusion/trajectory_mahal.hpp"
@@ -15,7 +16,6 @@
 #include <vector>
 
 namespace brew::trajectory_gaussian {
-
 
 template <typename Scalar, int D, int N>
 void merge(models::Mixture<models::TrajectoryGaussian<Scalar, D>, N>& mix, double threshold) {
@@ -76,4 +76,4 @@ void merge(models::Mixture<models::TrajectoryGaussian<Scalar, D>, N>& mix, doubl
     }
 }
 
-}  // namespace brew::trajectory_gaussian
+}

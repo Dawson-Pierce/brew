@@ -4,7 +4,6 @@
 
 namespace brew::template_matching {
 
-/// SVD-based point-to-point ICP (Arun et al. 1987).
 // @mex icp
 // @mex_name PointToPointIcp
 // @mex_namespace template_matching
@@ -28,4 +27,4 @@ public:
     [[nodiscard]] std::unique_ptr<IcpBase> clone() const override;
 };
 
-} // namespace brew::template_matching
+}

@@ -5,7 +5,6 @@
 
 namespace brew::dynamics {
 
-/// 2D constant turn-rate model: state = [x, y, v, theta, omega].
 // @mex dynamics
 // @mex_name ConstantTurn2D
 template <typename Scalar = double>
@@ -78,4 +77,4 @@ public:
     }
 };
 
-} // namespace brew::dynamics
+}

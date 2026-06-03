@@ -11,9 +11,6 @@
 
 namespace brew::filters {
 
-/// Base filter template. Specializations define predict/correct for each Dist.
-/// Dist must expose a nested ::Vector (Eigen::Matrix<Scalar, D, 1>) so the filter
-/// can locate the matching DynamicsBase<Scalar, D> specialization.
 template <typename Dist>
 class Filter {
 public:
@@ -21,9 +18,6 @@ public:
     static constexpr int DistStateDim = Dist::Vector::RowsAtCompileTime;
     using DynamicsType = dynamics::DynamicsBase<DistScalar, DistStateDim>;
 
-    // Typed matrix aliases. State-side is fixed to (DistStateDim, DistStateDim);
-    // measurement-side and kalman-gain stay Dynamic on the meas axis because
-    // measurement dim is genuinely runtime (point clouds, etc.).
     using StateVector      = Eigen::Matrix<DistScalar, DistStateDim, 1>;
     using StateMatrix      = Eigen::Matrix<DistScalar, DistStateDim, DistStateDim>;
     using MeasVector       = Eigen::Matrix<DistScalar, Eigen::Dynamic, 1>;
@@ -31,7 +25,6 @@ public:
     using MeasNoiseMatrix  = Eigen::Matrix<DistScalar, Eigen::Dynamic, Eigen::Dynamic>;
     using KalmanGainMatrix = Eigen::Matrix<DistScalar, DistStateDim, Eigen::Dynamic>;
 
-    // Measurement model types (measurement dim is runtime).
     using MeasurementFunc = std::function<MeasVector(const StateVector&)>;
     using MeasurementJacobian = std::variant<MeasMatrix,
         std::function<MeasMatrix(const StateVector&)>>;
@@ -39,8 +32,6 @@ public:
     virtual ~Filter() = default;
 
     [[nodiscard]] virtual std::unique_ptr<Filter<Dist>> clone() const = 0;
-
-    // ---- Model configuration ----
 
     void set_dynamics(std::shared_ptr<DynamicsType> dyn) {
         dyn_obj_ = std::move(dyn);
@@ -51,8 +42,6 @@ public:
 
     void set_process_noise(StateMatrix Q) { process_noise_ = std::move(Q); }
     void set_measurement_noise(MeasNoiseMatrix R) { measurement_noise_ = std::move(R); }
-
-    // ---- Accessors ----
 
     [[nodiscard]] const StateMatrix& process_noise() const { return process_noise_; }
     [[nodiscard]] const MeasNoiseMatrix& measurement_noise() const { return measurement_noise_; }
@@ -72,8 +61,6 @@ public:
         return std::get<std::function<MeasMatrix(const StateVector&)>>(H_)(state);
     }
 
-    // ---- Abstract interface ----
-
     struct CorrectionResult {
         Dist distribution;
         double likelihood;
@@ -89,14 +76,6 @@ public:
         const MeasVector& measurement,
         const Dist& predicted) const = 0;
 
-    // ---- Batch prediction ----
-
-    /// Predict every component of `mix` in place. Default: per-component predict()
-    /// (exact for any filter / dynamics). Filters with a linear time-invariant
-    /// dynamics (e.g. EKF) override this with a fast path that builds the shared
-    /// F once. Templated on the mixture capacity N (the base does not otherwise
-    /// know it), so it is a non-virtual member template resolved on the concrete
-    /// filter type the RFS holds.
     template <int N>
     void predict_batch(double dt, models::Mixture<Dist, N>& mix) const {
         const std::size_t K = mix.size();
@@ -105,15 +84,6 @@ public:
         }
     }
 
-    /// Polymorphic batch predict over the heap-backed (Eigen::Dynamic) mixture the
-    /// RFS use. The RFS hold a Filter<Dist> base pointer and call this ONCE per
-    /// timestep, so any concrete filter (EKF, UKF, future IMM/PF) plugs in. The
-    /// default forwards to the per-component predict_batch (exact for any filter);
-    /// filters with a fast path (EKF/UKF under LTI dynamics) override it. The inner
-    /// per-component loop stays non-virtual inside the override, so the
-    /// devirtualized-hot-loop speedup is preserved — only one virtual call is added
-    /// per timestep. (The non-virtual predict_batch<N> above still serves
-    /// compile-time fixed-N mixtures for C++/hardware users.)
     virtual void predict_batch_dynamic(
         double dt, models::Mixture<Dist, Eigen::Dynamic>& mix) const {
         this->predict_batch(dt, mix);
@@ -127,4 +97,4 @@ protected:
     MeasNoiseMatrix measurement_noise_;
 };
 
-} // namespace brew::filters
+}

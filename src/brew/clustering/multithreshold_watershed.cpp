@@ -32,7 +32,6 @@ std::vector<Eigen::MatrixXd> MultiThresholdWatershed::cluster(const Eigen::Matri
     std::sort(thr.begin(), thr.end());
     if (thr.empty()) thr.push_back(0.0);
 
-    // --- 1. Multi-threshold features: peak of each connected region with Z >= level ---
     std::vector<int> cand;
     std::vector<double> cand_level;
     std::vector<char> visited(N, 0);
@@ -76,7 +75,6 @@ std::vector<Eigen::MatrixXd> MultiThresholdWatershed::cluster(const Eigen::Matri
         }
     }
 
-    // --- 2. Keep features strongest-first, drop any within min_distance of a kept one ---
     std::vector<int> order(cand.size());
     std::iota(order.begin(), order.end(), 0);
     std::sort(order.begin(), order.end(), [&](int a, int b) {
@@ -102,7 +100,6 @@ std::vector<Eigen::MatrixXd> MultiThresholdWatershed::cluster(const Eigen::Matri
                 blocked[static_cast<std::size_t>(lin(ii, jj))] = 1;
     }
 
-    // --- 3. Priority flood from features over the on-mask, high intensity to low ---
     std::priority_queue<std::pair<double, int>> pq;
     std::vector<char> queued(N, 0);
     auto push_nbrs = [&](int cell) {
@@ -145,7 +142,6 @@ std::vector<Eigen::MatrixXd> MultiThresholdWatershed::cluster(const Eigen::Matri
         push_nbrs(cell);
     }
 
-    // --- 4. Emit feature basins (featureless regions dropped), drop small ---
     std::unordered_map<int, std::vector<int>> basins;
     for (int j = 0; j < nlon; ++j)
         for (int i = 0; i < nlat; ++i) {
@@ -174,4 +170,4 @@ std::vector<Eigen::MatrixXd> MultiThresholdWatershed::cluster(const Eigen::Matri
     return result;
 }
 
-} // namespace brew::clustering
+}

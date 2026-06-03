@@ -3,6 +3,7 @@
 // Component merge for the `trajectory_ggiw` package -- owns ONLY the TrajectoryGGIW merge
 // (no cross-model overload set). In namespace brew::trajectory_ggiw so the package's
 // concrete RFS resolve an unqualified merge(...) here.
+
 #include "brew/shared/mixture.hpp"
 #include "brew/trajectory_ggiw/trajectory_ggiw_model.hpp"
 #include "brew/shared/fusion/trajectory_mahal.hpp"
@@ -15,7 +16,6 @@
 #include <vector>
 
 namespace brew::trajectory_ggiw {
-
 
 template <typename Scalar, int D, int De, int N>
 void merge(models::Mixture<models::TrajectoryGGIW<Scalar, D, De>, N>& mix, double threshold) {
@@ -76,4 +76,4 @@ void merge(models::Mixture<models::TrajectoryGGIW<Scalar, D, De>, N>& mix, doubl
     }
 }
 
-}  // namespace brew::trajectory_ggiw
+}

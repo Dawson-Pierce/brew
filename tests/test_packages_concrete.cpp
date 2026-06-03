@@ -1,4 +1,5 @@
 // Compile-smoke + clone for the concrete RFS of every non-gaussian package.
+
 #include <gtest/gtest.h>
 #include "brew/ggiw/ggiw.hpp"
 #include "brew/ggiw_orientation/ggiw_orientation.hpp"

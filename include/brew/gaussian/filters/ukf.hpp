@@ -1,4 +1,5 @@
 #pragma once
+
 #include "brew/shared/filter_traits.hpp"
 
 #include "brew/shared/filter_base.hpp"
@@ -12,25 +13,6 @@
 
 namespace brew::filters {
 
-/// Unscented Kalman Filter for Gaussian distributions.
-///
-/// Propagates a deterministic set of sigma points through the (possibly
-/// nonlinear) dynamics propagate_state() and measurement function h() via the
-/// unscented transform, instead of linearizing with Jacobians like the EKF.
-/// For genuinely nonlinear models (constant-turn, body-frame, 3D-Euler) this is
-/// typically more accurate than the EKF; for linear models it reduces to the
-/// Kalman filter and matches the EKF up to numerical precision.
-///
-/// Scaling parameters: alpha (sigma-point spread), beta (prior knowledge of the
-/// distribution; 2 is optimal for Gaussians), kappa (secondary scaling, usually
-/// 0). The default alpha=1 keeps the weights O(1) and the transform numerically
-/// robust at any state magnitude; the textbook alpha=1e-3 (sigma points hugging
-/// the mean) makes n+lambda tiny, which both reduces the UKF to ~the EKF and
-/// causes catastrophic cancellation for large-magnitude states — avoid it unless
-/// you specifically want near-mean (derivative-like) behavior on a small state.
-///
-/// Pluggable into any RFS (PHD/GLMB/...) through the Filter<Gaussian> base, and
-/// usable standalone for single-object estimation / navigation.
 // @mex filter
 // @mex_name UKF
 // @mex_dist Gaussian
@@ -43,7 +25,6 @@ public:
     using CorrectionResult = typename Base::CorrectionResult;
     using typename Base::DynamicsType;
 
-    // Local aliases so the static factories (::Zero) parse on dependent types.
     using StateVector      = typename Base::StateVector;
     using StateMatrix      = typename Base::StateMatrix;
     using MeasVector       = typename Base::MeasVector;
@@ -73,9 +54,6 @@ public:
         double dt,
         const Dist& prev) const override {
 
-        // LTI shortcut: for a linear model the unscented transform is exact, so
-        // skip the sigma points and use the Kalman predict directly (identical to
-        // the EKF). Same math used by the batch path; ideal for navigation.
         if (this->dyn_obj_ && this->dyn_obj_->is_lti()) {
             const StateMatrix F = this->dyn_obj_->get_state_mat(dt, prev.mean());
             return Dist(F * prev.mean(),
@@ -85,17 +63,12 @@ public:
         const int n = static_cast<int>(prev.mean().size());
         const SigmaSet s = sigma_points(prev.mean(), prev.covariance());
 
-        // Propagate each sigma point through the (nonlinear) dynamics.
         DynMatrix prop(n, 2 * n + 1);
         for (int i = 0; i < 2 * n + 1; ++i) {
             typename Base::StateVector xi = s.pts.col(i);
             prop.col(i) = this->dyn_obj_->propagate_state(dt, xi);
         }
 
-        // Reconstruct around the central propagated point so the (possibly
-        // large) central term never forms a huge intermediate that cancels back
-        // down (stable even for small alpha / large-magnitude states). Exact:
-        // sum_i Wm_i X_i == X_0 + sum_{i>=1} Wm_i (X_i - X_0) since sum Wm = 1.
         StateVector mean = prop.col(0);
         for (int i = 1; i < 2 * n + 1; ++i) mean += s.Wm(i) * (prop.col(i) - prop.col(0));
 
@@ -108,10 +81,6 @@ public:
         return Dist(std::move(mean), std::move(cov));
     }
 
-    /// Batch predict over the dynamic mixture (RFS entry point). Under LTI the
-    /// unscented transform is exact and equals the Kalman predict, so reuse the
-    /// shared LTI batch (build F once, no sigma points) — same fast path as the
-    /// EKF. Otherwise fall back to the per-component sigma-point predict.
     void predict_batch_dynamic(
         double dt, models::Mixture<Dist, Eigen::Dynamic>& mix) const override {
         if (mix.size() == 0) return;
@@ -174,16 +143,15 @@ private:
     using DynMatrix = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
     struct SigmaSet {
-        DynMatrix pts;   // n x (2n+1) sigma points (columns)
-        DynVector Wm;    // mean weights
-        DynVector Wc;    // covariance weights
+        DynMatrix pts;
+        DynVector Wm;
+        DynVector Wc;
     };
 
-    Scalar alpha_ = Scalar(1);     // O(1) weights: numerically robust default
+    Scalar alpha_ = Scalar(1);
     Scalar beta_  = Scalar(2);
     Scalar kappa_ = Scalar(0);
 
-    /// Build the 2n+1 sigma points and unscented weights for (mean, cov).
     [[nodiscard]] SigmaSet sigma_points(
         const typename Base::StateVector& mean,
         const typename Base::StateMatrix& cov) const {
@@ -201,10 +169,6 @@ private:
         s.Wc(0) = lambda / c + (Scalar(1) - alpha_ * alpha_ + beta_);
         for (int i = 1; i <= 2 * n; ++i) s.Wm(i) = s.Wc(i) = Scalar(1) / (2 * c);
 
-        // Matrix square root of c*cov via Cholesky (columns are the +/- offsets).
-        // Symmetrize and check success; if the covariance is not numerically
-        // positive-definite, regularize with a small jitter (cf. fusion/merge.hpp)
-        // rather than silently consuming a meaningless factor.
         DynMatrix P = c * cov;
         P = Scalar(0.5) * (P + P.transpose());
         Eigen::LLT<DynMatrix> llt(P);
@@ -224,8 +188,6 @@ private:
         return s;
     }
 
-    /// Push sigma points through the measurement function and form the
-    /// predicted measurement, innovation covariance S, and cross-covariance Pxz.
     void measurement_transform(
         const SigmaSet& s,
         const typename Base::StateVector& state_mean,
@@ -259,4 +221,4 @@ private:
     }
 };
 
-} // namespace brew::filters
+}

@@ -5,17 +5,6 @@
 
 namespace brew::dynamics {
 
-/// Base class for continuous-time dynamics models defined by the ODE dx/dt = f(x, u).
-///
-/// Subclasses must provide:
-///   f()   — the state derivative
-///   F_c() — the continuous-time Jacobian (df/dx)
-///   Q_c() — the continuous-time process noise spectral density
-///
-/// Default implementations:
-///   propagate_state()    — 4th-order Runge-Kutta integration
-///   get_state_mat()      — matrix exponential: expm(F_c * dt)
-///   get_discrete_noise() — Van Loan's method from F_c and Q_c
 template <typename Scalar = double, int D = Eigen::Dynamic>
 class ContinuousDynamics : public DynamicsBase<Scalar, D> {
 public:
@@ -41,8 +30,6 @@ public:
         const Matrix Qc = Q_c();
         const int n = static_cast<int>(Fc.rows());
 
-        // Van Loan's 2n×2n auxiliary matrix — stays dynamic even for fixed D
-        // because the block expansion is 2n on each side.
         Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> Z =
             Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>::Zero(2*n, 2*n);
         Z.topLeftCorner(n, n)     = -Fc;
@@ -78,10 +65,10 @@ public:
     }
 
     [[nodiscard]] InputMatrix get_input_mat(
-        Scalar /*dt*/,
+        Scalar ,
         const Vector& state = Vector{}) const override {
         return InputMatrix::Zero(F_c(state).rows(), 1);
     }
 };
 
-} // namespace brew::dynamics
+}

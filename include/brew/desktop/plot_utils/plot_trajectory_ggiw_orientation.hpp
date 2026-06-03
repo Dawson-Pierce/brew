@@ -12,8 +12,6 @@
 
 namespace brew::plot_utils {
 
-/// Plot 2D TrajectoryGGIWOrientation: trajectory line + GGIW extent ellipses
-/// + principal axis lines at last state.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
                                          const brew::models::TrajectoryGGIWOrientation<Scalar, D, De>& tg,
@@ -44,7 +42,6 @@ void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
     line->color(color);
     line->line_width(1.5f);
 
-    // Start marker
     std::vector<double> sx = {x.front()};
     std::vector<double> sy = {y.front()};
     auto start_marker = ax->plot(sx, sy);
@@ -52,7 +49,6 @@ void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
     start_marker->color(color);
     start_marker->marker_size(8.0f);
 
-    // Draw GGIW orientation extent ellipses + principal axes at the last state
     auto last_mean = tg.get_last_state();
     auto last_cov = tg.get_last_cov();
     brew::models::GGIWOrientation<> last_ggiw(
@@ -60,7 +56,6 @@ void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
         last_mean, last_cov,
         tg.current().v(), tg.current().V());
 
-    // Copy basis from trajectory if available
     if (tg.current().basis().size() > 0) {
         last_ggiw.basis() = tg.current().basis();
         last_ggiw.eigenvalues() = tg.current().eigenvalues();
@@ -69,7 +64,6 @@ void plot_trajectory_ggiw_orientation_2d(matplot::axes_handle ax,
     plot_ggiw_orientation_2d(ax, last_ggiw, plt_inds, color, confidence);
 }
 
-/// Convenience: auto-dispatch based on plt_inds.size().
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw_orientation(matplot::axes_handle ax,
                                       const brew::models::TrajectoryGGIWOrientation<Scalar, D, De>& tg,
@@ -83,7 +77,6 @@ void plot_trajectory_ggiw_orientation(matplot::axes_handle ax,
     }
 }
 
-/// Convenience: create figure, plot, save if output_file set.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw_orientation(const brew::models::TrajectoryGGIWOrientation<Scalar, D, De>& tg,
                                       const PlotOptions& opts) {
@@ -99,4 +92,4 @@ void plot_trajectory_ggiw_orientation(const brew::models::TrajectoryGGIWOrientat
     }
 }
 
-} // namespace brew::plot_utils
+}

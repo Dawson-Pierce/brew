@@ -14,9 +14,6 @@ struct OSPAResult {
     double cardinality = 0.0;
 };
 
-/// Compute the Optimal Subpattern Assignment (OSPA) metric.
-/// Uses Hungarian assignment on pairwise Euclidean distances clamped by cutoff.
-/// Formula: OSPA = (1/max(m,n) * [sum(min(d_i, c)^p) + |m-n|*c^p])^(1/p)
 [[nodiscard]] inline OSPAResult calculate_ospa(
     const std::vector<Eigen::VectorXd>& estimates,
     const std::vector<Eigen::VectorXd>& truths,
@@ -38,7 +35,6 @@ struct OSPAResult {
     const double p = static_cast<double>(power);
     const int max_mn = std::max(m, n);
 
-    // Build pairwise distance matrix (m x n)
     Eigen::MatrixXd cost(m, n);
     for (int i = 0; i < m; ++i) {
         for (int j = 0; j < n; ++j) {
@@ -47,7 +43,6 @@ struct OSPAResult {
         }
     }
 
-    // Build cost matrix for Hungarian (use cutoff-clamped distances raised to power p)
     Eigen::MatrixXd cost_p(m, n);
     for (int i = 0; i < m; ++i) {
         for (int j = 0; j < n; ++j) {
@@ -57,13 +52,11 @@ struct OSPAResult {
 
     auto assignment = assignment::hungarian(cost_p);
 
-    // Localization component: sum of assigned (clamped) distances^p
     double loc_sum = 0.0;
     for (const auto& [row, col] : assignment.assignments) {
         loc_sum += std::pow(cost(row, col), p);
     }
 
-    // Cardinality component
     double card_sum = std::abs(m - n) * std::pow(cutoff, p);
 
     result.localization = std::pow(loc_sum / max_mn, 1.0 / p);
@@ -73,9 +66,6 @@ struct OSPAResult {
     return result;
 }
 
-/// Compute the Generalized Optimal Subpattern Assignment (GOSPA) metric.
-/// Avoids the 1/max(m,n) normalization issue of OSPA.
-/// alpha controls the relative weight of cardinality errors (default 2).
 [[nodiscard]] inline OSPAResult calculate_gospa(
     const std::vector<Eigen::VectorXd>& estimates,
     const std::vector<Eigen::VectorXd>& truths,
@@ -97,7 +87,6 @@ struct OSPAResult {
         return result;
     }
 
-    // Build pairwise distance matrix (m x n)
     Eigen::MatrixXd cost(m, n);
     for (int i = 0; i < m; ++i) {
         for (int j = 0; j < n; ++j) {
@@ -106,7 +95,6 @@ struct OSPAResult {
         }
     }
 
-    // Build cost matrix for Hungarian
     Eigen::MatrixXd cost_p(m, n);
     for (int i = 0; i < m; ++i) {
         for (int j = 0; j < n; ++j) {
@@ -116,13 +104,11 @@ struct OSPAResult {
 
     auto assignment = assignment::hungarian(cost_p);
 
-    // Localization: sum of assigned distances^p
     double loc_sum = 0.0;
     for (const auto& [row, col] : assignment.assignments) {
         loc_sum += std::pow(cost(row, col), p);
     }
 
-    // Cardinality: penalty for unassigned targets/estimates
     int n_assigned = static_cast<int>(assignment.assignments.size());
     int n_unassigned = (m - n_assigned) + (n - n_assigned);
     double card_sum = n_unassigned * std::pow(cutoff, p) / alpha;
@@ -134,4 +120,4 @@ struct OSPAResult {
     return result;
 }
 
-} // namespace brew::metrics
+}

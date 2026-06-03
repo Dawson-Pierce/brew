@@ -5,9 +5,6 @@
 
 namespace brew::dynamics {
 
-/// Constant-acceleration (double) integrator for 1, 2, or 3 spatial dimensions.
-/// State ordering: [pos..., vel..., acc...].
-/// Input is an acceleration increment applied each step.
 // @mex dynamics
 // @mex_name DoubleIntegrator
 // @mex_args dims:int
@@ -22,7 +19,6 @@ public:
     using InputVector = typename Base::InputVector;
     using InputMatrix = typename Base::InputMatrix;
 
-    /// Default ctor — only valid when Dspatial is fixed at compile time.
     DoubleIntegrator() : dims_(Dspatial) {
         static_assert(Dspatial != Eigen::Dynamic,
             "Specify spatial dim at runtime via DoubleIntegrator(int)");
@@ -52,7 +48,6 @@ public:
         return names[dims_ - 1];
     }
 
-    /// F = kron([[1, dt, 0.5*dt^2], [0, 1, dt], [0, 0, 1]], I_dims)
     [[nodiscard]] Matrix get_state_mat(
         Scalar dt,
         const Vector& = Vector{}) const override {
@@ -67,7 +62,6 @@ public:
         return F;
     }
 
-    /// G = kron([[0.5*dt^2], [dt], [1]], I_dims)
     [[nodiscard]] InputMatrix get_input_mat(
         Scalar dt,
         const Vector& = Vector{}) const override {
@@ -82,12 +76,10 @@ public:
         return G;
     }
 
-    /// Linear time-invariant: get_state_mat(dt) is state-independent, so the
-    /// transition can be built once and shared across a batch of targets.
     [[nodiscard]] bool is_lti() const override { return true; }
 
 private:
     int dims_;
 };
 
-} // namespace brew::dynamics
+}

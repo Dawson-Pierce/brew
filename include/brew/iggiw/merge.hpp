@@ -3,6 +3,7 @@
 // Component merge for the `iggiw` package -- owns ONLY the IGGIW merge
 // (no cross-model overload set). In namespace brew::iggiw so the package's
 // concrete RFS resolve an unqualified merge(...) here.
+
 #include "brew/shared/mixture.hpp"
 #include "brew/iggiw/iggiw_model.hpp"
 #include <Eigen/Dense>
@@ -14,7 +15,6 @@
 #include <vector>
 
 namespace brew::iggiw {
-
 
 template <typename Scalar, int D, int De, int N>
 void merge(models::Mixture<models::IGGIW<Scalar, D, De>, N>& mix, double threshold) {
@@ -100,4 +100,4 @@ void merge(models::Mixture<models::IGGIW<Scalar, D, De>, N>& mix, double thresho
     mix = std::move(result);
 }
 
-}  // namespace brew::iggiw
+}

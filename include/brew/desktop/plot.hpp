@@ -13,8 +13,6 @@
 
 namespace brew {
 
-// Convenience wrappers at the top-level brew namespace.
-// These forward to brew::plot_utils::* so callers don't need to reference the sub-namespace.
 void plot(const models::Gaussian<>& g,
           const plot_utils::PlotOptions& opts);
 void plot(const models::GGIW<>& g,
@@ -52,4 +50,4 @@ void plot(const models::Mixture<models::TrajectoryGGIW<Scalar, D, De>>& mix,
 void plot(const template_matching::PointCloud& cloud,
           const plot_utils::PlotOptions& opts);
 
-} // namespace brew
+}

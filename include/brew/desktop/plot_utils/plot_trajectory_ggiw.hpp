@@ -11,8 +11,6 @@
 
 namespace brew::plot_utils {
 
-/// Plot 2D TrajectoryGGIW: trajectory line + GGIW extent ellipses at last state.
-/// plt_inds must contain exactly 2 indices.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
                               const brew::models::TrajectoryGGIW<Scalar, D, De>& tg,
@@ -43,7 +41,6 @@ void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
     line->color(color);
     line->line_width(1.5f);
 
-    // Start marker
     std::vector<double> sx = {x.front()};
     std::vector<double> sy = {y.front()};
     auto start_marker = ax->plot(sx, sy);
@@ -51,7 +48,6 @@ void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
     start_marker->color(color);
     start_marker->marker_size(8.0f);
 
-    // Draw GGIW extent ellipses at the last state
     auto last_mean = tg.get_last_state();
     auto last_cov = tg.get_last_cov();
     brew::models::GGIW<> last_ggiw(
@@ -62,8 +58,6 @@ void plot_trajectory_ggiw_2d(matplot::axes_handle ax,
     plot_ggiw_2d(ax, last_ggiw, plt_inds, color, confidence);
 }
 
-/// Plot 3D TrajectoryGGIW: plot3 trajectory + GGIW extent ellipsoids at last state.
-/// plt_inds must contain exactly 3 indices.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
                               const brew::models::TrajectoryGGIW<Scalar, D, De>& tg,
@@ -96,7 +90,6 @@ void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
     line->color(color);
     line->line_width(1.5f);
 
-    // Start marker
     std::vector<double> sx = {x.front()};
     std::vector<double> sy = {y.front()};
     std::vector<double> sz = {z.front()};
@@ -105,7 +98,6 @@ void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
     start_marker->color(color);
     start_marker->marker_size(8.0f);
 
-    // Draw GGIW extent ellipsoids at the last state
     auto last_mean = tg.get_last_state();
     auto last_cov = tg.get_last_cov();
     brew::models::GGIW<> last_ggiw(
@@ -116,7 +108,6 @@ void plot_trajectory_ggiw_3d(matplot::axes_handle ax,
     plot_ggiw_3d(ax, last_ggiw, plt_inds, color, confidence, alpha);
 }
 
-/// Convenience: auto-dispatch based on plt_inds.size().
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw(matplot::axes_handle ax,
                            const brew::models::TrajectoryGGIW<Scalar, D, De>& tg,
@@ -133,7 +124,6 @@ void plot_trajectory_ggiw(matplot::axes_handle ax,
     }
 }
 
-/// Convenience: create figure, plot, save if output_file set.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic>
 void plot_trajectory_ggiw(const brew::models::TrajectoryGGIW<Scalar, D, De>& tg,
                            const PlotOptions& opts) {
@@ -149,5 +139,4 @@ void plot_trajectory_ggiw(const brew::models::TrajectoryGGIW<Scalar, D, De>& tg,
     }
 }
 
-} // namespace brew::plot_utils
-
+}

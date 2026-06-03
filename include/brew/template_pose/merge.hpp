@@ -3,6 +3,7 @@
 // Component merge for the `template_pose` package -- owns ONLY the TemplatePose merge
 // (no cross-model overload set). In namespace brew::template_pose so the package's
 // concrete RFS resolve an unqualified merge(...) here.
+
 #include "brew/shared/mixture.hpp"
 #include "brew/template_pose/template_pose_model.hpp"
 #include <Eigen/Dense>
@@ -14,7 +15,6 @@
 #include <vector>
 
 namespace brew::template_pose {
-
 
 template <typename Scalar, int D, int N>
 void merge(models::Mixture<models::TemplatePose<Scalar, D>, N>& mix, double threshold) {
@@ -136,4 +136,4 @@ void merge(models::Mixture<models::TemplatePose<Scalar, D>, N>& mix, double thre
     mix = std::move(result);
 }
 
-}  // namespace brew::template_pose
+}

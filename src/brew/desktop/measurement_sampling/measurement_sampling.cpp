@@ -12,8 +12,6 @@
 
 namespace brew::measurement_sampling {
 
-// ---- STL parsing helpers ----
-
 struct Triangle {
     Eigen::Vector3d v0, v1, v2;
     double area() const {
@@ -139,8 +137,6 @@ static Eigen::Vector3d sample_triangle_bary(const Triangle& tri, double u, doubl
     return b0 * tri.v0 + b1 * tri.v1 + b2 * tri.v2;
 }
 
-// ---- STL mesh loading ----
-
 PointCloud load_stl(const std::string& filepath) {
     auto triangles = parse_stl(filepath);
     if (triangles.empty()) {
@@ -163,9 +159,6 @@ Eigen::MatrixXd load_stl_triangles(const std::string& filepath) {
     }
     return result;
 }
-
-// ---- OpenVSP coordinate fix ----
-// OpenVSP exports with +X aft. Negate X and swap v1/v2 to preserve winding.
 
 static std::vector<Triangle> fix_vsp_triangles(std::vector<Triangle> triangles) {
     for (auto& tri : triangles) {
@@ -199,8 +192,6 @@ Eigen::MatrixXd load_stl_triangles_vsp(const std::string& filepath) {
     }
     return result;
 }
-
-// ---- STL surface sampling ----
 
 static void sample_stl_impl(const std::string& filepath, int num_points,
                             Eigen::MatrixXd& points_out, Eigen::MatrixXd* normals_out) {
@@ -251,8 +242,6 @@ PointCloud sample_stl(const std::string& filepath, int num_points,
     sample_stl_impl(filepath, num_points, points, &normals_out);
     return PointCloud(std::move(points));
 }
-
-// ---- OpenVSP surface sampling ----
 
 static void sample_triangles_impl(const std::vector<Triangle>& triangles, int num_points,
                                    Eigen::MatrixXd& points_out, Eigen::MatrixXd* normals_out) {
@@ -306,8 +295,6 @@ PointCloud sample_stl_vsp(const std::string& filepath, int num_points,
     sample_triangles_impl(triangles, num_points, points, &normals_out);
     return PointCloud(std::move(points));
 }
-
-// ---- Poisson disk sampling ----
 
 static Eigen::MatrixXd poisson_disk_filter(const Eigen::MatrixXd& candidates, int num_points) {
     const int N_cand = static_cast<int>(candidates.cols());
@@ -370,8 +357,6 @@ PointCloud sample_pc(const PointCloud& cloud, int num_points) {
     Eigen::MatrixXd filtered = poisson_disk_filter(cloud.points(), num_points);
     return PointCloud(std::move(filtered));
 }
-
-// ---- 2D shape sampling ----
 
 PointCloud sample_circle(double radius, int num_points) {
     Eigen::MatrixXd points(2, num_points);
@@ -438,8 +423,6 @@ PointCloud sample_triangle(double base, double height, int num_points) {
     }
     return PointCloud(std::move(points));
 }
-
-// ---- 3D shape sampling ----
 
 PointCloud sample_sphere(double radius, int num_points) {
     const int n_candidates = num_points * 5;
@@ -510,4 +493,4 @@ PointCloud sample_box(double lx, double ly, double lz, int num_points) {
     return PointCloud(std::move(filtered));
 }
 
-} // namespace brew::measurement_sampling
+}
