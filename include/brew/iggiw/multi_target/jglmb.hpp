@@ -1,5 +1,7 @@
 #pragma once
 
+// JGLMB RFS for the iggiw package (concrete; brew::iggiw).
+
 #include "brew/iggiw/iggiw_model.hpp"
 
 #include "brew/iggiw/multi_target/glmb.hpp"
@@ -16,9 +18,6 @@
 
 namespace brew::iggiw {
 
-/// Joint GLMB filter (Vo, Vo & Phung 2017). Inherits GLMB's track-table / hypothesis
-/// machinery but moves birth from predict() into the correct() assignment: birth
-/// candidates compete directly with surviving tracks for measurements.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class JGLMB : public GLMB<Scalar, D, De, MaxComponents> {
     using T = models::IGGIW<Scalar, D, De>;
@@ -72,8 +71,7 @@ public:
         return c;
     }
 
-    /// Predict existing tracks only (no separate birth step).
-    void predict(int /*timestep*/, double dt) override {
+    void predict(int , double dt) override {
         if (!this->has_filter_) return;
 
         std::vector<std::unique_ptr<TabEntry>> surv_tab;
@@ -138,8 +136,6 @@ public:
         this->card_dist_from_hyps();
     }
 
-    /// Joint correct: birth candidates compete with surviving tracks for measurements
-    /// within the same Murty assignment.
     void correct(const Eigen::MatrixXd& measurements) override {
         if (!this->has_filter_) return;
 
@@ -338,9 +334,7 @@ public:
 
                 std::vector<assignment::AssignmentResult> solutions;
                 if (use_gibbs_) {
-                    // Approximate the m_req best assignments by Gibbs sampling
-                    // (scales past Murty on large problems). Seed deterministically
-                    // for reproducibility, decorrelated across parents/timesteps.
+
                     const std::uint64_t seed =
                         0x9E3779B97F4A7C15ull * (static_cast<std::uint64_t>(up_hyps.size()) + 1)
                         + static_cast<std::uint64_t>(this->time_index_cntr_) + 1ull;
@@ -395,12 +389,10 @@ public:
         this->clean_updates();
     }
 
-    /// Use the Gibbs sampler (approximate, scales to large problems) instead of
-    /// exact Murty ranked assignment for the joint update. Default: Murty.
     void set_use_gibbs(bool b) { use_gibbs_ = b; }
 
 private:
     bool use_gibbs_ = false;
 };
 
-}  // namespace brew::iggiw
+}

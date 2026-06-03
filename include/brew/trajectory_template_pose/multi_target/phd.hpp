@@ -1,5 +1,7 @@
 #pragma once
 
+// PHD RFS for the trajectory_template_pose package (concrete; brew::trajectory_template_pose).
+
 #include "brew/trajectory_template_pose/trajectory_template_pose_model.hpp"
 
 #include "brew/shared/rfs_base.hpp"
@@ -19,8 +21,6 @@
 
 namespace brew::trajectory_template_pose {
 
-/// Probability Hypothesis Density (PHD) filter.
-/// Template parameter T is the single distribution type (e.g., Gaussian<>, GGIW).
 template <typename Scalar = double, int D = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class PHD : public multi_target::RFSBase {
     using T = models::TrajectoryTemplatePose<Scalar, D>;
@@ -46,8 +46,6 @@ public:
         if (cluster_obj_) c->cluster_obj_ = cluster_obj_;
         return c;
     }
-
-    // ---- Configuration ----
 
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
         filter_ = std::move(filter);
@@ -92,21 +90,14 @@ public:
         return extracted_mixtures_;
     }
 
-    // ---- RFS interface ----
-
-    void predict(int /*timestep*/, double dt) override {
+    void predict(int , double dt) override {
         if (!intensity_ || !has_filter_) return;
 
-        // Scale surviving weights, then batch-propagate every component. The
-        // concrete filter's predict_batch builds a shared F once for LTI dynamics
-        // (per-component fallback otherwise) — numerically identical to a
-        // per-component predict() loop.
         for (std::size_t k = 0; k < intensity_->size(); ++k) {
             intensity_->weights()(static_cast<Eigen::Index>(k)) *= prob_survive_;
         }
         filter_->predict_batch_dynamic(dt, *intensity_);
 
-        // Add birth components
         if (birth_model_) {
             auto birth_copy = birth_model_->clone();
             intensity_->add_components(*birth_copy);
@@ -117,29 +108,25 @@ public:
     void correct(const Eigen::MatrixXd& measurements) override {
         if (!intensity_ || !has_filter_) return;
 
-        // Build measurement groups (cells)
         std::vector<Eigen::MatrixXd> meas_groups;
         if (is_extended_ && cluster_obj_) {
             meas_groups = cluster_obj_->cluster(measurements);
         } else {
-            // Each column is a separate measurement
+
             for (int j = 0; j < measurements.cols(); ++j) {
                 meas_groups.push_back(measurements.col(j));
             }
         }
 
-        // Undetected copy: (1 - pd) * w
         auto undetected = intensity_->clone();
         for (std::size_t i = 0; i < undetected->size(); ++i) {
             undetected->weights()(static_cast<Eigen::Index>(i)) *= (1.0 - prob_detection_);
         }
 
-        // Scale intensity weights by pd for correction
         for (std::size_t i = 0; i < intensity_->size(); ++i) {
             intensity_->weights()(static_cast<Eigen::Index>(i)) *= prob_detection_;
         }
 
-        // Per-measurement correction
         models::Mixture<T, MaxComponents> corrected_mix;
 
         for (std::size_t z = 0; z < meas_groups.size(); ++z) {
@@ -151,7 +138,6 @@ public:
                 z_gate = meas.col(0);
             }
 
-            // Flatten measurement for correction (stack columns)
             Eigen::VectorXd meas_flat;
             if (meas.cols() > 1) {
                 meas_flat.resize(meas.size());
@@ -175,9 +161,6 @@ public:
                 }
             }
 
-            // Normalize weights with clutter
-            // For extended targets, the clutter term for a cluster of W
-            // measurements is the product of independent clutter intensities.
             double w_sum = 0.0;
             for (double w : w_lst) w_sum += w;
             const int W = static_cast<int>(meas.cols());
@@ -191,7 +174,6 @@ public:
             }
         }
 
-        // Replace intensity with undetected + corrected
         *intensity_ = std::move(*undetected);
         intensity_->add_components(corrected_mix);
     }
@@ -205,7 +187,6 @@ public:
         this->push_history(extracted_mixtures_, extract());
     }
 
-    /// Extract state estimates (components with weight >= threshold).
     [[nodiscard]] std::unique_ptr<models::Mixture<T, MaxComponents>> extract() const {
         if (!intensity_) return nullptr;
         auto result = std::make_unique<models::Mixture<T, MaxComponents>>();
@@ -234,4 +215,4 @@ private:
     std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
 };
 
-} // namespace brew::trajectory_template_pose
+}

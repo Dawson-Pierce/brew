@@ -16,7 +16,7 @@
 
 namespace brew::trajectory_gaussian {
 
-/// Merge close Trajectory<Gaussian<>> components (same-size, absorb into longer/heavier).
+
 template <typename Scalar, int D, int N>
 void merge(models::Mixture<models::TrajectoryGaussian<Scalar, D>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
@@ -56,7 +56,6 @@ void merge(models::Mixture<models::TrajectoryGaussian<Scalar, D>, N>& mix, doubl
                 keep = best_j; drop = best_i;
             }
 
-            // Absorb last-state into keeper
             auto& base = mix.component(keep);
             const int sd = base.state_dim;
             const int n_total = static_cast<int>(base.mean().size());

@@ -8,6 +8,7 @@
 // filters independently (e.g. add spawning) without a shared model-generalizing
 // template. It depends only on generic infrastructure (RFSBase, Mixture, the
 // Filter base, and the fusion/clustering utilities).
+
 #include "brew/gaussian/gaussian_model.hpp"
 #include "brew/shared/rfs_base.hpp"
 #include "brew/shared/mixture.hpp"
@@ -24,10 +25,6 @@
 
 namespace brew::gaussian {
 
-// NOTE: not yet @mex-exposed — the generator still dispatches the Gaussian PHD to
-// the generic multi_target::PHD<Gaussian> during the per-package migration. The
-// @mex annotations move here (and onto the generic template) when the generator
-// is rewired to target the concrete per-package classes.
 template <typename Scalar = double, int D = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class PHD : public multi_target::RFSBase {
     using T = models::Gaussian<Scalar, D>;
@@ -54,8 +51,6 @@ public:
         if (cluster_obj_) c->cluster_obj_ = cluster_obj_;
         return c;
     }
-
-    // ---- Configuration ----
 
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
         filter_ = std::move(filter);
@@ -100,19 +95,14 @@ public:
         return extracted_mixtures_;
     }
 
-    // ---- RFS interface ----
-
-    void predict(int /*timestep*/, double dt) override {
+    void predict(int , double dt) override {
         if (!intensity_ || !has_filter_) return;
 
-        // Scale surviving weights, then batch-propagate every component (the
-        // filter's predict_batch_dynamic uses a shared LTI F when applicable).
         for (std::size_t k = 0; k < intensity_->size(); ++k) {
             intensity_->weights()(static_cast<Eigen::Index>(k)) *= prob_survive_;
         }
         filter_->predict_batch_dynamic(dt, *intensity_);
 
-        // Add birth components
         if (birth_model_) {
             auto birth_copy = birth_model_->clone();
             intensity_->add_components(*birth_copy);
@@ -200,7 +190,6 @@ public:
         this->push_history(extracted_mixtures_, extract());
     }
 
-    /// Extract state estimates (components with weight >= threshold).
     [[nodiscard]] std::unique_ptr<models::Mixture<T, MaxComponents>> extract() const {
         if (!intensity_) return nullptr;
         auto result = std::make_unique<models::Mixture<T, MaxComponents>>();
@@ -229,4 +218,4 @@ private:
     std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
 };
 
-} // namespace brew::gaussian
+}

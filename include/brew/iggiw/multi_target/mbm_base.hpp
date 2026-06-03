@@ -1,5 +1,7 @@
 #pragma once
 
+// MBMBase RFS for the iggiw package (concrete; brew::iggiw).
+
 #include "brew/iggiw/iggiw_model.hpp"
 
 #include "brew/shared/rfs_base.hpp"
@@ -22,24 +24,18 @@
 
 namespace brew::iggiw {
 
-/// Shared infrastructure for MBM and PMBM. Stores a table of labeled Bernoulli-like
-/// tracks (each with existence probability and a per-timestep internal mixture), a set
-/// of weighted global hypotheses over track subsets, and helpers for hypothesis
-/// management (normalize / prune / cap / compact), cardinality, track history recording,
-/// and trajectory extraction. Subclasses override predict() and correct().
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class MBMBase : public multi_target::RFSBase {
     using T = models::IGGIW<Scalar, D, De>;
 public:
     using MixturePtr = std::unique_ptr<models::Mixture<T, MaxComponents>>;
 
-    /// One track: id + existence + per-timestep internal mixture + measurement-assoc history.
     struct TrackEntry {
         int id = -1;
         double existence_probability = 0.0;
         int birth_time_index = 0;
-        std::vector<MixturePtr> mixture_hist;     // one Mixture<T> per step alive
-        std::vector<int> meas_assoc_hist;         // -1 missed, otherwise measurement index
+        std::vector<MixturePtr> mixture_hist;
+        std::vector<int> meas_assoc_hist;
 
         [[nodiscard]] std::unique_ptr<TrackEntry> clone() const {
             auto r = std::make_unique<TrackEntry>();
@@ -60,14 +56,12 @@ public:
         }
     };
 
-    /// Weighted hypothesis over a subset of tracks.
     struct Hypothesis {
         double log_weight = 0.0;
         std::vector<std::size_t> track_indices;
         [[nodiscard]] std::size_t num_tracks() const { return track_indices.size(); }
     };
 
-    /// Extracted trajectory: per-step MAP-component state + meas_assoc + birth-time.
     struct ExtractedTrack {
         int id = -1;
         int b_time_index = 0;
@@ -76,8 +70,6 @@ public:
     };
 
     MBMBase() = default;
-
-    // ---- Common configuration ----
 
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
         filter_ = std::move(filter);
@@ -95,8 +87,6 @@ public:
         cluster_obj_ = std::move(obj);
     }
 
-    // ---- Accessors ----
-
     [[nodiscard]] const std::vector<std::unique_ptr<TrackEntry>>& track_tab() const {
         return track_tab_;
     }
@@ -110,7 +100,6 @@ public:
     [[nodiscard]] double estimated_cardinality() const { return estimated_cardinality_; }
     [[nodiscard]] const Eigen::VectorXd& cardinality() const { return cardinality_pmf_; }
 
-    /// Legacy-shape accessor: maps track id → per-step MAP-component mean-state history.
     [[nodiscard]] std::map<int, std::vector<Eigen::VectorXd>> track_histories() const {
         std::map<int, std::vector<Eigen::VectorXd>> out;
         for (const auto& trk : extracted_hists_) {
@@ -124,7 +113,6 @@ public:
     }
 
 protected:
-    // ---- Weight / hypothesis management ----
 
     void normalize_log_weights() {
         if (hypotheses_.empty()) return;
@@ -157,7 +145,6 @@ protected:
         hypotheses_.resize(static_cast<std::size_t>(max_hypotheses_));
     }
 
-    /// Remove unreferenced track entries and remap hypothesis indices.
     void compact_track_table() {
         const std::size_t n = track_tab_.size();
         std::vector<bool> referenced(n, false);
@@ -179,7 +166,6 @@ protected:
         track_tab_ = std::move(compact);
     }
 
-    /// Prune low-existence tracks from each hypothesis (doesn't touch the global table).
     void prune_low_existence_tracks() {
         for (auto& h : hypotheses_) {
             std::vector<std::size_t> kept;
@@ -220,9 +206,6 @@ protected:
         }
     }
 
-    // ---- Extraction ----
-
-    /// Index of highest-weight hypothesis, or npos if none.
     [[nodiscard]] std::size_t map_hypothesis_index() const {
         if (hypotheses_.empty()) return std::numeric_limits<std::size_t>::max();
         std::size_t idx = 0;
@@ -232,7 +215,6 @@ protected:
         return idx;
     }
 
-    /// For one track, pick the max-weight component per timestep.
     std::vector<std::unique_ptr<T>> extract_helper(const TrackEntry& trk) const {
         std::vector<std::unique_ptr<T>> states;
         states.reserve(trk.mixture_hist.size());
@@ -248,9 +230,6 @@ protected:
         return states;
     }
 
-    /// Merge tracks from MAP hypothesis into extracted_hists_; retire existing tracks
-    /// whose ID is re-extracted, or whose measurement associations are claimed by a new
-    /// track at the same timestep.
     void update_extract_hist(std::size_t idx_cmp) {
         std::vector<std::vector<int>> used_meas(
             static_cast<std::size_t>(time_index_cntr_ + 1));
@@ -303,8 +282,6 @@ protected:
         update_extract_hist(idx);
     }
 
-    /// Push a current-step snapshot mixture (one component per MAP track's latest state).
-    /// Governed by max_history_ (see multi_target::RFSBase::set_max_history).
     void push_extracted_snapshot() {
         if (this->max_history_ == 0) return;
         auto mix = std::make_unique<models::Mixture<T, MaxComponents>>();
@@ -329,21 +306,13 @@ protected:
         this->push_history(extracted_mixtures_, std::move(mix));
     }
 
-    // ---- Per-track mixture operations (reused by predict/correct in subclasses) ----
-
-    /// Build a predicted mixture from the current mixture by calling filter_.predict
-    /// on each component. Weights are preserved.
     MixturePtr predict_mixture(const models::Mixture<T, MaxComponents>& src, double dt) const {
-        // Clone (components + weights) then batch-predict in place — identical to
-        // a per-component predict() loop, but lets the concrete filter share F.
+
         auto out = src.clone();
         filter_->predict_batch_dynamic(dt, *out);
         return out;
     }
 
-    /// Correct a mixture by a measurement. Each component is updated by filter_.correct,
-    /// weights become w_c * likelihood_c, then re-normalized. Returns (corrected_mixture,
-    /// total_weight) where total_weight is the track-level likelihood of the measurement.
     std::pair<MixturePtr, double> correct_mixture(
         const models::Mixture<T, MaxComponents>& src,
         const Eigen::VectorXd& meas_flat) const
@@ -365,7 +334,6 @@ protected:
         return {std::move(out), total_w};
     }
 
-    /// Convert a (D, W) measurement matrix to its flat (D*W,) form for correction.
     static Eigen::VectorXd flatten_measurement(const Eigen::MatrixXd& meas) {
         if (meas.cols() <= 1) return meas.col(0);
         Eigen::VectorXd out(meas.size());
@@ -380,7 +348,6 @@ protected:
                                              : Eigen::VectorXd(meas.col(0));
     }
 
-    /// Does at least one component of the track's current mixture pass the gate for meas?
     bool passes_gate(const TrackEntry& trk, const Eigen::VectorXd& z_gate) const {
         const auto& mix = trk.current_mixture();
         for (std::size_t c = 0; c < mix.size(); ++c) {
@@ -389,7 +356,6 @@ protected:
         return false;
     }
 
-    /// Cluster measurements (DBSCAN) for extended targets, or one column per meas for point.
     std::vector<Eigen::MatrixXd> group_measurements(const Eigen::MatrixXd& measurements) const {
         std::vector<Eigen::MatrixXd> out;
         if (is_extended_ && cluster_obj_) {
@@ -400,7 +366,6 @@ protected:
         return out;
     }
 
-    /// Per-cluster clutter likelihood kappa_j = kappa_base^W for cluster of W measurements.
     static std::vector<double> compute_kappa_vec(
         const std::vector<Eigen::MatrixXd>& meas_groups, double kappa_base)
     {
@@ -411,8 +376,6 @@ protected:
         }
         return out;
     }
-
-    // ---- Members (protected for subclass access) ----
 
     std::unique_ptr<filters::Filter<T>> filter_;
     bool has_filter_ = false;
@@ -437,4 +400,4 @@ protected:
     int time_index_cntr_ = 0;
 };
 
-}  // namespace brew::iggiw
+}

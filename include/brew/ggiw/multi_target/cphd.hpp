@@ -1,5 +1,7 @@
 #pragma once
 
+// CPHD RFS for the ggiw package (concrete; brew::ggiw).
+
 #include "brew/ggiw/ggiw_model.hpp"
 
 #include "brew/shared/rfs_base.hpp"
@@ -24,10 +26,6 @@
 
 namespace brew::ggiw {
 
-/// Cardinalized Probability Hypothesis Density (CPHD) filter.
-/// Extends the PHD filter with a cardinality distribution for improved
-/// target number estimation (Vo, Singh & Doucet, 2006; Mahler, 2007).
-/// Template parameter T is the single distribution type (e.g., Gaussian<>, GGIW).
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class CPHD : public multi_target::RFSBase {
     using T = models::GGIW<Scalar, D, De>;
@@ -57,8 +55,6 @@ public:
         return c;
     }
 
-    // ---- Configuration ----
-
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
         filter_ = std::move(filter);
         has_filter_ = true;
@@ -86,27 +82,19 @@ public:
     void set_extended_target(bool ext) { is_extended_ = ext; }
     void set_cluster_object(std::shared_ptr<clustering::ClusterBase> obj) { cluster_obj_ = std::move(obj); }
 
-    /// Set the cardinality distribution (PMF over number of targets).
-    /// card(n) = P(N = n), must sum to 1, length = max_cardinality + 1.
     void set_cardinality(Eigen::VectorXd card) { cardinality_ = std::move(card); }
 
-    /// Set the birth cardinality distribution.
     void set_birth_cardinality(Eigen::VectorXd birth_card) { birth_cardinality_ = std::move(birth_card); }
 
-    /// Set maximum cardinality to track.
     void set_max_cardinality(int n) { max_cardinality_ = n; }
 
-    /// Convenience: set cardinality to a truncated Poisson(lambda) PMF.
     void set_poisson_cardinality(double lambda) {
         cardinality_ = make_poisson_pmf(lambda, max_cardinality_);
     }
 
-    /// Convenience: set birth cardinality to a truncated Poisson(lambda) PMF.
     void set_poisson_birth_cardinality(double lambda) {
         birth_cardinality_ = make_poisson_pmf(lambda, max_cardinality_);
     }
-
-    // ---- Accessors ----
 
     [[nodiscard]] const models::Mixture<T, MaxComponents>& intensity() const { return *intensity_; }
     [[nodiscard]] models::Mixture<T, MaxComponents>& intensity() { return *intensity_; }
@@ -117,7 +105,6 @@ public:
 
     [[nodiscard]] const Eigen::VectorXd& cardinality() const { return cardinality_; }
 
-    /// Estimated number of targets (mean of cardinality distribution).
     [[nodiscard]] double estimated_cardinality() const {
         double mean = 0.0;
         for (int n = 0; n < cardinality_.size(); ++n) {
@@ -126,7 +113,6 @@ public:
         return mean;
     }
 
-    /// MAP estimate of cardinality (mode of the distribution).
     [[nodiscard]] int map_cardinality() const {
         int best = 0;
         for (int n = 1; n < cardinality_.size(); ++n) {
@@ -139,12 +125,8 @@ public:
         return cardinality_history_;
     }
 
-    // ---- RFS interface ----
-
-    void predict(int /*timestep*/, double dt) override {
+    void predict(int , double dt) override {
         if (!intensity_ || !has_filter_) return;
-
-        // --- Phase A: Intensity prediction (same as PHD) ---
 
         for (std::size_t k = 0; k < intensity_->size(); ++k) {
             intensity_->weights()(static_cast<Eigen::Index>(k)) *= prob_survive_;
@@ -157,13 +139,10 @@ public:
 
         }
 
-        // --- Phase B: Cardinality prediction ---
-
         if (cardinality_.size() > 0 && birth_cardinality_.size() > 0) {
-            // Binomial thinning of cardinality by survival probability
+
             Eigen::VectorXd surv = predict_cardinality_survival(prob_survive_);
 
-            // Convolution with birth cardinality
             cardinality_ = convolve_cardinality(surv, birth_cardinality_);
         }
     }
@@ -171,7 +150,6 @@ public:
     void correct(const Eigen::MatrixXd& measurements) override {
         if (!intensity_ || !has_filter_) return;
 
-        // Build measurement groups (same as PHD)
         std::vector<Eigen::MatrixXd> meas_groups;
         if (is_extended_ && cluster_obj_) {
             meas_groups = cluster_obj_->cluster(measurements);
@@ -187,11 +165,8 @@ public:
         const double kappa = clutter_rate_ * clutter_density_;
         const double q_d = 1.0 - prob_detection_;
 
-        // Save predicted cardinality (needed for weight computations)
         const Eigen::VectorXd card_pred = cardinality_;
 
-        // --- Compute per-component likelihoods and corrected distributions ---
-        // delta(k, j) = pd * w_k * q_z(k,j)
         Eigen::MatrixXd delta = Eigen::MatrixXd::Zero(J, m);
         std::vector<std::vector<std::unique_ptr<T>>> corrected_dists(J);
         for (int k = 0; k < J; ++k) corrected_dists[k].resize(m);
@@ -220,8 +195,6 @@ public:
             }
         }
 
-        // --- Elementary symmetric functions ---
-        // Lambda_j = sum_k delta(k,j) / kappa
         Eigen::VectorXd Lambda(m);
         for (int j = 0; j < m; ++j) {
             double L_j = delta.col(j).sum();
@@ -229,14 +202,11 @@ public:
         }
         Eigen::VectorXd esf_full = multi_target::elementary_symmetric_functions(Lambda);
 
-        // --- Upsilon^0: used for cardinality update and weight denominator ---
-        // upsilon0(n) = sum_{j=0}^{min(m,n)} esf(j) * P(n,j) * (1-pd)^{n-j}
         Eigen::VectorXd upsilon0 = compute_upsilon(esf_full, m, N, q_d, 0);
 
         double denom = card_pred.dot(upsilon0);
         if (denom <= 0.0) denom = 1e-300;
 
-        // --- Update cardinality ---
         Eigen::VectorXd card_updated(N);
         for (int n = 0; n < N; ++n)
             card_updated(n) = card_pred(n) * upsilon0(n);
@@ -244,22 +214,17 @@ public:
         if (card_sum > 0.0) card_updated /= card_sum;
         cardinality_ = card_updated;
 
-        // --- Upsilon^1 for undetected weight ratio ---
-        // upsilon1(n) = sum_{j=0}^{min(m,n-1)} esf(j) * P(n,j+1) * (1-pd)^{n-j-1}
         Eigen::VectorXd upsilon1_full = compute_upsilon(esf_full, m, N, q_d, 1);
         double numer_undetected = card_pred.dot(upsilon1_full);
         double weight_ratio_undetected = numer_undetected / denom;
 
-        // --- Build updated intensity ---
         auto updated_intensity = std::make_unique<models::Mixture<T, MaxComponents>>();
 
-        // Undetected components
         for (int k = 0; k < J; ++k) {
             double w = q_d * intensity_->weight(k) * weight_ratio_undetected;
             updated_intensity->add_component(intensity_->component(k).clone_typed(), w);
         }
 
-        // Detected components (per measurement)
         for (int j = 0; j < m; ++j) {
             Eigen::VectorXd esf_minus_j = multi_target::esf_excluding(esf_full, Lambda(j));
             Eigen::VectorXd upsilon1_j = compute_upsilon(esf_minus_j, m - 1, N, q_d, 1);
@@ -269,8 +234,7 @@ public:
 
             for (int k = 0; k < J; ++k) {
                 if (delta(k, j) > 0.0 && corrected_dists[k][j]) {
-                    // CPHD: w = delta(k,j) * r_z / kappa
-                    // where r_z = <U^1(Z\{z_j}), card_pred> / <U^0(Z), card_pred>
+
                     double w = delta(k, j) * weight_ratio_j / kappa;
                     updated_intensity->add_component(
                         std::move(corrected_dists[k][j]), w);
@@ -291,7 +255,6 @@ public:
         this->push_history(cardinality_history_, cardinality_);
     }
 
-    /// Extract state estimates (components with weight >= threshold).
     [[nodiscard]] std::unique_ptr<models::Mixture<T, MaxComponents>> extract() const {
         if (!intensity_) return nullptr;
         auto result = std::make_unique<models::Mixture<T, MaxComponents>>();
@@ -306,12 +269,7 @@ public:
     }
 
 private:
-    // Compute Upsilon function for CPHD weight computation using log-domain
-    // arithmetic to avoid overflow of falling_factorial for large cardinalities.
-    // offset=0: Upsilon^0 (for cardinality update denominator)
-    //   upsilon(n) = sum_{j=0}^{min(m_esf,n)} esf(j) * P(n,j) * qd^{n-j}
-    // offset=1: Upsilon^1 (for weight ratios)
-    //   upsilon(n) = sum_{j=0}^{min(m_esf,n-1)} esf(j) * P(n,j+1) * qd^{n-j-1}
+
     [[nodiscard]] static Eigen::VectorXd compute_upsilon(
         const Eigen::VectorXd& esf, int m_esf, int N, double q_d, int offset)
     {
@@ -322,7 +280,6 @@ private:
             int j_max = std::min(m_esf, n - offset);
             if (j_max < 0) continue;
 
-            // Log-sum-exp accumulation for numerical stability
             double max_log = -std::numeric_limits<double>::infinity();
             std::vector<double> log_terms;
             log_terms.reserve(j_max + 1);
@@ -330,7 +287,7 @@ private:
             for (int j = 0; j <= j_max; ++j) {
                 if (j < esf.size() && n >= j + offset && esf(j) > 0.0) {
                     double log_esf = std::log(esf(j));
-                    // log(P(n, j+offset)) = log(n!) - log((n-j-offset)!)
+
                     double log_ff = lgamma(n + 1) - lgamma(n - j - offset + 1);
                     double log_qd_term = (n - j - offset) * log_qd;
                     double lt = log_esf + log_ff + log_qd_term;
@@ -350,7 +307,6 @@ private:
         return result;
     }
 
-    // Helper: truncated Poisson PMF
     [[nodiscard]] static Eigen::VectorXd make_poisson_pmf(double lambda, int max_n) {
         Eigen::VectorXd pmf(max_n + 1);
         double log_lambda = std::log(lambda);
@@ -359,18 +315,17 @@ private:
             pmf(n) = std::exp(n * log_lambda - lambda - log_factorial);
             log_factorial += std::log(static_cast<double>(n + 1));
         }
-        pmf /= pmf.sum(); // renormalize after truncation
+        pmf /= pmf.sum();
         return pmf;
     }
 
-    // Predict cardinality via binomial thinning by survival probability
     [[nodiscard]] Eigen::VectorXd predict_cardinality_survival(double ps) const {
         const int N = static_cast<int>(cardinality_.size());
         Eigen::VectorXd surv = Eigen::VectorXd::Zero(N);
 
         for (int j = 0; j < N; ++j) {
             for (int i = j; i < N; ++i) {
-                // C(i,j) * ps^j * (1-ps)^{i-j} * card(i)
+
                 double log_binom = lgamma(i + 1) - lgamma(j + 1) - lgamma(i - j + 1);
                 double val = std::exp(log_binom + j * std::log(ps)
                                       + (i - j) * std::log(1.0 - ps));
@@ -381,7 +336,6 @@ private:
         return surv;
     }
 
-    // Discrete convolution of surviving and birth cardinality PMFs
     [[nodiscard]] Eigen::VectorXd convolve_cardinality(
         const Eigen::VectorXd& surv, const Eigen::VectorXd& birth) const
     {
@@ -397,7 +351,6 @@ private:
             }
         }
 
-        // Normalize
         double s = result.sum();
         if (s > 0.0) result /= s;
         return result;
@@ -415,12 +368,11 @@ private:
     double gate_threshold_ = 9.0;
     bool is_extended_ = false;
 
-    // CPHD-specific state
-    Eigen::VectorXd cardinality_;           // PMF over target count
-    Eigen::VectorXd birth_cardinality_;     // Birth cardinality PMF
+    Eigen::VectorXd cardinality_;
+    Eigen::VectorXd birth_cardinality_;
     int max_cardinality_ = 100;
     std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
     std::deque<Eigen::VectorXd> cardinality_history_;
 };
 
-} // namespace brew::ggiw
+}

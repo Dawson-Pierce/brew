@@ -16,7 +16,7 @@
 
 namespace brew::trajectory_ggiw_orientation {
 
-/// Merge close Trajectory<GGIWOrientation<>> components (same-size, absorb into longer/heavier; basis left empty).
+
 template <typename Scalar, int D, int De, int N>
 void merge(models::Mixture<models::TrajectoryGGIWOrientation<Scalar, D, De>, N>& mix, double threshold) {
     if (mix.size() < 2) return;

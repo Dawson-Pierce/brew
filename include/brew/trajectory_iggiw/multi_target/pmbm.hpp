@@ -1,5 +1,7 @@
 #pragma once
 
+// PMBM RFS for the trajectory_iggiw package (concrete; brew::trajectory_iggiw).
+
 #include "brew/trajectory_iggiw/trajectory_iggiw_model.hpp"
 
 #include "brew/trajectory_iggiw/multi_target/mbm_base.hpp"
@@ -18,12 +20,6 @@
 
 namespace brew::trajectory_iggiw {
 
-/// Poisson Multi-Bernoulli Mixture (PMBM) filter. Maintains:
-///   - A Poisson intensity for undetected targets (inherits from MBMBase's is_extended etc).
-///   - A set of labeled Bernoulli tracks (from MBMBase::track_tab_) for detected targets.
-/// Birth is implicit: the birth Mixture is added to the Poisson intensity at each predict.
-/// The correct step runs an augmented Murty assignment where existing tracks, Poisson
-/// spawn candidates (one per measurement), and clutter compete jointly.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class PMBM : public MBMBase<Scalar, D, De, MaxComponents> {
     using T = models::TrajectoryIGGIW<Scalar, D, De>;
@@ -82,9 +78,6 @@ public:
         return c;
     }
 
-    // ---- Configuration ----
-
-    /// Poisson birth intensity added to the Poisson intensity each predict step.
     void set_birth_model(MixturePtr birth) {
         if (birth && !birth->empty()) {
             this->is_extended_ = birth->component(0).is_extended();
@@ -95,7 +88,6 @@ public:
         birth_model_ = std::move(birth);
     }
 
-    /// Initial Poisson intensity (undetected targets).
     void set_poisson_intensity(MixturePtr intensity) {
         poisson_intensity_ = std::move(intensity);
     }
@@ -105,30 +97,24 @@ public:
     void set_max_poisson_components(int n) { max_poisson_components_ = n; }
     void set_recycle_threshold(double t) { recycle_threshold_ = t; }
 
-    // ---- Accessors ----
-
     [[nodiscard]] const models::Mixture<T, MaxComponents>& poisson_intensity() const {
         return *poisson_intensity_;
     }
 
-    // ---- RFS interface ----
-
-    void predict(int /*timestep*/, double dt) override {
+    void predict(int , double dt) override {
         if (!this->has_filter_) return;
 
-        // Poisson prediction (weight *= ps, each component predicted).
         if (poisson_intensity_) {
             for (std::size_t k = 0; k < poisson_intensity_->size(); ++k) {
                 poisson_intensity_->weights()(static_cast<Eigen::Index>(k)) *= this->prob_survive_;
             }
             this->filter_->predict_batch_dynamic(dt, *poisson_intensity_);
-            // Birth adds to Poisson intensity.
+
             if (birth_model_) {
                 poisson_intensity_->add_components(*birth_model_);
             }
         }
 
-        // Existing tracks: predict the latest mixture and append to history.
         for (auto& trk : this->track_tab_) {
             trk->existence_probability *= this->prob_survive_;
             trk->mixture_hist.push_back(
@@ -144,10 +130,9 @@ public:
         const double kappa_base = this->clutter_rate_ * this->clutter_density_;
         auto kappa_vec = Base::compute_kappa_vec(meas_groups, kappa_base);
 
-        // Per-measurement Poisson spawn: corrected mixture and total likelihood weight.
         struct SpawnCandidate {
-            MixturePtr mixture;       // normalized spatial mixture after update
-            double total_weight = 0.0; // pd * sum_k w_k * qz_kj
+            MixturePtr mixture;
+            double total_weight = 0.0;
         };
         std::vector<SpawnCandidate> spawn(m);
 
@@ -179,20 +164,18 @@ public:
             }
         }
 
-        // Remaining Poisson becomes undetected contribution.
         auto undetected = poisson_intensity_->clone();
         for (std::size_t k = 0; k < undetected->size(); ++k) {
             undetected->weights()(static_cast<Eigen::Index>(k)) *= (1.0 - this->prob_detection_);
         }
 
-        // ---- Augmented Murty per parent hypothesis ----
         std::vector<Hypothesis> new_hyps;
 
         for (const auto& hyp : this->hypotheses_) {
             const int nt = static_cast<int>(hyp.num_tracks());
 
             if (m == 0) {
-                // No measurements: all tracks get missed-detection update.
+
                 Hypothesis h;
                 h.log_weight = hyp.log_weight;
                 for (int i = 0; i < nt; ++i) {
@@ -213,11 +196,6 @@ public:
                 continue;
             }
 
-            // Cost matrix layout:
-            //   rows [0, nt):     existing tracks
-            //   rows [nt, nt+m):  Poisson-spawn rows, one per measurement
-            //   cols [0, m):      measurement j
-            //   cols [m, m+nt+m): per-row miss diagonal
             const int n_rows = nt + m;
             const int n_cols = m + n_rows;
             Eigen::MatrixXd cost = Eigen::MatrixXd::Constant(n_rows, n_cols,
@@ -227,7 +205,6 @@ public:
             std::vector<std::vector<Cache>> cache(nt);
             for (int i = 0; i < nt; ++i) cache[i].resize(m);
 
-            // Existing track rows
             for (int i = 0; i < nt; ++i) {
                 const auto& trk = *this->track_tab_[hyp.track_indices[i]];
                 double r = trk.existence_probability;
@@ -251,13 +228,12 @@ public:
                 if (miss > 0.0) cost(i, m + i) = -std::log(miss);
             }
 
-            // Poisson-spawn rows
             for (int p = 0; p < m; ++p) {
                 int row = nt + p;
                 if (spawn[p].total_weight > 0.0 && kappa_vec[p] > 0.0) {
                     cost(row, p) = -std::log(spawn[p].total_weight / kappa_vec[p]);
                 }
-                // Spawn "miss" (no new track spawned) is free -- clutter baseline covers it.
+
                 cost(row, m + row) = 0.0;
             }
 
@@ -272,7 +248,6 @@ public:
                     if (row < n_rows && col < m) assign[row] = col;
                 }
 
-                // Existing tracks: detected or missed.
                 for (int i = 0; i < nt; ++i) {
                     std::size_t orig_idx = hyp.track_indices[i];
                     const auto& orig = *this->track_tab_[orig_idx];
@@ -295,13 +270,11 @@ public:
                     new_hyp.track_indices.push_back(new_idx);
                 }
 
-                // Poisson-spawn rows that fired: new Bernoulli tracks.
                 for (int p = 0; p < m; ++p) {
                     int row = nt + p;
-                    if (assign[row] < 0) continue;  // spawn did not fire
+                    if (assign[row] < 0) continue;
                     if (!spawn[p].mixture) continue;
 
-                    // Existence conditioned on "target vs clutter" for this measurement.
                     double r_new = spawn[p].total_weight
                                  / (kappa_vec[p] + spawn[p].total_weight);
 
@@ -325,7 +298,7 @@ public:
     }
 
     void cleanup() override {
-        // Poisson cleanup.
+
         if (poisson_intensity_) {
             fusion::prune(*poisson_intensity_, prune_poisson_threshold_);
             merge(*poisson_intensity_, merge_poisson_threshold_);
@@ -346,9 +319,7 @@ public:
     }
 
 private:
-    /// Recycle tracks whose existence is between prune_threshold and recycle_threshold
-    /// back into the Poisson intensity. Above recycle_threshold: keep as Bernoulli.
-    /// Below prune_threshold: drop entirely.
+
     void recycle_low_existence_to_poisson() {
         std::vector<bool> recycled(this->track_tab_.size(), false);
         for (auto& hyp : this->hypotheses_) {
@@ -376,8 +347,6 @@ private:
         }
     }
 
-    // ---- Members ----
-
     std::unique_ptr<models::Mixture<T, MaxComponents>> poisson_intensity_;
     std::unique_ptr<models::Mixture<T, MaxComponents>> birth_model_;
 
@@ -387,4 +356,4 @@ private:
     double recycle_threshold_ = 0.1;
 };
 
-}  // namespace brew::trajectory_iggiw
+}

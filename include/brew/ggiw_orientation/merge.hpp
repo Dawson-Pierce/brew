@@ -15,7 +15,7 @@
 
 namespace brew::ggiw_orientation {
 
-/// Merge close GGIWOrientation components (same as GGIW merge; basis left empty for filter to recompute).
+
 template <typename Scalar, int D, int De, int N>
 void merge(models::Mixture<models::GGIWOrientation<Scalar, D, De>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
@@ -24,7 +24,7 @@ void merge(models::Mixture<models::GGIWOrientation<Scalar, D, De>, N>& mix, doub
     models::Mixture<models::GGIWOrientation<Scalar, D, De>, N> result;
 
     while (true) {
-        // Find heaviest remaining
+
         double max_w = -1.0;
         std::size_t ref = 0;
         bool found = false;
@@ -37,7 +37,6 @@ void merge(models::Mixture<models::GGIWOrientation<Scalar, D, De>, N>& mix, doub
         }
         if (!found) break;
 
-        // Cholesky of reference covariance for gating
         Eigen::MatrixXd C_ref = mix.component(ref).covariance();
         C_ref = 0.5 * (C_ref + C_ref.transpose());
         Eigen::LLT<Eigen::MatrixXd> llt(C_ref);
@@ -47,7 +46,6 @@ void merge(models::Mixture<models::GGIWOrientation<Scalar, D, De>, N>& mix, doub
             llt.compute(C_ref);
         }
 
-        // Collect group indices within gate
         std::vector<std::size_t> grp;
         for (std::size_t i = 0; i < mix.size(); ++i) {
             if (!remaining[i]) continue;
@@ -66,7 +64,6 @@ void merge(models::Mixture<models::GGIWOrientation<Scalar, D, De>, N>& mix, doub
             continue;
         }
 
-        // Weighted averages of all parameters
         const int n = static_cast<int>(mix.component(ref).mean().size());
         const int d = mix.component(ref).extent_dim();
 
@@ -93,7 +90,6 @@ void merge(models::Mixture<models::GGIWOrientation<Scalar, D, De>, N>& mix, doub
         V_new /= w_sum;
         V_new = 0.5 * (V_new + V_new.transpose());
 
-        // Basis/eigenvalues left at defaults — filter recomputes on next correction
         result.add_component(
             std::make_unique<models::GGIWOrientation<Scalar, D, De>>(a_new, b_new, m_new, P_new, v_new, V_new),
             w_sum);

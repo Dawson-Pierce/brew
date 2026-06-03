@@ -1,5 +1,7 @@
 #pragma once
 
+// MBM RFS for the iggiw package (concrete; brew::iggiw).
+
 #include "brew/iggiw/iggiw_model.hpp"
 
 #include "brew/iggiw/multi_target/mbm_base.hpp"
@@ -15,11 +17,6 @@
 
 namespace brew::iggiw {
 
-/// Multi-Bernoulli Mixture (MBM) filter. Unlabeled. Each track is a Bernoulli with an
-/// explicit existence probability and an internal mixture over single-model objects.
-/// Birth is an LMB RFS with per-term spatial mixtures and explicit birth probabilities.
-/// The MBM maintains weighted hypotheses over track subsets; each correct step uses
-/// Murty's m-best assignment to enumerate likely hypotheses.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class MBM : public MBMBase<Scalar, D, De, MaxComponents> {
     using T = models::IGGIW<Scalar, D, De>;
@@ -37,7 +34,7 @@ public:
 
     [[nodiscard]] std::unique_ptr<multi_target::RFSBase> clone() const override {
         auto c = std::make_unique<MBM<Scalar, D, De, MaxComponents>>();
-        c->hypotheses_.clear();  // clear default init
+        c->hypotheses_.clear();
         c->prob_detection_ = this->prob_detection_;
         c->prob_survive_ = this->prob_survive_;
         c->clutter_rate_ = this->clutter_rate_;
@@ -75,9 +72,6 @@ public:
         return c;
     }
 
-    // ---- Configuration ----
-
-    /// Birth model: a list of (spatial mixture, birth probability) terms.
     void set_birth_terms(std::vector<std::pair<MixturePtr, double>> terms) {
         birth_terms_ = std::move(terms);
         if (!birth_terms_.empty() && !birth_terms_[0].first->empty()) {
@@ -88,7 +82,6 @@ public:
         }
     }
 
-    /// Convenience overload: one spatial mixture with a single birth probability.
     void set_birth_model(MixturePtr birth_mix, double p_birth) {
         birth_terms_.clear();
         if (!birth_mix || birth_mix->empty()) return;
@@ -99,18 +92,14 @@ public:
         }
     }
 
-    // ---- RFS interface ----
-
-    void predict(int /*timestep*/, double dt) override {
+    void predict(int , double dt) override {
         if (!this->has_filter_) return;
 
-        // Propagate existing tracks (append predicted mixture to history).
         for (auto& trk : this->track_tab_) {
             trk->existence_probability *= this->prob_survive_;
             trk->mixture_hist.push_back(this->predict_mixture(trk->current_mixture(), dt));
         }
 
-        // Spawn birth tracks and add them to every hypothesis.
         std::vector<std::size_t> birth_indices;
         for (std::size_t i = 0; i < birth_terms_.size(); ++i) {
             auto entry = std::make_unique<TrackEntry>();
@@ -181,7 +170,7 @@ public:
 
                 double miss = 1.0 - this->prob_detection_ * r;
                 if (miss > 0.0) cost(i, m + i) = -std::log(miss);
-                // else: leaving miss at infinity forbids missing a certainly-detected track.
+
             }
 
             auto solutions = (n > 0)
@@ -189,7 +178,7 @@ public:
                 : std::vector<assignment::AssignmentResult>{};
 
             if (n == 0) {
-                // No existing tracks: single "all clutter" continuation.
+
                 assignment::AssignmentResult empty;
                 empty.total_cost = 0.0;
                 solutions.push_back(empty);
@@ -209,12 +198,12 @@ public:
                     const auto& orig = *this->track_tab_[orig_idx];
                     auto child = orig.clone();
                     if (assign[i] >= 0) {
-                        // Detected: corrected mixture, existence = 1.
+
                         child->mixture_hist.back() = cache[i][assign[i]].mix->clone();
                         child->existence_probability = 1.0;
                         child->meas_assoc_hist.push_back(assign[i]);
                     } else {
-                        // Missed: keep mixture, update existence.
+
                         double r = orig.existence_probability;
                         child->existence_probability =
                             r * (1.0 - this->prob_detection_)
@@ -270,4 +259,4 @@ private:
     std::vector<std::pair<MixturePtr, double>> birth_terms_;
 };
 
-}  // namespace brew::iggiw
+}

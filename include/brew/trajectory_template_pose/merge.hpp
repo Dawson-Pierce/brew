@@ -16,7 +16,7 @@
 
 namespace brew::trajectory_template_pose {
 
-/// Merge close Trajectory<TemplatePose<>> components (same-size, same-template, absorb into longer/heavier).
+
 template <typename Scalar, int D, int N>
 void merge(models::Mixture<models::TrajectoryTemplatePose<Scalar, D>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
@@ -30,13 +30,10 @@ void merge(models::Mixture<models::TrajectoryTemplatePose<Scalar, D>, N>& mix, d
 
         for (std::size_t i = 0; i < mix.size(); ++i) {
             for (std::size_t j = i + 1; j < mix.size(); ++j) {
-                // Same-template constraint
+
                 if (mix.component(i).current().template_id() !=
                     mix.component(j).current().template_id()) continue;
 
-                // Rotation distance gate: skip if rotations are > 90° apart,
-                // but only when both sides have been PCA-aligned. A birth
-                // component's identity rotation should not block absorption.
                 if (!mix.component(i).current().needs_pca_alignment()
                     && !mix.component(j).current().needs_pca_alignment()) {
                     const auto& Ri = mix.component(i).current().rotation();

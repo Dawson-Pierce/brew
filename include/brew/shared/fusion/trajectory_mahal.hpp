@@ -7,6 +7,7 @@
 // gate, so the helper lives here (inline, ODR-safe) and is included by each
 // trajectory package's merge.hpp. It is model-agnostic: it only sees stacked
 // state means and covariances.
+
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
@@ -14,8 +15,6 @@
 
 namespace brew::fusion {
 
-/// Mahalanobis distance between two equal-length stacked trajectory states.
-/// Returns +inf for mismatched sizes (different window lengths never merge).
 inline double trajectory_mahal_dist(const Eigen::VectorXd& mi, const Eigen::MatrixXd& Pi,
                                     const Eigen::VectorXd& mj, const Eigen::MatrixXd& Pj) {
     if (mi.size() != mj.size()) return std::numeric_limits<double>::infinity();
@@ -29,7 +28,7 @@ inline double trajectory_mahal_dist(const Eigen::VectorXd& mi, const Eigen::Matr
         C += eps_reg * Eigen::MatrixXd::Identity(C.rows(), C.cols());
         llt.compute(C);
         if (llt.info() != Eigen::Success) {
-            // Fallback to pseudoinverse
+
             const Eigen::VectorXd diff = mi - mj;
             return diff.transpose() * C.completeOrthogonalDecomposition().pseudoInverse() * diff;
         }
@@ -38,4 +37,4 @@ inline double trajectory_mahal_dist(const Eigen::VectorXd& mi, const Eigen::Matr
     return y.squaredNorm();
 }
 
-}  // namespace brew::fusion
+}

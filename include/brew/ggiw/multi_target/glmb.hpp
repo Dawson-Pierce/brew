@@ -1,5 +1,7 @@
 #pragma once
 
+// GLMB RFS for the ggiw package (concrete; brew::ggiw).
+
 #include "brew/ggiw/ggiw_model.hpp"
 
 #include "brew/shared/rfs_base.hpp"
@@ -23,25 +25,18 @@
 
 namespace brew::ggiw {
 
-/// Delta-Generalized Labeled Multi-Bernoulli filter (Vo & Vo 2013, 2014).
-/// Each track is an internal mixture of single-model objects of type T that evolves
-/// over time; trajectories are reconstructed from the MAP-cardinality hypothesis at
-/// each cleanup step. Birth is an LMB RFS with per-term spatial mixtures and explicit
-/// birth probabilities.
 template <typename Scalar = double, int D = Eigen::Dynamic, int De = Eigen::Dynamic, int MaxComponents = Eigen::Dynamic>
 class GLMB : public multi_target::RFSBase {
     using T = models::GGIW<Scalar, D, De>;
 public:
-    using Label = std::pair<int, int>;  // (birth_time_index, birth_model_index)
+    using Label = std::pair<int, int>;
     using MixturePtr = std::unique_ptr<models::Mixture<T, MaxComponents>>;
 
-    /// Track table entry: a labeled track's evolving internal mixture of single-model
-    /// objects plus its measurement-association history.
     struct TabEntry {
         Label label{};
         int time_index = 0;
-        std::vector<MixturePtr> mixture_hist;   // per-timestep mixture, one entry per step alive
-        std::vector<int> meas_assoc_hist;       // -1 = missed, otherwise measurement index
+        std::vector<MixturePtr> mixture_hist;
+        std::vector<int> meas_assoc_hist;
 
         [[nodiscard]] std::unique_ptr<TabEntry> clone() const {
             auto r = std::make_unique<TabEntry>();
@@ -54,14 +49,12 @@ public:
         }
     };
 
-    /// Global hypothesis: association probability (linear) and set of track-table indices.
     struct Hypothesis {
         double assoc_prob = 0.0;
         std::vector<std::size_t> track_set;
         [[nodiscard]] std::size_t num_tracks() const { return track_set.size(); }
     };
 
-    /// Extracted trajectory: labeled, with full per-step MAP-component state history.
     struct ExtractedTrack {
         Label label{};
         int b_time_index = 0;
@@ -115,16 +108,11 @@ public:
         return c;
     }
 
-    // ---- Configuration ----
-
     void set_filter(std::unique_ptr<filters::Filter<T>> filter) {
         filter_ = std::move(filter);
         has_filter_ = true;
     }
 
-    /// Birth model: a list of (spatial mixture, birth probability) terms. The mixture
-    /// weights describe the *spatial* distribution within a term; the scalar is the
-    /// probability that a target is born from that term at a given step.
     void set_birth_terms(
         std::vector<std::pair<MixturePtr, double>> terms)
     {
@@ -137,7 +125,6 @@ public:
         }
     }
 
-    /// Convenience overload: one spatial mixture with a single birth probability.
     void set_birth_model(MixturePtr birth_mix, double p_birth) {
         birth_terms_.clear();
         if (!birth_mix || birth_mix->empty()) return;
@@ -151,10 +138,10 @@ public:
     void set_req_births(int n) { req_births_ = n; }
     void set_req_surv(int n) { req_surv_ = n; }
     void set_req_upd(int n) { req_upd_ = n; }
-    /// Back-compat: set req_births/req_surv/req_upd together.
+
     void set_k_best(int k) { req_births_ = req_surv_ = req_upd_ = k; }
     void set_prune_threshold(double t) { prune_threshold_ = t; }
-    /// Back-compat alias of set_prune_threshold.
+
     void set_prune_threshold_hypothesis(double t) { prune_threshold_ = t; }
     void set_max_hypotheses(int n) { max_hypotheses_ = n; }
     void set_extract_threshold(double t) { extract_threshold_ = t; }
@@ -165,8 +152,6 @@ public:
         cluster_obj_ = std::move(obj);
     }
 
-    // ---- Accessors ----
-
     [[nodiscard]] const std::vector<std::unique_ptr<TabEntry>>& track_tab() const {
         return track_tab_;
     }
@@ -176,18 +161,12 @@ public:
     [[nodiscard]] const std::vector<std::unique_ptr<ExtractedTrack>>& extracted_tracks() const {
         return extractable_hists_;
     }
-    /// Per-timestep snapshot of extracted tracks' latest states. Each entry is a
-    /// unit-weight mixture of the live-track current-state distributions. Bounded by
-    /// max_history_ (see multi_target::RFSBase::set_max_history): 0 disables recording, N caps to the
-    /// N most recent entries, SIZE_MAX (default) keeps everything.
+
     [[nodiscard]] const std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>>&
     extracted_mixtures() const { return extracted_mixtures_; }
     [[nodiscard]] double estimated_cardinality() const { return estimated_cardinality_; }
     [[nodiscard]] const Eigen::VectorXd& cardinality() const { return cardinality_pmf_; }
 
-    /// Legacy-shape accessor: maps a synthetic id (derived from label) to its per-step
-    /// MAP-component mean-state history. Used by plotting helpers that expect
-    /// std::map<int, vector<VectorXd>>.
     [[nodiscard]] std::map<int, std::vector<Eigen::VectorXd>> track_histories() const {
         std::map<int, std::vector<Eigen::VectorXd>> out;
         for (const auto& trk : extractable_hists_) {
@@ -201,12 +180,9 @@ public:
         return out;
     }
 
-    // ---- RFS interface ----
-
-    void predict(int /*timestep*/, double dt) override {
+    void predict(int , double dt) override {
         if (!has_filter_) return;
 
-        // Build birth table and costs
         std::vector<std::unique_ptr<TabEntry>> birth_tab;
         Eigen::VectorXd birth_log_cost(static_cast<int>(birth_terms_.size()));
         for (std::size_t i = 0; i < birth_terms_.size(); ++i) {
@@ -220,16 +196,14 @@ public:
             birth_tab.push_back(std::move(entry));
         }
 
-        // Birth hypotheses via subset enumeration
         auto birth_paths = multi_target::detail::k_shortest_subsets(birth_log_cost, req_births_);
 
-        // tot_b_prob in log-space: sum log(1 - p_B) over all terms
         double tot_b_prob_log = 0.0;
         for (const auto& [mix, p_b] : birth_terms_) {
             tot_b_prob_log += std::log(std::max(1.0 - p_b, std::numeric_limits<double>::min()));
         }
 
-        std::vector<std::pair<double, std::vector<int>>> birth_hyps;  // (log_prob, term_indices)
+        std::vector<std::pair<double, std::vector<int>>> birth_hyps;
         birth_hyps.reserve(birth_paths.size());
         std::vector<double> birth_logs;
         birth_logs.reserve(birth_paths.size());
@@ -240,10 +214,9 @@ public:
         }
         double birth_lse = multi_target::detail::log_sum_exp(birth_logs);
         for (auto& [lw, ind] : birth_hyps) {
-            lw = std::exp(lw - birth_lse);  // now normalized linear prob
+            lw = std::exp(lw - birth_lse);
         }
 
-        // Predict existing tracks into surv_tab (append one new mixture per track)
         std::vector<std::unique_ptr<TabEntry>> surv_tab;
         surv_tab.reserve(track_tab_.size());
         for (const auto& trk : track_tab_) {
@@ -255,11 +228,10 @@ public:
             surv_tab.push_back(std::move(nt));
         }
 
-        // Survival hypotheses: each parent hypothesis generates req_surv_ * sqrt ratio children
         double sum_sqrt_w = 0.0;
         for (const auto& h : hypotheses_) sum_sqrt_w += std::sqrt(h.assoc_prob);
 
-        std::vector<std::pair<double, std::vector<std::size_t>>> surv_hyps;  // (log_prob, surv-track-indices)
+        std::vector<std::pair<double, std::vector<std::size_t>>> surv_hyps;
         std::vector<double> surv_logs;
         for (const auto& hyp : hypotheses_) {
             if (hyp.num_tracks() == 0) {
@@ -295,7 +267,6 @@ public:
             lw = std::exp(lw - surv_lse);
         }
 
-        // Convolve birth and survival hypotheses
         const std::size_t n_birth_tracks = birth_tab.size();
         std::vector<Hypothesis> new_hyps;
         new_hyps.reserve(birth_hyps.size() * surv_hyps.size());
@@ -315,7 +286,6 @@ public:
             for (auto& h : new_hyps) h.assoc_prob /= tot_w;
         }
 
-        // track_tab = birth_tab + surv_tab
         track_tab_.clear();
         track_tab_.reserve(n_birth_tracks + surv_tab.size());
         for (auto& e : birth_tab) track_tab_.push_back(std::move(e));
@@ -329,7 +299,6 @@ public:
     void correct(const Eigen::MatrixXd& measurements) override {
         if (!has_filter_) return;
 
-        // Build measurement groups
         std::vector<Eigen::MatrixXd> meas_groups;
         if (is_extended_ && cluster_obj_) {
             meas_groups = cluster_obj_->cluster(measurements);
@@ -341,21 +310,15 @@ public:
         const int num_meas = static_cast<int>(meas_groups.size());
         const int num_pred = static_cast<int>(track_tab_.size());
 
-        // Build cor_tab: (num_meas + 1) * num_pred entries
-        // Slots 0..num_pred-1: track i, missed detection
-        // Slots num_pred*(emm+1) + i: track i corrected by meas emm
         std::vector<std::unique_ptr<TabEntry>> cor_tab;
         cor_tab.resize(static_cast<std::size_t>((num_meas + 1) * num_pred));
 
-        // Missed-detection copies
         for (int i = 0; i < num_pred; ++i) {
             auto nt = track_tab_[i]->clone();
             nt->meas_assoc_hist.push_back(-1);
             cor_tab[static_cast<std::size_t>(i)] = std::move(nt);
         }
 
-        // all_cost_m[i, j] = sum over components of (w * likelihood); i.e., track-level
-        // likelihood of meas j given track i.
         Eigen::MatrixXd all_cost_m = Eigen::MatrixXd::Zero(num_pred, std::max(num_meas, 1));
 
         for (int j = 0; j < num_meas; ++j) {
@@ -379,7 +342,7 @@ public:
                 const auto& last = *trk.mixture_hist.back();
 
                 if (gating_on_) {
-                    // Skip tracks where no component passes the gate
+
                     bool gated = false;
                     for (std::size_t c = 0; c < last.size(); ++c) {
                         double gv = filter_->gate(z_gate, last.component(c));
@@ -391,8 +354,6 @@ public:
                     }
                 }
 
-                // Per-component correction: build the corrected mixture, accumulate total
-                // likelihood, then renormalize component weights.
                 auto corrected = std::make_unique<models::Mixture<T, MaxComponents>>();
                 std::vector<double> new_w(last.size(), 0.0);
                 double total_w = 0.0;
@@ -419,7 +380,6 @@ public:
             }
         }
 
-        // Build corrected hypotheses
         std::vector<Hypothesis> up_hyps;
 
         if (num_meas == 0) {
@@ -430,8 +390,8 @@ public:
                 double lw = -clutter_rate_ + pmd_log
                           + std::log(std::max(hyp.assoc_prob, std::numeric_limits<double>::min()));
                 Hypothesis h;
-                h.assoc_prob = lw;  // log-domain, normalized below
-                h.track_set = hyp.track_set;  // missed-detection slots are at indices 0..num_pred-1
+                h.assoc_prob = lw;
+                h.track_set = hyp.track_set;
                 up_hyps.push_back(std::move(h));
             }
         } else {
@@ -513,7 +473,6 @@ public:
             }
         }
 
-        // Normalize up_hyps via log-sum-exp
         std::vector<double> logs;
         logs.reserve(up_hyps.size());
         for (const auto& h : up_hyps) logs.push_back(h.assoc_prob);
@@ -537,9 +496,7 @@ public:
     }
 
 protected:
-    // ---- Hypothesis helpers ----
 
-    /// Merge duplicate hypotheses (same sorted track_set) by summing assoc_prob.
     void clean_predictions() {
         std::vector<Hypothesis> out;
         std::vector<std::vector<std::size_t>> keys;
@@ -562,7 +519,6 @@ protected:
         hypotheses_ = std::move(out);
     }
 
-    /// Remove tracks not referenced by any hypothesis; remap hypothesis indices.
     void clean_updates() {
         const std::size_t n = track_tab_.size();
         std::vector<std::size_t> used(n, 0);
@@ -655,9 +611,6 @@ protected:
         }
     }
 
-    // ---- Extraction ----
-
-    /// For one track, pick the max-weight component per timestep.
     std::vector<std::unique_ptr<T>> extract_helper(const TabEntry& trk) const {
         std::vector<std::unique_ptr<T>> states;
         states.reserve(trk.mixture_hist.size());
@@ -673,8 +626,6 @@ protected:
         return states;
     }
 
-    /// Merge new tracks from MAP hypothesis into extractable_hists_; retire old tracks
-    /// whose measurement associations are claimed by new tracks or whose labels reappear.
     void update_extract_hist(std::size_t idx_cmp) {
         std::vector<std::vector<int>> used_meas(static_cast<std::size_t>(time_index_cntr_ + 1));
         std::vector<Label> used_labels;
@@ -719,8 +670,6 @@ protected:
         extractable_hists_ = std::move(surviving);
     }
 
-    /// Pick MAP-cardinality, highest-weight hypothesis. Returns track_tab index of that
-    /// hypothesis, or npos if no hypothesis exists.
     [[nodiscard]] std::size_t map_hypothesis_index() const {
         if (hypotheses_.empty()) return std::numeric_limits<std::size_t>::max();
         int map_card = 0;
@@ -747,7 +696,7 @@ protected:
     }
 
     static int label_to_id(const Label& l) {
-        // Arbitrary 1-to-1 hash for legacy integer-id callers.
+
         return l.first * 100000 + l.second;
     }
 
@@ -773,8 +722,6 @@ protected:
         this->push_history(extracted_mixtures_, std::move(mix));
     }
 
-    // ---- Members ----
-
     std::unique_ptr<filters::Filter<T>> filter_;
     bool has_filter_ = false;
     std::vector<std::unique_ptr<TabEntry>> track_tab_;
@@ -799,4 +746,4 @@ protected:
     std::deque<std::unique_ptr<models::Mixture<T, MaxComponents>>> extracted_mixtures_;
 };
 
-}  // namespace brew::ggiw
+}

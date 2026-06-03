@@ -4,6 +4,7 @@
 // merge — no cross-model overload set. Lives in namespace brew::gaussian so the
 // package's concrete RFS resolve an unqualified merge(...) to this, with no
 // dependency on (or collision with) the shared multi-model fusion::merge.
+
 #include "brew/shared/mixture.hpp"
 #include "brew/gaussian/gaussian_model.hpp"
 
@@ -13,7 +14,6 @@
 
 namespace brew::gaussian {
 
-/// Merge close Gaussian components via moment matching (iterative closest-pair).
 template <typename Scalar, int D, int N>
 void merge(models::Mixture<models::Gaussian<Scalar, D>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
@@ -62,4 +62,4 @@ void merge(models::Mixture<models::Gaussian<Scalar, D>, N>& mix, double threshol
     }
 }
 
-}  // namespace brew::gaussian
+}

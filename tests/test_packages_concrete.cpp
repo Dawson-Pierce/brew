@@ -1,12 +1,5 @@
+// Compile-smoke + clone for the concrete RFS of every non-gaussian package.
 #include <gtest/gtest.h>
-
-// Compile-smoke test for the per-package CONCRETE RFS filters of all NON-gaussian
-// packages (gaussian has its own test_gaussian_concrete.cpp). Each package's RFS
-// are concrete classes in namespace brew::<pkg>, templated only on data type +
-// size/shape (and extent De for the GGIW family), never on the model. This forces
-// full template + vtable emission of every concrete RFS through its umbrella,
-// catching de-templating regressions at compile time; clone() exercises the
-// RFSBase override on a default-constructed filter.
 #include "brew/ggiw/ggiw.hpp"
 #include "brew/ggiw_orientation/ggiw_orientation.hpp"
 #include "brew/iggiw/iggiw.hpp"
@@ -28,8 +21,6 @@ static void instantiate_and_clone() {
                   "concrete package RFS must derive from multi_target::RFSBase");
 }
 
-// Instantiate the 6 concrete RFS of one package (MBMBase is abstract -> only via
-// the MBM/PMBM inheritance static_asserts).
 #define SMOKE_PACKAGE(NS)                                  \
     instantiate_and_clone<NS::PHD<>>();                    \
     instantiate_and_clone<NS::CPHD<>>();                   \

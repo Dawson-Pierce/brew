@@ -15,10 +15,7 @@
 
 namespace brew::iggiw {
 
-/// Merge close IGGIW components via weighted averaging (heaviest-first grouping).
-/// Identical kinematic+extent merge to GGIW; alpha/beta retain their
-/// InverseGamma-on-intensity interpretation so beta/(alpha-1) remains the
-/// posterior mean intensity of the merged component.
+
 template <typename Scalar, int D, int De, int N>
 void merge(models::Mixture<models::IGGIW<Scalar, D, De>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
@@ -27,7 +24,7 @@ void merge(models::Mixture<models::IGGIW<Scalar, D, De>, N>& mix, double thresho
     models::Mixture<models::IGGIW<Scalar, D, De>, N> result;
 
     while (true) {
-        // Find heaviest remaining
+
         double max_w = -1.0;
         std::size_t ref = 0;
         bool found = false;
@@ -40,7 +37,6 @@ void merge(models::Mixture<models::IGGIW<Scalar, D, De>, N>& mix, double thresho
         }
         if (!found) break;
 
-        // Cholesky of reference covariance for gating
         Eigen::MatrixXd C_ref = mix.component(ref).covariance();
         C_ref = 0.5 * (C_ref + C_ref.transpose());
         Eigen::LLT<Eigen::MatrixXd> llt(C_ref);
@@ -50,7 +46,6 @@ void merge(models::Mixture<models::IGGIW<Scalar, D, De>, N>& mix, double thresho
             llt.compute(C_ref);
         }
 
-        // Collect group indices within gate
         std::vector<std::size_t> grp;
         for (std::size_t i = 0; i < mix.size(); ++i) {
             if (!remaining[i]) continue;
@@ -69,7 +64,6 @@ void merge(models::Mixture<models::IGGIW<Scalar, D, De>, N>& mix, double thresho
             continue;
         }
 
-        // Weighted averages of all parameters
         const int n = static_cast<int>(mix.component(ref).mean().size());
         const int d = mix.component(ref).extent_dim();
 

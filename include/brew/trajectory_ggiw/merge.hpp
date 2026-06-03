@@ -16,7 +16,7 @@
 
 namespace brew::trajectory_ggiw {
 
-/// Merge close Trajectory<GGIW<>> components (same-size, absorb into longer/heavier).
+
 template <typename Scalar, int D, int De, int N>
 void merge(models::Mixture<models::TrajectoryGGIW<Scalar, D, De>, N>& mix, double threshold) {
     if (mix.size() < 2) return;
