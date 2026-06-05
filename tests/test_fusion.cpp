@@ -2,11 +2,19 @@
 #include "brew/shared/fusion/arithmetic_average.hpp"
 #include "brew/gaussian/gci.hpp"
 #include "brew/gaussian/gaussian_model.hpp"
+#include "brew/ggiw/gci.hpp"
+#include "brew/ggiw/ggiw_model.hpp"
+#include "brew/iggiw/gci.hpp"
+#include "brew/iggiw/iggiw_model.hpp"
+#include "brew/ggiw_orientation/gci.hpp"
+#include "brew/ggiw_orientation/ggiw_orientation_model.hpp"
 #include "brew/shared/mixture.hpp"
 
 using namespace brew;
 using G = models::Gaussian<>;
 using Mix = models::Mixture<G>;
+using GG = models::GGIW<>;
+using GGMix = models::Mixture<GG>;
 
 static Mix one(const Eigen::Vector2d& m, const Eigen::Matrix2d& P, double w = 1.0) {
     Mix mix;
@@ -54,6 +62,78 @@ TEST(Fusion, GciDiffCovInformationForm) {
     auto f = gaussian::gci<>({&a, &b}, {w, 1 - w});
     Eigen::Matrix2d expected_info = w * P1.inverse() + (1 - w) * P2.inverse();
     EXPECT_TRUE(f.component(0).covariance().inverse().isApprox(expected_info, 1e-9));
+}
+
+static GGMix ggiw_one(double a, double b, const Eigen::Vector2d& m, const Eigen::Matrix2d& P,
+                      double v, const Eigen::Matrix2d& V, double w = 1.0) {
+    GGMix mix;
+    mix.add_component(std::make_unique<GG>(a, b, m, P, v, V), w);
+    return mix;
+}
+
+TEST(Fusion, GgiwGciIdenticalIsIdentity) {
+    Eigen::Vector2d m(1, 2);
+    Eigen::Matrix2d P = Eigen::Matrix2d::Identity() * 2.0;
+    Eigen::Matrix2d V = Eigen::Matrix2d::Identity() * 3.0;
+    GGMix a = ggiw_one(5, 2, m, P, 10, V), b = ggiw_one(5, 2, m, P, 10, V);
+    auto f = ggiw::gci<>({&a, &b}, {0.5, 0.5});
+    ASSERT_EQ(f.size(), 1u);
+    EXPECT_NEAR(f.component(0).alpha(), 5.0, 1e-9);
+    EXPECT_NEAR(f.component(0).beta(), 2.0, 1e-9);
+    EXPECT_NEAR(f.component(0).v(), 10.0, 1e-9);
+    EXPECT_TRUE(f.component(0).V().isApprox(V, 1e-9));
+    EXPECT_TRUE(f.component(0).mean().isApprox(m, 1e-9));
+    EXPECT_TRUE(f.component(0).covariance().isApprox(P, 1e-9));
+    EXPECT_NEAR(f.weight(0), 1.0, 1e-9);
+}
+
+TEST(Fusion, GgiwGciNaturalParamPooling) {
+    Eigen::Vector2d m1(0, 0), m2(2, 1);
+    Eigen::Matrix2d P1 = Eigen::Matrix2d::Identity() * 2.0, P2;
+    P2 << 1, 0, 0, 4;
+    Eigen::Matrix2d V1 = Eigen::Matrix2d::Identity() * 3.0, V2 = Eigen::Matrix2d::Identity() * 6.0;
+    const double w1 = 0.3, w2 = 0.7;
+    GGMix a = ggiw_one(4, 2, m1, P1, 8, V1), b = ggiw_one(6, 4, m2, P2, 12, V2);
+    auto f = ggiw::gci<>({&a, &b}, {w1, w2});
+    ASSERT_EQ(f.size(), 1u);
+    const auto& g = f.component(0);
+    EXPECT_NEAR(g.alpha(), w1 * 4 + w2 * 6, 1e-9);
+    EXPECT_NEAR(g.beta(), w1 * 2 + w2 * 4, 1e-9);
+    EXPECT_NEAR(g.v(), w1 * 8 + w2 * 12, 1e-9);
+    EXPECT_TRUE(g.V().isApprox(w1 * V1 + w2 * V2, 1e-9));
+    EXPECT_TRUE(g.covariance().inverse().isApprox(w1 * P1.inverse() + w2 * P2.inverse(), 1e-9));
+    Eigen::Vector2d expected_m = g.covariance() * (w1 * P1.inverse() * m1 + w2 * P2.inverse() * m2);
+    EXPECT_TRUE(g.mean().isApprox(expected_m, 1e-9));
+}
+
+TEST(Fusion, IggiwGciIdentity) {
+    using IG = models::IGGIW<>;
+    Eigen::Vector2d m(1, 2);
+    Eigen::Matrix2d P = Eigen::Matrix2d::Identity() * 2.0;
+    Eigen::Matrix2d V = Eigen::Matrix2d::Identity() * 3.0;
+    models::Mixture<IG> a, b;
+    a.add_component(std::make_unique<IG>(5.0, 2.0, m, P, 10.0, V), 1.0);
+    b.add_component(std::make_unique<IG>(5.0, 2.0, m, P, 10.0, V), 1.0);
+    auto f = iggiw::gci<>({&a, &b}, {0.5, 0.5});
+    ASSERT_EQ(f.size(), 1u);
+    EXPECT_NEAR(f.component(0).alpha(), 5.0, 1e-9);
+    EXPECT_NEAR(f.component(0).v(), 10.0, 1e-9);
+    EXPECT_TRUE(f.component(0).mean().isApprox(m, 1e-9));
+}
+
+TEST(Fusion, GgiwOrientationGciDerivesBasis) {
+    using GO = models::GGIWOrientation<>;
+    Eigen::Vector2d m(0, 0);
+    Eigen::Matrix2d P = Eigen::Matrix2d::Identity() * 2.0;
+    Eigen::Matrix2d V;
+    V << 5, 1, 1, 2;
+    models::Mixture<GO> a, b;
+    a.add_component(std::make_unique<GO>(5.0, 2.0, m, P, 10.0, V), 1.0);
+    b.add_component(std::make_unique<GO>(5.0, 2.0, m, P, 10.0, V), 1.0);
+    auto f = ggiw_orientation::gci<>({&a, &b}, {0.5, 0.5});
+    ASSERT_EQ(f.size(), 1u);
+    EXPECT_TRUE(f.component(0).V().isApprox(V, 1e-9));
+    EXPECT_TRUE(f.component(0).has_eigenvalues());
 }
 
 TEST(Fusion, GciMixtureCombinatorialNormalized) {

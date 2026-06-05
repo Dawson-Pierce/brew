@@ -18,6 +18,8 @@
 #include "brew/ggiw/multi_target/pmbm.hpp"
 
 #include "brew/ggiw/merge.hpp"
+#include "brew/ggiw/gci.hpp"
+#include "brew/shared/fusion/arithmetic_average.hpp"
 #include "brew/shared/fusion/prune.hpp"
 #include "brew/shared/fusion/cap.hpp"
 #include "brew/clustering/dbscan.hpp"
