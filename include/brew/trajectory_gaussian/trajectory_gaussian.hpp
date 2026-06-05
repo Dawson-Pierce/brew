@@ -19,6 +19,8 @@
 #include "brew/trajectory_gaussian/multi_target/pmbm.hpp"
 
 #include "brew/trajectory_gaussian/merge.hpp"
+#include "brew/trajectory_gaussian/gci.hpp"
+#include "brew/shared/fusion/arithmetic_average.hpp"
 #include "brew/shared/fusion/prune.hpp"
 #include "brew/shared/fusion/cap.hpp"
 #include "brew/clustering/dbscan.hpp"

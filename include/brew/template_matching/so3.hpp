@@ -6,6 +6,7 @@
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -55,6 +56,19 @@ namespace brew::template_matching::so3 {
     return Eigen::Matrix3d::Identity()
            + std::sin(angle) * K
            + (1.0 - std::cos(angle)) * K * K;
+}
+
+// Weighted geodesic (Karcher) mean of rotations on SO(3).
+[[nodiscard]] inline Eigen::Matrix3d weighted_mean(const std::vector<Eigen::Matrix3d>& R,
+                                                   const std::vector<double>& w) {
+    Eigen::Matrix3d Rf = R[0];
+    for (int it = 0; it < 20; ++it) {
+        Eigen::Vector3d delta = Eigen::Vector3d::Zero();
+        for (std::size_t i = 0; i < R.size(); ++i) delta += w[i] * log(Rf.transpose() * R[i]);
+        Rf = Rf * exp(delta);
+        if (delta.norm() < 1e-12) break;
+    }
+    return Rf;
 }
 
 }

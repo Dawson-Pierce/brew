@@ -8,6 +8,14 @@
 #include "brew/iggiw/iggiw_model.hpp"
 #include "brew/ggiw_orientation/gci.hpp"
 #include "brew/ggiw_orientation/ggiw_orientation_model.hpp"
+#include "brew/template_pose/gci.hpp"
+#include "brew/template_pose/template_pose_model.hpp"
+#include "brew/trajectory_gaussian/gci.hpp"
+#include "brew/trajectory_gaussian/trajectory_gaussian_model.hpp"
+#include "brew/trajectory_ggiw/gci.hpp"
+#include "brew/trajectory_ggiw/trajectory_ggiw_model.hpp"
+#include "brew/trajectory_template_pose/gci.hpp"
+#include "brew/trajectory_template_pose/trajectory_template_pose_model.hpp"
 #include "brew/shared/mixture.hpp"
 
 using namespace brew;
@@ -134,6 +142,106 @@ TEST(Fusion, GgiwOrientationGciDerivesBasis) {
     ASSERT_EQ(f.size(), 1u);
     EXPECT_TRUE(f.component(0).V().isApprox(V, 1e-9));
     EXPECT_TRUE(f.component(0).has_eigenvalues());
+}
+
+static Eigen::Matrix3d Rz(double a) {
+    Eigen::Matrix3d R;
+    R << std::cos(a), -std::sin(a), 0, std::sin(a), std::cos(a), 0, 0, 0, 1;
+    return R;
+}
+
+TEST(Fusion, TemplatePoseGciAugmentedManifoldCi) {
+    using TP = models::TemplatePose<>;
+    Eigen::Vector3d t1(0, 0, 0), t2(2, 0, 0);
+    Eigen::MatrixXd P = Eigen::MatrixXd::Identity(6, 6) * 2.0;  // [trans(3); so(3) tangent(3)]
+    std::vector<int> pos{0, 1, 2};
+    models::Mixture<TP> a, b;
+    a.add_component(std::make_unique<TP>(t1, P, 7, pos, Rz(0.0)), 1.0);
+    b.add_component(std::make_unique<TP>(t2, P, 7, pos, Rz(M_PI / 2)), 1.0);
+    auto f = template_pose::gci<>({&a, &b}, {0.5, 0.5});
+    ASSERT_EQ(f.size(), 1u);
+    EXPECT_TRUE(f.component(0).mean().isApprox((t1 + t2) * 0.5, 1e-7));
+    EXPECT_TRUE(f.component(0).rotation().isApprox(Rz(M_PI / 4), 1e-7));
+    EXPECT_EQ(f.component(0).covariance().rows(), 6);
+    EXPECT_TRUE(f.component(0).covariance().isApprox(P, 1e-7));  // equal P -> fused P == P
+    EXPECT_EQ(f.component(0).template_id(), 7);
+}
+
+TEST(Fusion, TemplatePoseGciIdentity) {
+    using TP = models::TemplatePose<>;
+    Eigen::Vector3d t(1, 2, 3);
+    Eigen::MatrixXd P = Eigen::MatrixXd::Identity(6, 6) * 1.5;
+    std::vector<int> pos{0, 1, 2};
+    models::Mixture<TP> a, b;
+    a.add_component(std::make_unique<TP>(t, P, 3, pos, Rz(0.4)), 1.0);
+    b.add_component(std::make_unique<TP>(t, P, 3, pos, Rz(0.4)), 1.0);
+    auto f = template_pose::gci<>({&a, &b}, {0.5, 0.5});
+    ASSERT_EQ(f.size(), 1u);
+    EXPECT_TRUE(f.component(0).mean().isApprox(t, 1e-9));
+    EXPECT_TRUE(f.component(0).rotation().isApprox(Rz(0.4), 1e-7));
+    EXPECT_TRUE(f.component(0).covariance().isApprox(P, 1e-7));
+}
+
+TEST(Fusion, TrajectoryGaussianGciStackedCi) {
+    using IG = models::Gaussian<>;
+    using TG = models::TrajectoryGaussian<>;
+    Eigen::Vector2d m1(0, 0), m2(4, 2);
+    Eigen::Matrix2d P = Eigen::Matrix2d::Identity() * 3.0;
+    models::Mixture<TG> a, b;
+    a.add_component(std::make_unique<TG>(2, IG(m1, P), 5), 1.0);
+    b.add_component(std::make_unique<TG>(2, IG(m2, P), 5), 1.0);
+    auto f = trajectory_gaussian::gci<>({&a, &b}, {0.5, 0.5});
+    ASSERT_EQ(f.size(), 1u);
+    const auto& t = f.component(0);
+    EXPECT_TRUE(t.mean().head(2).isApprox((m1 + m2) * 0.5, 1e-9));
+    EXPECT_TRUE(t.covariance().topLeftCorner(2, 2).isApprox(P, 1e-9));
+    EXPECT_TRUE(t.history_at(0).mean().isApprox((m1 + m2) * 0.5, 1e-9));
+}
+
+TEST(Fusion, TrajectoryGaussianGciSkipsMismatchedWindow) {
+    using IG = models::Gaussian<>;
+    using TG = models::TrajectoryGaussian<>;
+    Eigen::Vector2d m(0, 0);
+    Eigen::Matrix2d P = Eigen::Matrix2d::Identity();
+    models::Mixture<TG> a, b;
+    a.add_component(std::make_unique<TG>(2, IG(m, P), 5), 1.0);           // state_dim 2
+    b.add_component(std::make_unique<TG>(3, IG(Eigen::Vector3d::Zero(), Eigen::Matrix3d::Identity()), 5), 1.0);
+    auto f = trajectory_gaussian::gci<>({&a, &b}, {0.5, 0.5});
+    EXPECT_EQ(f.size(), 0u);  // different stacked size -> no fusable tuple
+}
+
+TEST(Fusion, TrajectoryGgiwGciPoolsInner) {
+    using IG = models::GGIW<>;
+    using TG = models::TrajectoryGGIW<>;
+    Eigen::Vector2d m1(0, 0), m2(4, 2);
+    Eigen::Matrix2d P = Eigen::Matrix2d::Identity() * 3.0;
+    Eigen::Matrix2d V = Eigen::Matrix2d::Identity() * 5.0;
+    models::Mixture<TG> a, b;
+    a.add_component(std::make_unique<TG>(2, IG(5, 2, m1, P, 10, V), 5), 1.0);
+    b.add_component(std::make_unique<TG>(2, IG(7, 4, m2, P, 12, V), 5), 1.0);
+    auto f = trajectory_ggiw::gci<>({&a, &b}, {0.5, 0.5});
+    ASSERT_EQ(f.size(), 1u);
+    const auto& t = f.component(0);
+    EXPECT_TRUE(t.mean().head(2).isApprox((m1 + m2) * 0.5, 1e-9));
+    EXPECT_NEAR(t.history_at(0).alpha(), 6.0, 1e-9);
+    EXPECT_NEAR(t.history_at(0).beta(), 3.0, 1e-9);
+    EXPECT_NEAR(t.history_at(0).v(), 11.0, 1e-9);
+    EXPECT_TRUE(t.history_at(0).V().isApprox(V, 1e-9));
+    EXPECT_TRUE(t.history_at(0).mean().isApprox((m1 + m2) * 0.5, 1e-9));
+}
+
+TEST(Fusion, TrajectoryTemplatePoseGciSo3) {
+    using IT = models::TemplatePose<>;
+    using TG = models::TrajectoryTemplatePose<>;
+    Eigen::Vector3d m(0, 0, 0);
+    Eigen::Matrix3d P = Eigen::Matrix3d::Identity() * 2.0;
+    std::vector<int> pos{0, 1, 2};
+    models::Mixture<TG> a, b;
+    a.add_component(std::make_unique<TG>(3, IT(m, P, 5, pos, Rz(0.0)), 5), 1.0);
+    b.add_component(std::make_unique<TG>(3, IT(m, P, 5, pos, Rz(M_PI / 2)), 5), 1.0);
+    auto f = trajectory_template_pose::gci<>({&a, &b}, {0.5, 0.5});
+    ASSERT_EQ(f.size(), 1u);
+    EXPECT_TRUE(f.component(0).history_at(0).rotation().isApprox(Rz(M_PI / 4), 1e-7));
 }
 
 TEST(Fusion, GciMixtureCombinatorialNormalized) {
