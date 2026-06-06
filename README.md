@@ -104,7 +104,3 @@ ctest --test-dir build --output-on-failure
 
 Per-package, no-MATLAB verification (including the `hardware` target) is available
 via `../docker/` — see `docker/README.md`.
-
-## License
-
-See [LICENSE](LICENSE).
