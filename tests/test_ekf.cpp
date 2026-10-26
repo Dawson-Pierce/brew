@@ -1,0 +1,56 @@
+#include <gtest/gtest.h>
+#include "brew/gaussian/filters/ekf.hpp"
+#include "brew/dynamics/single_integrator.hpp"
+
+using namespace brew::filters;
+using namespace brew::models;
+using namespace brew::dynamics;
+
+TEST(EKFTest, PredictStep) {
+    auto dyn = std::make_shared<SingleIntegrator<>>(2);
+    EKF<> ekf;
+    ekf.set_dynamics(dyn);
+
+    Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+    Eigen::MatrixXd Q_in = 0.01 * Eigen::MatrixXd::Identity(G.cols(), G.cols());
+    ekf.set_process_noise(G * Q_in * G.transpose());
+
+    Eigen::VectorXd mean(4);
+    mean << 0, 0, 1, 1;
+    Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
+
+    Gaussian prior(mean, cov);
+    auto predicted = ekf.predict(1.0, prior);
+
+    EXPECT_NEAR(predicted.mean()(0), 1.0, 1e-10);
+    EXPECT_NEAR(predicted.mean()(1), 1.0, 1e-10);
+
+    EXPECT_GT(predicted.covariance()(0, 0), cov(0, 0));
+}
+
+TEST(EKFTest, CorrectStep) {
+    auto dyn = std::make_shared<SingleIntegrator<>>(2);
+    EKF<> ekf;
+    ekf.set_dynamics(dyn);
+
+    Eigen::MatrixXd H(2, 4);
+    H << 1, 0, 0, 0,
+         0, 1, 0, 0;
+    ekf.set_measurement_jacobian(H);
+    ekf.set_measurement_noise(Eigen::MatrixXd::Identity(2, 2) * 0.1);
+
+    Eigen::VectorXd mean(4);
+    mean << 0, 0, 1, 1;
+    Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4) * 10.0;
+    Gaussian predicted(mean, cov);
+
+    Eigen::VectorXd z(2);
+    z << 0.5, 0.5;
+
+    auto [corrected, likelihood] = ekf.correct(z, predicted);
+
+    EXPECT_GT(corrected.mean()(0), 0.0);
+    EXPECT_LT(corrected.mean()(0), 0.5);
+
+    EXPECT_GT(likelihood, 0.0);
+}

@@ -1,0 +1,220 @@
+#include <gtest/gtest.h>
+#include "brew/shared/elementary_symmetric.hpp"
+#include "brew/gaussian/gaussian.hpp"
+#include "brew/gaussian/filters/ekf.hpp"
+#include "brew/dynamics/single_integrator.hpp"
+#include <random>
+
+using namespace brew;
+
+TEST(ElementarySymmetric, EmptyVector) {
+    Eigen::VectorXd z(0);
+    auto esf = multi_target::elementary_symmetric_functions(z);
+    ASSERT_EQ(esf.size(), 1);
+    EXPECT_DOUBLE_EQ(esf(0), 1.0);
+}
+
+TEST(ElementarySymmetric, SingleElement) {
+    Eigen::VectorXd z(1);
+    z << 3.0;
+    auto esf = multi_target::elementary_symmetric_functions(z);
+    ASSERT_EQ(esf.size(), 2);
+    EXPECT_DOUBLE_EQ(esf(0), 1.0);
+    EXPECT_DOUBLE_EQ(esf(1), 3.0);
+}
+
+TEST(ElementarySymmetric, ThreeElements) {
+
+    Eigen::VectorXd z(3);
+    z << 1.0, 2.0, 3.0;
+    auto esf = multi_target::elementary_symmetric_functions(z);
+    ASSERT_EQ(esf.size(), 4);
+    EXPECT_DOUBLE_EQ(esf(0), 1.0);
+    EXPECT_DOUBLE_EQ(esf(1), 6.0);
+    EXPECT_DOUBLE_EQ(esf(2), 11.0);
+    EXPECT_DOUBLE_EQ(esf(3), 6.0);
+}
+
+TEST(ElementarySymmetric, ESFExcluding) {
+
+    Eigen::VectorXd z(3);
+    z << 1.0, 2.0, 3.0;
+    auto esf_full = multi_target::elementary_symmetric_functions(z);
+    auto esf_minus = multi_target::esf_excluding(esf_full, 2.0);
+
+    ASSERT_EQ(esf_minus.size(), 3);
+    EXPECT_DOUBLE_EQ(esf_minus(0), 1.0);
+    EXPECT_DOUBLE_EQ(esf_minus(1), 4.0);
+    EXPECT_DOUBLE_EQ(esf_minus(2), 3.0);
+}
+
+TEST(ElementarySymmetric, FallingFactorial) {
+    EXPECT_DOUBLE_EQ(multi_target::falling_factorial(5, 0), 1.0);
+    EXPECT_DOUBLE_EQ(multi_target::falling_factorial(5, 1), 5.0);
+    EXPECT_DOUBLE_EQ(multi_target::falling_factorial(5, 2), 20.0);
+    EXPECT_DOUBLE_EQ(multi_target::falling_factorial(5, 3), 60.0);
+    EXPECT_DOUBLE_EQ(multi_target::falling_factorial(5, 5), 120.0);
+}
+
+TEST(CPHD, GaussianPredictCorrectCleanup) {
+    auto ekf = std::make_unique<filters::EKF<>>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    ekf->set_dynamics(dyn);
+
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ekf->set_measurement_jacobian(H);
+    Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+    ekf->set_process_noise(G * (0.1 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
+
+    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    Eigen::VectorXd birth_mean(4);
+    birth_mean << 0.0, 0.0, 0.0, 0.0;
+    Eigen::MatrixXd birth_cov = 10.0 * Eigen::MatrixXd::Identity(4, 4);
+    birth->add_component(std::make_unique<models::Gaussian<>>(birth_mean, birth_cov), 0.1);
+
+    auto intensity = birth->clone();
+
+    gaussian::CPHD<> cphd;
+    cphd.set_filter(std::move(ekf));
+    cphd.set_birth_model(std::move(birth));
+    cphd.set_intensity(std::move(intensity));
+    cphd.set_prob_detection(0.9);
+    cphd.set_prob_survive(0.99);
+    cphd.set_clutter_rate(1.0);
+    cphd.set_clutter_density(1e-4);
+    cphd.set_prune_threshold(1e-5);
+    cphd.set_merge_threshold(4.0);
+    cphd.set_max_components(20);
+    cphd.set_extract_threshold(0.4);
+    cphd.set_gate_threshold(16.0);
+
+    cphd.set_poisson_cardinality(0.1);
+    cphd.set_poisson_birth_cardinality(0.1);
+
+    cphd.predict(0, 1.0);
+    EXPECT_GE(cphd.intensity().size(), 2u);
+
+    EXPECT_NEAR(cphd.cardinality().sum(), 1.0, 1e-10);
+
+    Eigen::MatrixXd meas(2, 1);
+    meas << 0.5, 0.3;
+    cphd.correct(meas);
+    EXPECT_GE(cphd.intensity().size(), 1u);
+    EXPECT_NEAR(cphd.cardinality().sum(), 1.0, 1e-10);
+
+    cphd.cleanup();
+    EXPECT_LE(cphd.intensity().size(), 20u);
+    EXPECT_GE(cphd.extracted_mixtures().size(), 1u);
+    EXPECT_GE(cphd.cardinality_history().size(), 1u);
+}
+
+TEST(CPHD, Clone) {
+    auto ekf = std::make_unique<filters::EKF<>>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    ekf->set_dynamics(dyn);
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * Eigen::MatrixXd::Identity(G.cols(), G.cols()) * G.transpose());
+    }
+    ekf->set_measurement_noise(Eigen::MatrixXd::Identity(2, 2));
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ekf->set_measurement_jacobian(H);
+
+    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    Eigen::VectorXd m(4);
+    m.setZero();
+    birth->add_component(std::make_unique<models::Gaussian<>>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
+
+    gaussian::CPHD<> cphd;
+    cphd.set_filter(std::move(ekf));
+    cphd.set_birth_model(std::move(birth));
+    cphd.set_intensity(std::make_unique<models::Mixture<models::Gaussian<>>>());
+    cphd.set_poisson_cardinality(0.5);
+    cphd.set_poisson_birth_cardinality(0.1);
+
+    auto cloned = cphd.clone();
+    ASSERT_NE(cloned, nullptr);
+}
+
+TEST(CPHD, ZeroPoissonRateAndZeroSurvivalAreWellDefined) {
+    auto ekf = std::make_unique<filters::EKF<>>();
+    ekf->set_dynamics(std::make_shared<dynamics::SingleIntegrator<>>(1));
+    ekf->set_process_noise(Eigen::Matrix2d::Zero());
+
+    gaussian::CPHD<> cphd;
+    cphd.set_filter(std::move(ekf));
+    cphd.set_intensity(std::make_unique<models::Mixture<models::Gaussian<>>>());
+    cphd.set_poisson_cardinality(2.0);
+    cphd.set_poisson_birth_cardinality(0.0);
+    cphd.set_prob_survive(0.0);
+    cphd.predict(0, 1.0);
+
+    EXPECT_TRUE(cphd.cardinality().allFinite());
+    EXPECT_DOUBLE_EQ(cphd.cardinality()(0), 1.0);
+    EXPECT_NEAR(cphd.cardinality().tail(cphd.cardinality().size() - 1).sum(), 0.0, 1e-15);
+}
+
+TEST(CPHD, CardinalityConvergence) {
+
+    auto ekf = std::make_unique<filters::EKF<>>();
+    auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(2);
+    ekf->set_dynamics(dyn);
+
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 4);
+    H(0, 0) = 1.0; H(1, 1) = 1.0;
+    ekf->set_measurement_jacobian(H);
+    {
+        Eigen::MatrixXd G = dyn->get_input_mat(1.0, Eigen::VectorXd());
+        ekf->set_process_noise(G * (0.5 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
+    }
+    ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
+
+    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
+    birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
+    birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
+    Eigen::VectorXd b1(4), b2(4);
+    b1 << 0.0, 0.0, 0.0, 0.0;
+    b2 << 50.0, 0.0, 0.0, 0.0;
+    birth->add_component(std::make_unique<models::Gaussian<>>(b1, birth_cov), 0.05);
+    birth->add_component(std::make_unique<models::Gaussian<>>(b2, birth_cov), 0.05);
+
+    gaussian::CPHD<> cphd;
+    cphd.set_filter(std::move(ekf));
+    cphd.set_birth_model(std::move(birth));
+    cphd.set_intensity(std::make_unique<models::Mixture<models::Gaussian<>>>());
+    cphd.set_prob_detection(0.95);
+    cphd.set_prob_survive(0.99);
+    cphd.set_clutter_rate(1.0);
+    cphd.set_clutter_density(1e-4);
+    cphd.set_prune_threshold(1e-5);
+    cphd.set_merge_threshold(4.0);
+    cphd.set_max_components(30);
+    cphd.set_extract_threshold(0.4);
+    cphd.set_gate_threshold(25.0);
+    cphd.set_poisson_cardinality(0.1);
+    cphd.set_poisson_birth_cardinality(0.1);
+
+    std::mt19937 rng(42);
+    std::normal_distribution<double> noise(0.0, 1.0);
+
+    for (int k = 0; k < 20; ++k) {
+        cphd.predict(k, 1.0);
+
+        Eigen::MatrixXd meas(2, 2);
+        meas(0, 0) = 5.0 + noise(rng);
+        meas(1, 0) = 5.0 + noise(rng);
+        meas(0, 1) = 50.0 + noise(rng);
+        meas(1, 1) = 5.0 + noise(rng);
+
+        cphd.correct(meas);
+        cphd.cleanup();
+    }
+
+    double est = cphd.estimated_cardinality();
+    EXPECT_GT(est, 1.0) << "Estimated cardinality should be above 1 (two targets present)";
+    EXPECT_LT(est, 4.0) << "Estimated cardinality should not overshoot too much";
+}

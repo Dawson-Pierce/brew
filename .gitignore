@@ -1,0 +1,10 @@
+build*/
+dependencies/
+output/
+*.log
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.exe

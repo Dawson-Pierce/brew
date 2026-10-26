@@ -1,0 +1,277 @@
+#pragma once
+
+#include "brew/shared/filter_traits.hpp"
+
+#include "brew/assert.hpp"
+#include "brew/shared/filter_base.hpp"
+#include "brew/trajectory_template_pose/trajectory_template_pose_model.hpp"
+#include "brew/template_pose/template_pose_model.hpp"
+#include "brew/template_matching/icp_base.hpp"
+#include "brew/template_matching/point_cloud.hpp"
+#include "brew/template_matching/template_library.hpp"
+#include "brew/template_matching/tm_icp_runner.hpp"
+#include <algorithm>
+#include <cmath>
+#include <memory>
+#include <utility>
+
+namespace brew::filters {
+
+// @mex filter
+// @mex_name TrajectoryTmEkf
+// @mex_dist TrajectoryTemplatePose
+// @mex_setters rotation_process_noise:mat, window_size:int
+// @mex_handle_setters icp:IcpBase, template_library:TemplateLibrary
+
+template <typename Scalar = double, int D = Eigen::Dynamic>
+class TrajectoryTmEkf
+    : public Filter<models::TrajectoryTemplatePose<Scalar, D>> {
+public:
+    using InnerDist = models::TemplatePose<Scalar, D>;
+    using Dist = models::TrajectoryTemplatePose<Scalar, D>;
+    using TrajectoryType = Dist;
+    using Base = Filter<Dist>;
+    using CorrectionResult = typename Base::CorrectionResult;
+    using typename Base::DynamicsType;
+
+    TrajectoryTmEkf() = default;
+
+    [[nodiscard]] std::unique_ptr<Base> clone() const override {
+        auto c = std::make_unique<TrajectoryTmEkf<Scalar, D>>();
+        c->dyn_obj_ = this->dyn_obj_;
+        c->h_ = this->h_;
+        c->H_ = this->H_;
+        c->process_noise_ = this->process_noise_;
+        c->measurement_noise_ = this->measurement_noise_;
+        c->rotation_process_noise_ = rotation_process_noise_;
+        c->icp_runner_ = icp_runner_;
+        c->window_size_ = window_size_;
+        return c;
+    }
+
+    [[nodiscard]] Dist predict(
+        double dt,
+        const Dist& prev) const override {
+
+        Dist result = prev;
+        const int sd = prev.state_dim;
+
+        Eigen::VectorXd prev_last_state = prev.get_last_state();
+        const auto& prev_tp = prev.current();
+
+        Eigen::VectorXd next_state;
+        Eigen::MatrixXd F;
+        if (!prev_tp.needs_pca_alignment()) {
+            Eigen::MatrixXd rot_dyn = prev_tp.rotation();
+            next_state = this->dyn_obj_->propagate_state(dt, prev_last_state, rot_dyn);
+            F = this->dyn_obj_->get_state_mat(dt, prev_last_state, rot_dyn);
+        } else {
+            next_state = this->dyn_obj_->propagate_state(dt, prev_last_state);
+            F = this->dyn_obj_->get_state_mat(dt, prev_last_state);
+        }
+
+        result.advance_window();
+
+        const int last = result.last_index();
+        const int prev_last = last - 1;
+
+        if (prev_last >= 0) {
+            for (int k = 0; k < last; ++k) {
+                result.cov_at(last, k) = F * result.cov_at(prev_last, k);
+                result.cov_at(k, last) = result.cov_at(last, k).transpose();
+            }
+            result.cov_at(last, last) =
+                F * result.cov_at(prev_last, prev_last) * F.transpose()
+                + this->process_noise_;
+        } else {
+            result.cov_at(last, last) = this->process_noise_;
+        }
+
+        result.mean_at(last) = next_state;
+
+        const int n_rot = prev_tp.rot_dim();
+        const int n_aug = sd + n_rot;
+        Eigen::MatrixXd aug_cov = Eigen::MatrixXd::Zero(n_aug, n_aug);
+        aug_cov.topLeftCorner(sd, sd) = Eigen::MatrixXd(result.cov_at(last, last));
+        const Eigen::MatrixXd& prev_aug = prev_tp.covariance();
+        aug_cov.bottomRightCorner(n_rot, n_rot) =
+            prev_aug.bottomRightCorner(n_rot, n_rot) + rotation_process_noise_;
+
+        Eigen::Matrix3d next_rotation = this->dyn_obj_->propagate_extent(
+            dt, prev_last_state, prev_tp.rotation());
+
+        result.history_at(last) = prev_tp.with_updated_state(
+            next_state, std::move(aug_cov), std::move(next_rotation));
+
+        return result;
+    }
+
+    [[nodiscard]] CorrectionResult correct(
+        const typename Base::MeasVector& measurement,
+        const Dist& predicted) const override {
+
+        BREW_ASSERT(icp_runner_.ready(),
+                    "TrajectoryTmEkf: ICP and template library must be set");
+
+        constexpr int d = 3;
+        const int sd = predicted.state_dim;
+        const int last = predicted.last_index();
+        const int live = predicted.stacked_size();
+
+        const Eigen::VectorXd prev_state = predicted.get_last_state();
+        const auto& pred_tp = predicted.current();
+        const int n_rot = pred_tp.rot_dim();
+        const auto& pos_idx = pred_tp.pos_indices();
+
+        const int M = static_cast<int>(measurement.size()) / d;
+        BREW_ASSERT(M > 0 && measurement.size() % d == 0,
+                    "TrajectoryTmEkf: measurement must contain one or more packed 3D points");
+        Eigen::MatrixXd meas_mat = Eigen::Map<const Eigen::MatrixXd>(measurement.data(), d, M);
+        template_matching::PointCloud meas_cloud(meas_mat);
+
+        const auto psm = icp_runner_.run(
+            meas_cloud, pred_tp.template_id(),
+            pred_tp.rotation(), pred_tp.position(), pred_tp.needs_pca_alignment());
+
+        Eigen::MatrixXd H_pos = Eigen::MatrixXd::Zero(d, sd);
+        for (int i = 0; i < d; ++i) {
+            H_pos(i, pos_idx[i]) = 1.0;
+        }
+        Eigen::Vector3d trans_innov = psm.t - H_pos * prev_state;
+
+        const Eigen::MatrixXd& P_aug = pred_tp.covariance();
+        const Eigen::MatrixXd& R_meas = this->measurement_noise_;
+        const int n_aug = sd + n_rot;
+
+        constexpr int m_dim = d + 3;
+        Eigen::Matrix<double, m_dim, 1> innovation;
+        innovation.head<3>() = trans_innov;
+        innovation.tail<3>() = psm.rotation_innovation();
+
+        Eigen::MatrixXd H_aug = Eigen::MatrixXd::Zero(m_dim, n_aug);
+        H_aug.topLeftCorner(d, sd) = H_pos;
+        H_aug.bottomRightCorner(n_rot, n_rot) = Eigen::Matrix3d::Identity();
+
+        Eigen::MatrixXd S = H_aug * P_aug * H_aug.transpose() + R_meas;
+        S = 0.5 * (S + S.transpose());
+        auto S_ldlt = S.ldlt();
+
+        Eigen::MatrixXd K_aug = P_aug * H_aug.transpose()
+            * S_ldlt.solve(Eigen::MatrixXd::Identity(m_dim, m_dim));
+
+        const Eigen::VectorXd delta = K_aug * innovation;
+        const Eigen::Matrix3d next_rotation = psm.apply_rotation_delta(delta.tail<3>());
+
+        Eigen::MatrixXd I_aug = Eigen::MatrixXd::Identity(n_aug, n_aug);
+        const Eigen::MatrixXd A_aug = I_aug - K_aug * H_aug;
+        Eigen::MatrixXd next_aug_cov = A_aug * P_aug * A_aug.transpose()
+            + K_aug * R_meas * K_aug.transpose();
+        next_aug_cov = 0.5 * (next_aug_cov + next_aug_cov.transpose());
+
+        const double mahal = innovation.transpose() * S_ldlt.solve(innovation);
+        const double log_det_S = S_ldlt.vectorD().array().abs().log().sum();
+        constexpr int innov_dim = m_dim;
+
+        Eigen::MatrixXd P_live = predicted.covariance().topLeftCorner(live, live);
+        Eigen::VectorXd mean_live = predicted.mean().head(live);
+
+        Eigen::MatrixXd H_dot = Eigen::MatrixXd::Zero(d, live);
+        H_dot.block(0, live - sd, d, sd) = H_pos;
+
+        Eigen::MatrixXd S_trans = H_dot * P_live * H_dot.transpose()
+                                + R_meas.topLeftCorner(d, d);
+        Eigen::LDLT<Eigen::MatrixXd> trans_ldlt(S_trans);
+        Eigen::MatrixXd K_stacked = P_live * H_dot.transpose()
+            * trans_ldlt.solve(Eigen::MatrixXd::Identity(d, d));
+        Eigen::VectorXd new_mean_live = mean_live + K_stacked * trans_innov;
+        const Eigen::MatrixXd I_live = Eigen::MatrixXd::Identity(live, live);
+        const Eigen::MatrixXd A_live = I_live - K_stacked * H_dot;
+        Eigen::MatrixXd new_P_live = A_live * P_live * A_live.transpose()
+            + K_stacked * R_meas.topLeftCorner(d, d) * K_stacked.transpose();
+        new_P_live = 0.5 * (new_P_live + new_P_live.transpose());
+
+        double log_L_pose = -0.5 * (innov_dim * std::log(2.0 * M_PI) + log_det_S + mahal);
+        double log_L = psm.log_likelihood + log_L_pose;
+        double likelihood = std::exp(std::clamp(log_L, -500.0, 500.0));
+        if (!std::isfinite(likelihood) || likelihood <= 0.0) {
+            likelihood = 1e-300;
+        }
+
+        Dist result = predicted;
+        result.mean().head(live) = new_mean_live;
+        result.covariance().topLeftCorner(live, live) = new_P_live;
+
+        for (int i = 0; i < predicted.window_size(); ++i) {
+            result.history_at(i).mean() = result.mean_at(i);
+        }
+
+        Eigen::VectorXd last_mean = result.mean_at(last);
+        result.history_at(last) = result.history_at(last).with_updated_state_aligned(
+            std::move(last_mean), std::move(next_aug_cov), next_rotation);
+
+        return { std::move(result), likelihood };
+    }
+
+    [[nodiscard]] double gate(
+        const typename Base::MeasVector& measurement,
+        const Dist& predicted) const override {
+
+        constexpr int d = 3;
+        const auto& tp = predicted.current();
+        const auto& pos_idx = tp.pos_indices();
+
+        const int M = static_cast<int>(measurement.size()) / d;
+        BREW_ASSERT(M > 0 && measurement.size() % d == 0,
+                    "TrajectoryTmEkf: measurement must contain one or more packed 3D points");
+        Eigen::MatrixXd meas_mat = Eigen::Map<const Eigen::MatrixXd>(measurement.data(), d, M);
+        Eigen::Vector3d centroid = meas_mat.rowwise().mean();
+
+        Eigen::Vector3d t_pred = tp.position();
+
+        const auto& P_aug = tp.covariance();
+        Eigen::Matrix3d P_pos;
+        for (int i = 0; i < d; ++i) {
+            for (int j = 0; j < d; ++j) {
+                P_pos(i, j) = P_aug(pos_idx[i], pos_idx[j]);
+            }
+        }
+
+        Eigen::Matrix3d R_pos = Eigen::Matrix3d::Zero();
+        if (this->measurement_noise_.rows() >= d && this->measurement_noise_.cols() >= d) {
+            R_pos = this->measurement_noise_.topLeftCorner(d, d);
+        }
+        const Eigen::Matrix3d S = 0.5 * (P_pos + P_pos.transpose()) + R_pos;
+        Eigen::Vector3d nu = centroid - t_pred;
+        return nu.transpose() * S.ldlt().solve(nu);
+    }
+
+    void set_rotation_process_noise(Eigen::MatrixXd Q_rot) {
+        rotation_process_noise_ = std::move(Q_rot);
+    }
+
+    void set_icp(std::shared_ptr<template_matching::IcpBase> icp) {
+        icp_runner_.set_icp(std::move(icp));
+    }
+
+    void set_template_library(std::shared_ptr<template_matching::TemplateLibrary> lib) {
+        icp_runner_.set_template_library(std::move(lib));
+    }
+
+    void set_window_size(int n) { window_size_ = (n > 0 ? n : 1); }
+    [[nodiscard]] int window_size() const { return window_size_; }
+
+private:
+    int window_size_ = Dist::kDefaultWindow;
+
+private:
+    Eigen::MatrixXd rotation_process_noise_;
+    template_matching::TmIcpRunner icp_runner_;
+};
+
+}
+
+namespace brew::filters {
+
+template <typename Scalar, int D>
+struct default_filter<models::TrajectoryTemplatePose<Scalar, D>> { using type = TrajectoryTmEkf<Scalar, D>; };
+}

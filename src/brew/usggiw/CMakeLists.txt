@@ -1,0 +1,2 @@
+add_library(brew_pkg_usggiw STATIC filters/usggiw_ekf.cpp)
+target_link_libraries(brew_pkg_usggiw PUBLIC brew_shared brew_dynamics brew_clustering)

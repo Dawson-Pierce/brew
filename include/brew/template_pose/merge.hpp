@@ -1,0 +1,156 @@
+#pragma once
+
+// Component merge for the `template_pose` package -- owns ONLY the TemplatePose merge
+// (no cross-model overload set). In namespace brew::template_pose so the package's
+// concrete RFS resolve an unqualified merge(...) here.
+
+#include "brew/shared/mixture.hpp"
+#include "brew/template_pose/template_pose_model.hpp"
+#include "brew/template_matching/so3.hpp"
+#include <Eigen/Dense>
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <limits>
+#include <numeric>
+#include <vector>
+
+namespace brew::template_pose {
+
+template <typename Scalar, int D, int N>
+void merge(models::Mixture<models::TemplatePose<Scalar, D>, N>& mix, double threshold,
+           double rotation_threshold = M_PI / 2.0) {
+    if (mix.size() < 2) return;
+
+    std::vector<bool> remaining(mix.size(), true);
+    models::Mixture<models::TemplatePose<Scalar, D>, N> result;
+
+    while (true) {
+
+        double max_w = -1.0;
+        std::size_t ref = 0;
+        bool found = false;
+
+        for (std::size_t i = 0; i < mix.size(); ++i) {
+            if (remaining[i] && mix.weight(i) > max_w) {
+                max_w = mix.weight(i);
+                ref = i;
+                found = true;
+            }
+        }
+        if (!found) break;
+
+        Eigen::MatrixXd C_ref = mix.component(ref).covariance();
+        C_ref = 0.5 * (C_ref + C_ref.transpose());
+        Eigen::LLT<Eigen::MatrixXd> llt(C_ref);
+        if (llt.info() != Eigen::Success) {
+            const double eps_reg = 1e-9 * std::max(1.0, C_ref.trace() / C_ref.rows());
+            C_ref += eps_reg * Eigen::MatrixXd::Identity(C_ref.rows(), C_ref.cols());
+            llt.compute(C_ref);
+        }
+
+        std::vector<std::size_t> grp;
+        const int ref_templ_id = mix.component(ref).template_id();
+        for (std::size_t i = 0; i < mix.size(); ++i) {
+            if (!remaining[i]) continue;
+
+            if (mix.component(i).template_id() != ref_templ_id) continue;
+            if (mix.component(i).mode_id() != mix.component(ref).mode_id()) continue;
+            if (mix.component(i).impulse_branch() != mix.component(ref).impulse_branch()) continue;
+
+            const Eigen::VectorXd d = mix.component(i).mean() - mix.component(ref).mean();
+
+            const int n_aug = mix.component(ref).aug_dim();
+            const int n_trans = mix.component(ref).trans_dim();
+            Eigen::VectorXd d_aug = Eigen::VectorXd::Zero(n_aug);
+            d_aug.head(n_trans) = d;
+            const Eigen::VectorXd y = llt.matrixL().solve(d_aug);
+            if (y.squaredNorm() > threshold) continue;
+
+            if (!mix.component(i).needs_pca_alignment()
+                && !mix.component(ref).needs_pca_alignment()) {
+                const auto& Ri = mix.component(i).rotation();
+                const auto& Rr = mix.component(ref).rotation();
+                Eigen::MatrixXd R_err = Ri.transpose() * Rr;
+                double cos_angle = std::clamp((R_err.trace() - 1.0) / 2.0, -1.0, 1.0);
+                double rot_dist = std::acos(cos_angle);
+                if (rot_dist > rotation_threshold) continue;
+            }
+
+            grp.push_back(i);
+        }
+
+        double w_sum = 0.0;
+        for (auto idx : grp) w_sum += mix.weight(idx);
+
+        if (w_sum <= 0.0) {
+            for (auto idx : grp) remaining[idx] = false;
+            continue;
+        }
+
+        const int n_trans = mix.component(ref).trans_dim();
+        const int n_aug = mix.component(ref).aug_dim();
+        const int d = mix.component(ref).dim();
+
+        Eigen::VectorXd m_new = Eigen::VectorXd::Zero(n_trans);
+        for (auto idx : grp) {
+            m_new += mix.weight(idx) * mix.component(idx).mean();
+        }
+        m_new /= w_sum;
+
+        Eigen::MatrixXd R_sum = Eigen::MatrixXd::Zero(d, d);
+        for (auto idx : grp) {
+            const double w = mix.weight(idx);
+            R_sum += w * mix.component(idx).rotation();
+        }
+        R_sum /= w_sum;
+        Eigen::JacobiSVD<Eigen::MatrixXd> svd(R_sum, Eigen::ComputeFullU | Eigen::ComputeFullV);
+        Eigen::MatrixXd U = svd.matrixU();
+        Eigen::MatrixXd V = svd.matrixV();
+
+        Eigen::MatrixXd D_mat = Eigen::MatrixXd::Identity(d, d);
+        D_mat(d - 1, d - 1) = (U * V.transpose()).determinant();
+        Eigen::MatrixXd R_new = U * D_mat * V.transpose();
+
+        Eigen::MatrixXd P_new = Eigen::MatrixXd::Zero(n_aug, n_aug);
+        for (auto idx : grp) {
+            const double w = mix.weight(idx);
+            const Eigen::VectorXd dm = mix.component(idx).mean() - m_new;
+
+            Eigen::MatrixXd spread = Eigen::MatrixXd::Zero(n_aug, n_aug);
+            Eigen::VectorXd offset = Eigen::VectorXd::Zero(n_aug);
+            offset.head(n_trans) = dm;
+            offset.tail(d) = template_matching::so3::log(
+                mix.component(idx).rotation() * R_new.transpose());
+            spread = offset * offset.transpose();
+
+            P_new += w * (mix.component(idx).covariance() + spread);
+        }
+        P_new /= w_sum;
+        P_new = 0.5 * (P_new + P_new.transpose());
+
+        std::size_t base_idx = ref;
+        for (auto idx : grp) {
+            if (!mix.component(idx).needs_pca_alignment()) { base_idx = idx; break; }
+        }
+        auto merged = std::make_unique<models::TemplatePose<Scalar, D>>(
+            mix.component(base_idx).with_updated_state(m_new, P_new, R_new));
+        merged->set_mode_id(mix.component(base_idx).mode_id());
+        // The scalar likelihood belongs to a registration branch. Preserve the
+        // strongest branch explicitly rather than whichever aligned base came first.
+        merged->set_impulse_evidence(mix.component(ref).impulse_observation(),
+                                    mix.component(ref).impulse_variance());
+        merged->set_impulse_branch(mix.component(ref).impulse_branch(), mix.component(ref).impulse_parent());
+        merged->set_impulse_log_likelihood(mix.component(ref).impulse_log_likelihood());
+        merged->set_impulse_branch_evidence(mix.component(ref).impulse_log_zero(),
+                                          mix.component(ref).impulse_log_positive());
+
+        result.add_component(std::move(merged), w_sum);
+
+        for (auto idx : grp) remaining[idx] = false;
+    }
+
+    mix = std::move(result);
+}
+
+}

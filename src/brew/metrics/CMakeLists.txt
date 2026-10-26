@@ -1,0 +1,2 @@
+add_library(brew_metrics INTERFACE)
+target_link_libraries(brew_metrics INTERFACE brew_shared)
