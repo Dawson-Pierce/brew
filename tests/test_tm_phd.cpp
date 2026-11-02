@@ -1,22 +1,36 @@
 #include <gtest/gtest.h>
 #include "brew/dynamics/single_integrator.hpp"
 #include "brew/dynamics/clohessy_wiltshire.hpp"
-#include "brew/template_pose/template_pose_model.hpp"
-#include "brew/shared/trajectory_window.hpp"
-#include "brew/shared/mixture.hpp"
-#include "brew/template_pose/filters/tm_ekf.hpp"
-#include "brew/template_pose/filters/imm_tm_ekf.hpp"
-#include "brew/trajectory_template_pose/filters/trajectory_tm_ekf.hpp"
-#include "brew/template_pose/template_pose.hpp"
-#include "brew/trajectory_template_pose/trajectory_template_pose.hpp"
-#include "brew/shared/fusion/prune.hpp"
-#include "brew/clustering/dbscan.hpp"
-#include "brew/template_matching/point_cloud.hpp"
-#include "brew/template_matching/point_to_point_icp.hpp"
-#include "brew/template_matching/point_to_plane_icp.hpp"
-#include "brew/template_matching/template_library.hpp"
-#include "brew/template_matching/tm_icp_runner.hpp"
-#include "brew/desktop/measurement_sampling/measurement_sampling.hpp"
+#include "brew/models/template_pose.hpp"
+#include "brew/models/trajectory_window.hpp"
+#include "brew/models/mixture.hpp"
+#include "brew/filters/tm_ekf.hpp"
+#include "brew/filters/imm_tm_ekf.hpp"
+#include "brew/filters/trajectory_tm_ekf.hpp"
+#include "brew/models/pointing_firing_model.hpp"
+#include "brew/filters/intent_filter.hpp"
+#include "brew/multiObjectTrackers/phd.hpp"
+#include "brew/multiObjectTrackers/mbm_base.hpp"
+#include "brew/multiObjectTrackers/cphd.hpp"
+#include "brew/multiObjectTrackers/glmb.hpp"
+#include "brew/multiObjectTrackers/jglmb.hpp"
+#include "brew/multiObjectTrackers/mbm.hpp"
+#include "brew/multiObjectTrackers/pmbm.hpp"
+#include "brew/models/merge/template_pose.hpp"
+#include "brew/utils/fusion/template_pose_gci.hpp"
+#include "brew/utils/fusion/arithmetic_average.hpp"
+#include "brew/utils/fusion/prune.hpp"
+#include "brew/utils/fusion/cap.hpp"
+#include "brew/utils/clustering/dbscan.hpp"
+#include "brew/models/trajectory_template_pose.hpp"
+#include "brew/models/merge/trajectory_template_pose.hpp"
+#include "brew/utils/fusion/trajectory_template_pose_gci.hpp"
+#include "brew/utils/registration/point_cloud.hpp"
+#include "brew/utils/registration/point_to_point_icp.hpp"
+#include "brew/utils/registration/point_to_plane_icp.hpp"
+#include "brew/utils/registration/template_library.hpp"
+#include "brew/utils/registration/tm_icp_runner.hpp"
+#include "brew/utils/measurement_sampling/measurement_sampling.hpp"
 
 #include <Eigen/Dense>
 #include <random>
@@ -28,9 +42,9 @@
 
 #ifdef BREW_ENABLE_PLOTTING
 #include <matplot/matplot.h>
-#include <brew/desktop/plot_utils/plot_options.hpp>
-#include <brew/desktop/plot_utils/color_palette.hpp>
-#include <brew/desktop/plot_utils/plot_point_cloud.hpp>
+#include "brew/utils/plot_utils/plot_options.hpp"
+#include "brew/utils/plot_utils/color_palette.hpp"
+#include "brew/utils/plot_utils/plot_point_cloud.hpp"
 #include <filesystem>
 #endif
 
@@ -47,11 +61,11 @@ TEST(TmAngularRate, PropagatesRotationAndRateCovariance) {
     mean(8) = 0.01;
     Eigen::MatrixXd covariance = Eigen::MatrixXd::Identity(12, 12) * 0.01;
     covariance(8, 8) = 0.0004;
-    models::TemplatePose<> initial(mean, covariance, 0, {0, 1, 2});
+    brew::models::TemplatePose<> initial(mean, covariance, 0, {0, 1, 2});
     initial = initial.with_updated_state_aligned(mean, covariance, Eigen::Matrix3d::Identity());
     const auto predicted = filter.predict(2.0, initial);
     EXPECT_NEAR(predicted.mean()(8), 0.01, 1e-12);
-    EXPECT_NEAR(template_matching::so3::log(predicted.rotation())(2), 0.02, 1e-12);
+    EXPECT_NEAR(utils::registration::so3::log(predicted.rotation())(2), 0.02, 1e-12);
     EXPECT_NEAR(predicted.covariance()(11, 8), 0.0008, 1e-12);
     EXPECT_GT(predicted.covariance()(11, 11), covariance(11, 11));
 }
@@ -95,13 +109,13 @@ TEST(TmPoseCovariance, UsesTemplateAxesAndPredictedRange) {
     points << 4.0, -4.0, 0.0, 0.0, 0.0, 0.0,
               0.0, 0.0, 1.0, -1.0, 0.0, 0.0,
               0.0, 0.0, 0.0, 0.0, 1.0, -1.0;
-    auto library = std::make_shared<template_matching::TemplateLibrary>();
-    const int id = library->add(template_matching::PointCloud(points));
+    auto library = std::make_shared<utils::registration::TemplateLibrary>();
+    const int id = library->add(utils::registration::PointCloud(points));
     Eigen::MatrixXd other_points = points;
     other_points.row(0) = points.row(1);
     other_points.row(1) = points.row(0);
-    const int other_id = library->add(template_matching::PointCloud(other_points));
-    template_matching::TmIcpRunner runner;
+    const int other_id = library->add(utils::registration::PointCloud(other_points));
+    utils::registration::TmIcpRunner runner;
     runner.set_template_library(library);
 
     const Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
@@ -132,17 +146,17 @@ TEST(TmSurfaceScore, UsesEveryReturnAndKeepsDenseCloudScoresFinite) {
             0.0, 0.0, 0.0;
     Eigen::MatrixXd bad = good;
     bad.row(2).array() += 4.0;
-    auto library = std::make_shared<template_matching::TemplateLibrary>();
-    const int good_id = library->add(template_matching::PointCloud(good));
-    const int bad_id = library->add(template_matching::PointCloud(bad));
-    template_matching::TmIcpRunner runner;
+    auto library = std::make_shared<utils::registration::TemplateLibrary>();
+    const int good_id = library->add(utils::registration::PointCloud(good));
+    const int bad_id = library->add(utils::registration::PointCloud(bad));
+    utils::registration::TmIcpRunner runner;
     runner.set_template_library(library);
 
     Eigen::MatrixXd observed(3, 1200);
     for (int i = 0; i < observed.cols(); ++i) {
         observed.col(i) = good.col(i % good.cols());
     }
-    const template_matching::PointCloud cloud(observed);
+    const utils::registration::PointCloud cloud(observed);
     const auto I = Eigen::Matrix3d::Identity();
     const auto zero = Eigen::Vector3d::Zero();
     const double good_score = runner.surface_log_likelihood(
@@ -155,7 +169,7 @@ TEST(TmSurfaceScore, UsesEveryReturnAndKeepsDenseCloudScoresFinite) {
 }
 
 TEST(TmPhdLogWeights, DistinguishesScoresBelowLinearUnderflow) {
-    using Pose = models::TemplatePose<>;
+    using Pose = brew::models::TemplatePose<>;
     class FixedLogFilter final : public filters::Filter<Pose> {
     public:
         [[nodiscard]] std::unique_ptr<filters::Filter<Pose>> clone() const override {
@@ -175,14 +189,14 @@ TEST(TmPhdLogWeights, DistinguishesScoresBelowLinearUnderflow) {
         [[nodiscard]] double gate(const MeasVector&, const Pose&) const override { return 0.0; }
     };
 
-    auto intensity = std::make_unique<models::Mixture<Pose>>();
+    auto intensity = std::make_unique<brew::models::Mixture<Pose>>();
     Eigen::VectorXd mean = Eigen::VectorXd::Zero(6);
     Eigen::MatrixXd covariance = Eigen::MatrixXd::Identity(9, 9);
     for (int template_id = 0; template_id < 2; ++template_id) {
         intensity->add_component(std::make_unique<Pose>(
             mean, covariance, template_id, std::vector<int>{0, 1, 2}), 0.5);
     }
-    template_pose::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::TemplatePose<>, Eigen::Dynamic> phd;
     phd.set_filter(std::make_unique<FixedLogFilter>());
     phd.set_intensity(std::move(intensity));
     phd.set_prob_detection(1.0);
@@ -200,7 +214,7 @@ TEST(TmPhdLogWeights, DistinguishesScoresBelowLinearUnderflow) {
 namespace {
 
 template <typename T>
-void print_sorted_weights(const models::Mixture<T>& mix, std::size_t max_show = 8) {
+void print_sorted_weights(const brew::models::Mixture<T>& mix, std::size_t max_show = 8) {
     std::vector<double> w(mix.size());
     for (std::size_t i = 0; i < mix.size(); ++i) w[i] = mix.weight(i);
     std::sort(w.begin(), w.end(), std::greater<double>());
@@ -442,27 +456,27 @@ Eigen::MatrixXd generate_tm_measurements_3d(
 TEST(TmPhd, Tracking3D_SingleTarget) {
 
     auto load_template = [](const std::string& stl_file, int n_pts) {
-        auto cloud = measurement_sampling::sample_stl_vsp(stl_file, n_pts);
+        auto cloud = utils::measurement_sampling::sample_stl_vsp(stl_file, n_pts);
         Eigen::Vector3d centroid = cloud.points().rowwise().mean();
         cloud.points().colwise() -= centroid;
-        auto templ = std::make_shared<template_matching::PointCloud>(cloud.points());
+        auto templ = std::make_shared<utils::registration::PointCloud>(cloud.points());
         return std::make_pair(templ, centroid);
     };
 
     auto [templ_B, centroid_B] = load_template("A.stl", 5000);
 
-    auto lib = std::make_shared<template_matching::TemplateLibrary>();
+    auto lib = std::make_shared<utils::registration::TemplateLibrary>();
     int id_B = lib->add(templ_B);
 
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(3);
 
-    template_matching::IcpParams icp_params;
+    utils::registration::IcpParams icp_params;
     icp_params.max_iterations = 25;
     icp_params.tolerance = 1e-10;
     icp_params.sigma_sq = 0.001;
     icp_params.trim_fraction = 1.0;
 
-    auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
+    auto inner_icp = std::make_shared<utils::registration::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
 
     auto ekf = std::make_unique<filters::TmEkf<>>();
@@ -491,7 +505,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     std::vector<TmTruthTarget3D> truth_targets;
     truth_targets.push_back(make_tm_target_3d(x0, R0, omega, 0, num_steps - 1, dt, *dyn));
 
-    Eigen::MatrixXd tri_B_body = measurement_sampling::load_stl_triangles_vsp("A.stl");
+    Eigen::MatrixXd tri_B_body = utils::measurement_sampling::load_stl_triangles_vsp("A.stl");
     tri_B_body.colwise() -= centroid_B;
 
     std::vector<Eigen::MatrixXd> meas_triangles = {tri_B_body};
@@ -507,7 +521,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
             k, point_noise_std, rng, 1000, 100, -0.3);
     }
 
-    auto birth = std::make_unique<models::Mixture<models::TemplatePose<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::TemplatePose<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
     birth_cov.topLeftCorner(3, 3) = 1500.0 * Eigen::Matrix3d::Identity();
     birth_cov.block(3, 3, 3, 3) = 500.0 * Eigen::Matrix3d::Identity();
@@ -517,12 +531,12 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     Eigen::VectorXd b_mean(6);
     b_mean << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TemplatePose<>>(b_mean, birth_cov, id_B, pos_indices), 0.01);
+        std::make_unique<brew::models::TemplatePose<>>(b_mean, birth_cov, id_B, pos_indices), 0.01);
 
-    template_pose::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::TemplatePose<>, Eigen::Dynamic> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose<>>>());
+    phd.set_intensity(std::make_unique<brew::models::Mixture<brew::models::TemplatePose<>>>());
     phd.set_prob_detection(1.0);
     phd.set_prob_survive(0.99);
     phd.set_clutter_rate(1.0);
@@ -532,7 +546,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
     phd.set_max_components(20);
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(100.0);
-    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(8.0, 3));
+    phd.set_cluster_object(std::make_shared<utils::clustering::DBSCAN>(8.0, 3));
 
     std::cout << "\n=== TM-PHD 3D Single Target (B) ===\n";
     std::cout << std::setw(5) << "k"
@@ -598,7 +612,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
 #ifdef BREW_ENABLE_PLOTTING
     std::filesystem::create_directories("output");
 
-    Eigen::MatrixXd tri_verts = measurement_sampling::load_stl_triangles_vsp("A.stl");
+    Eigen::MatrixXd tri_verts = utils::measurement_sampling::load_stl_triangles_vsp("A.stl");
     tri_verts.colwise() -= centroid_B;
     const int num_tris = static_cast<int>(tri_verts.cols()) / 3;
 
@@ -665,7 +679,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
                 ez.push_back(latest.component(0).mean()(2));
             }
             auto ep = ax->plot3(ex, ey, ez, "o");
-            auto c = brew::plot_utils::lines_color(0);
+            auto c = brew::utils::plot_utils::lines_color(0);
             ep->color(c);
             ep->marker_size(5.0f);
             ep->marker_face_color(c);
@@ -680,7 +694,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
         ax->axes_aspect_ratio(1.0f);
         ax->view(45.f, 30.f);
 
-        brew::plot_utils::save_figure(fig, "output/tm_phd_3d_single.png");
+        brew::utils::plot_utils::save_figure(fig, "output/tm_phd_3d_single.png");
     }
 
     {
@@ -703,7 +717,7 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
         ax2->xlabel("(b)");
         ax2->x_axis().label_font_size(18);
 
-        brew::plot_utils::save_figure(fig, "output/tm_phd_3d_single_convergence.png");
+        brew::utils::plot_utils::save_figure(fig, "output/tm_phd_3d_single_convergence.png");
     }
 #endif
 }
@@ -711,22 +725,22 @@ TEST(TmPhd, Tracking3D_SingleTarget) {
 TEST(TmPhd, Tracking3D_MultipleTargets) {
 
     struct TemplateData {
-        std::shared_ptr<template_matching::PointCloud> templ;
+        std::shared_ptr<utils::registration::PointCloud> templ;
         Eigen::Vector3d centroid;
         Eigen::Matrix3d pca_axes;
         Eigen::Vector3d pca_centroid;
     };
     auto load_template = [](const std::string& stl_file, int n_pts) {
 
-        auto dense = measurement_sampling::sample_stl_vsp(stl_file, 5000);
+        auto dense = utils::measurement_sampling::sample_stl_vsp(stl_file, 5000);
         Eigen::Vector3d centroid = dense.points().rowwise().mean();
         dense.points().colwise() -= centroid;
-        Eigen::Matrix3d axes = template_matching::PcaIcp::pca_axes(dense.points());
+        Eigen::Matrix3d axes = utils::registration::PcaIcp::pca_axes(dense.points());
         Eigen::Vector3d pca_centroid = dense.points().rowwise().mean();
 
-        auto cloud = measurement_sampling::sample_stl_vsp(stl_file, n_pts);
+        auto cloud = utils::measurement_sampling::sample_stl_vsp(stl_file, n_pts);
         cloud.points().colwise() -= centroid;
-        auto templ = std::make_shared<template_matching::PointCloud>(cloud.points());
+        auto templ = std::make_shared<utils::registration::PointCloud>(cloud.points());
         return TemplateData{templ, centroid, axes, pca_centroid};
     };
 
@@ -735,7 +749,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
     auto& templ_A = td_A.templ; auto& centroid_A = td_A.centroid;
     auto& templ_B = td_B.templ; auto& centroid_B = td_B.centroid;
 
-    auto lib = std::make_shared<template_matching::TemplateLibrary>();
+    auto lib = std::make_shared<utils::registration::TemplateLibrary>();
     int id_A = lib->add(templ_A, td_A.pca_axes, td_A.pca_centroid);
     int id_B = lib->add(templ_B, td_B.pca_axes, td_B.pca_centroid);
 
@@ -751,12 +765,12 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
 
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(3);
 
-    template_matching::IcpParams icp_params;
+    utils::registration::IcpParams icp_params;
     icp_params.max_iterations = 25;
     icp_params.tolerance = 1e-12;
     icp_params.sigma_sq = 0.1;
 
-    auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
+    auto inner_icp = std::make_shared<utils::registration::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
 
     auto ekf = std::make_unique<filters::TmEkf<>>();
@@ -792,10 +806,10 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
     truth_targets.push_back(make_tm_target_3d(x0_A, R0_A, omega_A, 0, num_steps - 1, dt, *dyn));
     truth_targets.push_back(make_tm_target_3d(x0_B,   R0_B,   omega_B,   0, num_steps - 1, dt, *dyn));
 
-    Eigen::MatrixXd tri_A_body = measurement_sampling::load_stl_triangles_vsp("A.stl");
+    Eigen::MatrixXd tri_A_body = utils::measurement_sampling::load_stl_triangles_vsp("A.stl");
     tri_A_body.colwise() -= centroid_A;
 
-    Eigen::MatrixXd tri_B_body = measurement_sampling::load_stl_triangles_vsp("B.stl");
+    Eigen::MatrixXd tri_B_body = utils::measurement_sampling::load_stl_triangles_vsp("B.stl");
     tri_B_body.colwise() -= centroid_B;
 
     std::vector<Eigen::MatrixXd> meas_triangles = {tri_A_body, tri_B_body};
@@ -819,7 +833,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
             k, point_noise_std, rng, 1000, 100, -0.3);
     }
 
-    auto birth = std::make_unique<models::Mixture<models::TemplatePose<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::TemplatePose<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
     birth_cov.topLeftCorner(3, 3) = 1500.0 * Eigen::Matrix3d::Identity();
     birth_cov.block(3, 3, 3, 3) = 500.0 * Eigen::Matrix3d::Identity();
@@ -830,14 +844,14 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
     b_mean << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     double w_b = 0.001;
     birth->add_component(
-        std::make_unique<models::TemplatePose<>>(b_mean, birth_cov, id_A, pos_indices), w_b);
+        std::make_unique<brew::models::TemplatePose<>>(b_mean, birth_cov, id_A, pos_indices), w_b);
     birth->add_component(
-        std::make_unique<models::TemplatePose<>>(b_mean, birth_cov, id_B, pos_indices), w_b);
+        std::make_unique<brew::models::TemplatePose<>>(b_mean, birth_cov, id_B, pos_indices), w_b);
 
-    template_pose::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::TemplatePose<>, Eigen::Dynamic> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose<>>>());
+    phd.set_intensity(std::make_unique<brew::models::Mixture<brew::models::TemplatePose<>>>());
     phd.set_prob_detection(p_detect);
     phd.set_prob_survive(0.99);
     phd.set_clutter_rate(1.0);
@@ -847,7 +861,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
     phd.set_max_components(50);
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(100.0);
-    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(8.0, 3));
+    phd.set_cluster_object(std::make_shared<utils::clustering::DBSCAN>(8.0, 3));
 
     std::cout << "\n=== TM-PHD 3D Multi-Template Tracking (A + B) ===\n";
     std::cout << std::setw(5) << "k"
@@ -929,11 +943,11 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
 
     {
 
-        Eigen::MatrixXd tri_A_body = measurement_sampling::load_stl_triangles_vsp("A.stl");
+        Eigen::MatrixXd tri_A_body = utils::measurement_sampling::load_stl_triangles_vsp("A.stl");
         tri_A_body.colwise() -= centroid_A;
         const int n_tri_A_body = static_cast<int>(tri_A_body.cols()) / 3;
 
-        Eigen::MatrixXd tri_B_body = measurement_sampling::load_stl_triangles_vsp("B.stl");
+        Eigen::MatrixXd tri_B_body = utils::measurement_sampling::load_stl_triangles_vsp("B.stl");
         tri_B_body.colwise() -= centroid_B;
         const int n_tri_B_body = static_cast<int>(tri_B_body.cols()) / 3;
 
@@ -974,7 +988,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
             ax->z_axis().label_font_size(18);
             set_equal_axes(ax, tri_A_body);
             ax->view(45.f, 30.f);
-            brew::plot_utils::save_figure(fig, "output/stl_A.png");
+            brew::utils::plot_utils::save_figure(fig, "output/stl_A.png");
         }
 
         {
@@ -990,7 +1004,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
             ax->z_axis().label_font_size(18);
             set_equal_axes(ax, tri_B_body);
             ax->view(45.f, 30.f);
-            brew::plot_utils::save_figure(fig, "output/stl_B.png");
+            brew::utils::plot_utils::save_figure(fig, "output/stl_B.png");
         }
     }
 
@@ -1003,17 +1017,17 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
 
         const int plot_stride = 3;
 
-        Eigen::MatrixXd tri_A = measurement_sampling::load_stl_triangles_vsp("A.stl");
+        Eigen::MatrixXd tri_A = utils::measurement_sampling::load_stl_triangles_vsp("A.stl");
         tri_A.colwise() -= centroid_A;
 
         const int n_tri_A = static_cast<int>(tri_A.cols()) / 3;
 
-        Eigen::MatrixXd tri_B = measurement_sampling::load_stl_triangles_vsp("B.stl");
+        Eigen::MatrixXd tri_B = utils::measurement_sampling::load_stl_triangles_vsp("B.stl");
         tri_B.colwise() -= centroid_B;
 
         const int n_tri_B = static_cast<int>(tri_B.cols()) / 3;
 
-        auto get_tri_data = [&](const models::TemplatePose<>& est)
+        auto get_tri_data = [&](const brew::models::TemplatePose<>& est)
             -> std::pair<const Eigen::MatrixXd*, int> {
             if (est.template_id() == id_A)
                 return {&tri_A, n_tri_A};
@@ -1068,7 +1082,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
         for (int k = 0; k < num_steps; ++k) {
             const auto& latest = *phd.extracted_mixtures()[k];
             for (std::size_t i = 0; i < latest.size(); ++i) {
-                auto c = brew::plot_utils::lines_color(static_cast<int>(i));
+                auto c = brew::utils::plot_utils::lines_color(static_cast<int>(i));
                 std::vector<double> ex = {latest.component(i).mean()(0)};
                 std::vector<double> ey = {latest.component(i).mean()(1)};
                 std::vector<double> ez = {latest.component(i).mean()(2)};
@@ -1086,7 +1100,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
         ax->z_axis().label_font_size(18);
         ax->view(45.f, 30.f);
 
-        brew::plot_utils::save_figure(fig, "output/tm_phd_3d_multi.png");
+        brew::utils::plot_utils::save_figure(fig, "output/tm_phd_3d_multi.png");
     }
 
     {
@@ -1111,7 +1125,7 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
         ax2->xlabel("(b)");
         ax2->x_axis().label_font_size(18);
 
-        brew::plot_utils::save_figure(fig, "output/tm_phd_3d_multi_convergence.png");
+        brew::utils::plot_utils::save_figure(fig, "output/tm_phd_3d_multi_convergence.png");
     }
 
 #endif
@@ -1120,21 +1134,21 @@ TEST(TmPhd, Tracking3D_MultipleTargets) {
 TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
 
     struct TemplateData {
-        std::shared_ptr<template_matching::PointCloud> templ;
+        std::shared_ptr<utils::registration::PointCloud> templ;
         Eigen::Vector3d centroid;
         Eigen::Matrix3d pca_axes;
         Eigen::Vector3d pca_centroid;
     };
     auto load_template = [](const std::string& stl_file, int n_pts) {
-        auto dense = measurement_sampling::sample_stl_vsp(stl_file, 5000);
+        auto dense = utils::measurement_sampling::sample_stl_vsp(stl_file, 5000);
         Eigen::Vector3d centroid = dense.points().rowwise().mean();
         dense.points().colwise() -= centroid;
-        Eigen::Matrix3d axes = template_matching::PcaIcp::pca_axes(dense.points());
+        Eigen::Matrix3d axes = utils::registration::PcaIcp::pca_axes(dense.points());
         Eigen::Vector3d pca_centroid = dense.points().rowwise().mean();
 
-        auto cloud = measurement_sampling::sample_stl_vsp(stl_file, n_pts);
+        auto cloud = utils::measurement_sampling::sample_stl_vsp(stl_file, n_pts);
         cloud.points().colwise() -= centroid;
-        auto templ = std::make_shared<template_matching::PointCloud>(cloud.points());
+        auto templ = std::make_shared<utils::registration::PointCloud>(cloud.points());
         return TemplateData{templ, centroid, axes, pca_centroid};
     };
 
@@ -1143,19 +1157,19 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     auto& templ_A = td_A.templ; auto& centroid_A = td_A.centroid;
     auto& templ_B = td_B.templ; auto& centroid_B = td_B.centroid;
 
-    auto lib = std::make_shared<template_matching::TemplateLibrary>();
+    auto lib = std::make_shared<utils::registration::TemplateLibrary>();
     int id_A = lib->add(templ_A, td_A.pca_axes, td_A.pca_centroid);
     int id_B = lib->add(templ_B, td_B.pca_axes, td_B.pca_centroid);
 
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(3);
 
-    template_matching::IcpParams icp_params;
+    utils::registration::IcpParams icp_params;
     icp_params.max_iterations = 25;
     icp_params.tolerance = 1e-6;
     icp_params.sigma_sq = 0.1;
     icp_params.trim_fraction = 1.0;
 
-    auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
+    auto inner_icp = std::make_shared<utils::registration::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
 
     constexpr int kTrajTmWindow3D = 5;
@@ -1192,10 +1206,10 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     truth_targets.push_back(make_tm_target_3d(x0_A, R0_A, omega_A, 0, num_steps - 1, dt, *dyn));
     truth_targets.push_back(make_tm_target_3d(x0_B,   R0_B,   omega_B,   0, num_steps - 1, dt, *dyn));
 
-    Eigen::MatrixXd tri_A_body = measurement_sampling::load_stl_triangles_vsp("A.stl");
+    Eigen::MatrixXd tri_A_body = utils::measurement_sampling::load_stl_triangles_vsp("A.stl");
     tri_A_body.colwise() -= centroid_A;
 
-    Eigen::MatrixXd tri_B_body = measurement_sampling::load_stl_triangles_vsp("B.stl");
+    Eigen::MatrixXd tri_B_body = utils::measurement_sampling::load_stl_triangles_vsp("B.stl");
     tri_B_body.colwise() -= centroid_B;
 
     std::vector<Eigen::MatrixXd> meas_triangles = {tri_A_body, tri_B_body};
@@ -1219,7 +1233,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
             k, point_noise_std, rng, 1000, 100, -0.3);
     }
 
-    auto birth = std::make_unique<models::Mixture<models::TrajectoryTemplatePose<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::TrajectoryTemplatePose<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
     birth_cov.topLeftCorner(3, 3) = 1500.0 * Eigen::Matrix3d::Identity();
     birth_cov.block(3, 3, 3, 3) = 500.0 * Eigen::Matrix3d::Identity();
@@ -1232,12 +1246,12 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
 
     auto make_traj_birth = [&](int template_id) {
 
-        auto tp = models::TemplatePose<>(b_mean, birth_cov, template_id, pos_indices);
+        auto tp = brew::models::TemplatePose<>(b_mean, birth_cov, template_id, pos_indices);
 
-        models::TemplatePose<> tp_trans = tp;
+        brew::models::TemplatePose<> tp_trans = tp;
         tp_trans.covariance() = tp.covariance().topLeftCorner(sd, sd);
         auto traj = std::make_unique<
-            models::TrajectoryTemplatePose<>>(sd, tp_trans, kTrajTmWindow3D);
+            brew::models::TrajectoryTemplatePose<>>(sd, tp_trans, kTrajTmWindow3D);
         traj->history_at(0) = tp;
         return traj;
     };
@@ -1247,11 +1261,11 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     birth->add_component(make_traj_birth(id_A), w_b);
     birth->add_component(make_traj_birth(id_B), w_b);
 
-    trajectory_template_pose::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::TrajectoryTemplatePose<>, Eigen::Dynamic> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(
-        std::make_unique<models::Mixture<models::TrajectoryTemplatePose<>>>());
+        std::make_unique<brew::models::Mixture<brew::models::TrajectoryTemplatePose<>>>());
     phd.set_prob_detection(p_detect);
     phd.set_prob_survive(0.99);
     phd.set_clutter_rate(1.0);
@@ -1261,7 +1275,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
     phd.set_max_components(50);
     phd.set_extract_threshold(0.4);
     phd.set_gate_threshold(100.0);
-    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(8.0, 3));
+    phd.set_cluster_object(std::make_shared<utils::clustering::DBSCAN>(8.0, 3));
 
     std::cout << "\n=== Trajectory TM-PHD 3D Multi-Template Tracking (A + B) ===\n";
     std::cout << std::setw(5) << "k"
@@ -1350,17 +1364,17 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
 
         const int plot_stride = 3;
 
-        Eigen::MatrixXd tri_A = measurement_sampling::load_stl_triangles_vsp("A.stl");
+        Eigen::MatrixXd tri_A = utils::measurement_sampling::load_stl_triangles_vsp("A.stl");
         tri_A.colwise() -= centroid_A;
 
         const int n_tri_A = static_cast<int>(tri_A.cols()) / 3;
 
-        Eigen::MatrixXd tri_B = measurement_sampling::load_stl_triangles_vsp("B.stl");
+        Eigen::MatrixXd tri_B = utils::measurement_sampling::load_stl_triangles_vsp("B.stl");
         tri_B.colwise() -= centroid_B;
 
         const int n_tri_B = static_cast<int>(tri_B.cols()) / 3;
 
-        auto get_tri_data = [&](const models::TemplatePose<>& est)
+        auto get_tri_data = [&](const brew::models::TemplatePose<>& est)
             -> std::pair<const Eigen::MatrixXd*, int> {
             if (est.template_id() == id_A)
                 return {&tri_A, n_tri_A};
@@ -1423,7 +1437,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
                 ey.push_back(tp.mean()(1));
                 ez.push_back(tp.mean()(2));
             }
-            auto c = brew::plot_utils::lines_color(static_cast<int>(i));
+            auto c = brew::utils::plot_utils::lines_color(static_cast<int>(i));
             auto el = ax->plot3(ex, ey, ez, "o-");
             el->color(c);
             el->line_width(1.5f);
@@ -1438,7 +1452,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
         ax->z_axis().label_font_size(18);
         ax->view(45.f, 30.f);
 
-        brew::plot_utils::save_figure(fig, "output/trajectory_tm_phd_3d_multi.png");
+        brew::utils::plot_utils::save_figure(fig, "output/trajectory_tm_phd_3d_multi.png");
     }
 
     {
@@ -1503,7 +1517,7 @@ TEST(TmPhd, TrajectoryTracking3D_MultipleTargets) {
         ax2->xlabel("(b)");
         ax2->x_axis().label_font_size(18);
 
-        brew::plot_utils::save_figure(fig, "output/trajectory_tm_phd_3d_multi_convergence.png");
+        brew::utils::plot_utils::save_figure(fig, "output/trajectory_tm_phd_3d_multi_convergence.png");
     }
 #endif
 }

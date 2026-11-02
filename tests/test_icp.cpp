@@ -1,15 +1,15 @@
 #include <gtest/gtest.h>
 
-#include "brew/template_matching/pca_icp.hpp"
-#include "brew/template_matching/point_to_point_icp.hpp"
-#include "brew/template_matching/point_to_plane_icp.hpp"
-#include "brew/template_matching/so3.hpp"
-#include "brew/template_matching/template_library.hpp"
+#include "brew/utils/registration/pca_icp.hpp"
+#include "brew/utils/registration/point_to_point_icp.hpp"
+#include "brew/utils/registration/point_to_plane_icp.hpp"
+#include "brew/utils/registration/so3.hpp"
+#include "brew/utils/registration/template_library.hpp"
 
 #include <cmath>
 #include <random>
 
-using namespace brew::template_matching;
+using namespace brew::utils::registration;
 
 TEST(Icp, PartialPlaneDoesNotInventMotionAlongWeaklyObservedDirections) {
     Eigen::MatrixXd points(3, 100), normals(3, 100);

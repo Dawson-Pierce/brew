@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "brew/dynamics/impulse_model.hpp"
 
 namespace brew::dynamics {
 
@@ -24,6 +25,11 @@ public:
     using ExtentMatrix = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
     virtual ~DynamicsBase() = default;
+
+    void set_impulse_model(const ImpulseModel& model) {
+        impulse_model_ = std::make_shared<const ImpulseModel>(model);
+    }
+    const ImpulseModel* impulse_model() const { return impulse_model_.get(); }
 
     [[nodiscard]] virtual std::unique_ptr<DynamicsBase> clone() const = 0;
 
@@ -72,6 +78,9 @@ public:
     }
 
     [[nodiscard]] virtual bool is_lti() const { return false; }
+
+private:
+    std::shared_ptr<const ImpulseModel> impulse_model_;
 };
 
 }

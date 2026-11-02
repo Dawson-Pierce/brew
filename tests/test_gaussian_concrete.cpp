@@ -1,8 +1,21 @@
 // Compile-smoke + clone for the concrete gaussian RFS (MBMBase abstract -> only via inheritance asserts).
 
 #include <gtest/gtest.h>
-#include "brew/gaussian/gaussian.hpp"
-#include "brew/gaussian/multi_target/mbm_base.hpp"
+#include "brew/models/gaussian.hpp"
+#include "brew/filters/ekf.hpp"
+#include "brew/multiObjectTrackers/phd.hpp"
+#include "brew/multiObjectTrackers/mbm_base.hpp"
+#include "brew/multiObjectTrackers/cphd.hpp"
+#include "brew/multiObjectTrackers/glmb.hpp"
+#include "brew/multiObjectTrackers/jglmb.hpp"
+#include "brew/multiObjectTrackers/mbm.hpp"
+#include "brew/multiObjectTrackers/pmbm.hpp"
+#include "brew/models/merge/gaussian.hpp"
+#include "brew/utils/fusion/gaussian_gci.hpp"
+#include "brew/utils/fusion/arithmetic_average.hpp"
+#include "brew/utils/fusion/prune.hpp"
+#include "brew/utils/fusion/cap.hpp"
+#include "brew/utils/clustering/dbscan.hpp"
 
 using namespace brew;
 
@@ -11,25 +24,25 @@ static void expect_default_constructible_and_cloneable() {
     Rfs rfs;
     auto cloned = rfs.clone();
     EXPECT_NE(cloned, nullptr);
-    static_assert(std::is_base_of_v<multi_target::RFSBase, Rfs>,
-                  "concrete gaussian RFS must derive from multi_target::RFSBase");
+    static_assert(std::is_base_of_v<multiObjectTrackers::RFSBase, Rfs>,
+                  "concrete gaussian RFS must derive from multiObjectTrackers::RFSBase");
 }
 
 TEST(GaussianConcreteRFS, AllInstantiateAndClone) {
-    expect_default_constructible_and_cloneable<gaussian::PHD<>>();
-    expect_default_constructible_and_cloneable<gaussian::CPHD<>>();
-    expect_default_constructible_and_cloneable<gaussian::GLMB<>>();
-    expect_default_constructible_and_cloneable<gaussian::JGLMB<>>();
-    expect_default_constructible_and_cloneable<gaussian::MBM<>>();
-    expect_default_constructible_and_cloneable<gaussian::PMBM<>>();
+    expect_default_constructible_and_cloneable<brew::multiObjectTrackers::PHD<brew::models::Gaussian<>, Eigen::Dynamic>>();
+    expect_default_constructible_and_cloneable<brew::multiObjectTrackers::CPHD<brew::models::Gaussian<>, Eigen::Dynamic>>();
+    expect_default_constructible_and_cloneable<brew::multiObjectTrackers::GLMB<brew::models::Gaussian<>, Eigen::Dynamic>>();
+    expect_default_constructible_and_cloneable<brew::multiObjectTrackers::JGLMB<brew::models::Gaussian<>, Eigen::Dynamic>>();
+    expect_default_constructible_and_cloneable<brew::multiObjectTrackers::MBM<brew::models::Gaussian<>, Eigen::Dynamic>>();
+    expect_default_constructible_and_cloneable<brew::multiObjectTrackers::PMBM<brew::models::Gaussian<>, Eigen::Dynamic>>();
 }
 
 TEST(GaussianConcreteRFS, InheritanceChain) {
-    static_assert(std::is_base_of_v<gaussian::GLMB<>, gaussian::JGLMB<>>,
+    static_assert(std::is_base_of_v<brew::multiObjectTrackers::GLMB<brew::models::Gaussian<>, Eigen::Dynamic>, brew::multiObjectTrackers::JGLMB<brew::models::Gaussian<>, Eigen::Dynamic>>,
                   "JGLMB must extend the gaussian GLMB");
-    static_assert(std::is_base_of_v<gaussian::MBMBase<>, gaussian::MBM<>>,
+    static_assert(std::is_base_of_v<brew::multiObjectTrackers::MBMBase<brew::models::Gaussian<>, Eigen::Dynamic>, brew::multiObjectTrackers::MBM<brew::models::Gaussian<>, Eigen::Dynamic>>,
                   "MBM must extend the gaussian MBMBase");
-    static_assert(std::is_base_of_v<gaussian::MBMBase<>, gaussian::PMBM<>>,
+    static_assert(std::is_base_of_v<brew::multiObjectTrackers::MBMBase<brew::models::Gaussian<>, Eigen::Dynamic>, brew::multiObjectTrackers::PMBM<brew::models::Gaussian<>, Eigen::Dynamic>>,
                   "PMBM must extend the gaussian MBMBase");
     SUCCEED();
 }

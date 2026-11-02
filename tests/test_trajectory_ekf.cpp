@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/trajectory_gaussian/filters/trajectory_gaussian_ekf.hpp"
+#include "brew/filters/trajectory_gaussian_ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
@@ -30,7 +30,7 @@ TEST_F(TrajectoryGaussianEKFTest, PredictWindowGrowth) {
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
 
-    models::TrajectoryGaussian<> tg(4, models::Gaussian<>(mean, cov), kWindow);
+    brew::models::TrajectoryGaussian<> tg(4, brew::models::Gaussian<>(mean, cov), kWindow);
     EXPECT_EQ(tg.window_size(), 1);
 
     auto pred1 = filter.predict(1.0, tg);
@@ -50,7 +50,7 @@ TEST_F(TrajectoryGaussianEKFTest, LScanTrim) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    models::TrajectoryGaussian<> tg(4, models::Gaussian<>(mean, cov), kWindow);
+    brew::models::TrajectoryGaussian<> tg(4, brew::models::Gaussian<>(mean, cov), kWindow);
 
     auto current = tg;
     for (int i = 0; i < 6; ++i) {
@@ -67,7 +67,7 @@ TEST_F(TrajectoryGaussianEKFTest, CorrectStep) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    models::TrajectoryGaussian<> tg(4, models::Gaussian<>(mean, cov), kWindow);
+    brew::models::TrajectoryGaussian<> tg(4, brew::models::Gaussian<>(mean, cov), kWindow);
 
     auto pred = filter.predict(1.0, tg);
 
@@ -87,7 +87,7 @@ TEST_F(TrajectoryGaussianEKFTest, Gate) {
     Eigen::VectorXd mean(4);
     mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
-    models::TrajectoryGaussian<> tg(4, models::Gaussian<>(mean, cov), kWindow);
+    brew::models::TrajectoryGaussian<> tg(4, brew::models::Gaussian<>(mean, cov), kWindow);
 
     Eigen::VectorXd meas_close(2);
     meas_close << 0.1, 0.1;

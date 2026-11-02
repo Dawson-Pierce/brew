@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "brew/clustering/dbscan.hpp"
+#include "brew/utils/clustering/dbscan.hpp"
 
-using namespace brew::clustering;
+using namespace brew::utils::clustering;
 
 TEST(DBSCAN, TwoClusters) {
 

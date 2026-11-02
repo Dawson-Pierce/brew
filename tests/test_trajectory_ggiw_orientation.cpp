@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/trajectory_ggiw_orientation/filters/trajectory_ggiw_orientation_ekf.hpp"
+#include "brew/filters/trajectory_ggiw_orientation_ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
@@ -16,7 +16,7 @@ TEST(TrajectoryGGIWOrientationModel, ConstructAndAccessors) {
     V << 10.0, 2.0,
           2.0, 5.0;
 
-    models::TrajectoryGGIWOrientation<>g(4, models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
+    brew::models::TrajectoryGGIWOrientation<>g(4, brew::models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
 
     EXPECT_EQ(g.current().extent_dim(), 2);
     EXPECT_TRUE(g.is_extended());
@@ -41,7 +41,7 @@ TEST(TrajectoryGGIWOrientationModel, Clone) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::TrajectoryGGIWOrientation<>g(4, models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
+    brew::models::TrajectoryGGIWOrientation<>g(4, brew::models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
 
     auto typed_clone = g.clone_typed();
     ASSERT_NE(typed_clone, nullptr);
@@ -79,7 +79,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, PredictGrowsTrajectory) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::TrajectoryGGIWOrientation<>tg(4, models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
+    brew::models::TrajectoryGGIWOrientation<>tg(4, brew::models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
 
     auto pred = filter.predict(1.0, tg);
 
@@ -100,7 +100,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, CorrectPopulatesBasis) {
     V << 50.0, 10.0,
          10.0, 30.0;
 
-    models::TrajectoryGGIWOrientation<>tg(4, models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
+    brew::models::TrajectoryGGIWOrientation<>tg(4, brew::models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
 
     auto pred = filter.predict(1.0, tg);
 
@@ -130,7 +130,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, MultipleStepsBasisAlignment) {
     V << 80.0, 5.0,
           5.0, 20.0;
 
-    models::TrajectoryGGIWOrientation<>tg(4, models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
+    brew::models::TrajectoryGGIWOrientation<>tg(4, brew::models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
 
     auto pred1 = filter.predict(1.0, tg);
     Eigen::VectorXd meas1(2);
@@ -161,7 +161,7 @@ TEST_F(TrajectoryGGIWOrientationEKFTest, Gate) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::TrajectoryGGIWOrientation<>tg(4, models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
+    brew::models::TrajectoryGGIWOrientation<>tg(4, brew::models::GGIWOrientation<>(10.0, 5.0, mean, cov, 10.0, V), kTestWindow);
 
     Eigen::VectorXd meas_close(2);
     meas_close << 0.1, 0.1;

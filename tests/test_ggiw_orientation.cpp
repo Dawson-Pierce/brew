@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/ggiw_orientation/filters/ggiw_orientation_ekf.hpp"
+#include "brew/filters/ggiw_orientation_ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
@@ -13,7 +13,7 @@ TEST(GGIWOrientationModel, ConstructAndAccessors) {
     V << 10.0, 2.0,
           2.0, 5.0;
 
-    models::GGIWOrientation<> g(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIWOrientation<> g(10.0, 5.0, mean, cov, 10.0, V);
 
     EXPECT_EQ(g.extent_dim(), 2);
     EXPECT_TRUE(g.is_extended());
@@ -40,7 +40,7 @@ TEST(GGIWOrientationModel, Clone) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIWOrientation<> g(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIWOrientation<> g(10.0, 5.0, mean, cov, 10.0, V);
 
     auto base_clone = g.clone();
     ASSERT_NE(base_clone, nullptr);
@@ -58,7 +58,7 @@ TEST(GGIWOrientationModel, SetBasis) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIWOrientation<> g(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIWOrientation<> g(10.0, 5.0, mean, cov, 10.0, V);
 
     Eigen::MatrixXd new_basis(2, 2);
     new_basis << 0.0, 1.0,
@@ -93,7 +93,7 @@ TEST_F(GGIWOrientationEKFTest, PredictPreservesBasis) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
     filter.set_temporal_decay(1.0);
     filter.set_forgetting_factor(1.0);
 
@@ -114,7 +114,7 @@ TEST_F(GGIWOrientationEKFTest, FirstCorrectionPopulatesBasis) {
     V << 50.0, 10.0,
          10.0, 30.0;
 
-    models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     Eigen::VectorXd meas(2);
     meas << 0.1, 0.1;
@@ -141,7 +141,7 @@ TEST_F(GGIWOrientationEKFTest, SecondCorrectionAlignsBasis) {
     V << 80.0, 5.0,
           5.0, 20.0;
 
-    models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
     filter.set_temporal_decay(1.0);
     filter.set_forgetting_factor(1.0);
 
@@ -172,7 +172,7 @@ TEST_F(GGIWOrientationEKFTest, Gate) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIWOrientation<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     Eigen::VectorXd meas_close(2);
     meas_close << 0.1, 0.1;

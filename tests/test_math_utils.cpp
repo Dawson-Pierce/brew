@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
-#include "brew/desktop/plot_utils/math_utils.hpp"
+#include "brew/utils/plot_utils/math_utils.hpp"
 #include <numbers>
 #include <cmath>
 
-using namespace brew::plot_utils;
+using namespace brew::utils::plot_utils;
 
 TEST(Chi2Inv, ExactDof2) {
 

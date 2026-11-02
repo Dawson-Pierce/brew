@@ -1,25 +1,44 @@
 #pragma once
 
 #include "brew/dynamics/single_integrator.hpp"
-#include "brew/shared/mixture.hpp"
-#include "brew/gaussian/gaussian_model.hpp"
-#include "brew/ggiw/ggiw_model.hpp"
-#include "brew/shared/trajectory_window.hpp"
-#include "brew/ggiw_orientation/ggiw_orientation_model.hpp"
-#include "brew/gaussian/filters/ekf.hpp"
-#include "brew/gaussian/filters/ukf.hpp"
-#include "brew/ggiw/filters/ggiw_ekf.hpp"
-#include "brew/ggiw_orientation/filters/ggiw_orientation_ekf.hpp"
-#include "brew/trajectory_gaussian/filters/trajectory_gaussian_ekf.hpp"
-#include "brew/trajectory_ggiw/filters/trajectory_ggiw_ekf.hpp"
-#include "brew/trajectory_ggiw_orientation/filters/trajectory_ggiw_orientation_ekf.hpp"
-#include "brew/gaussian/gaussian.hpp"
-#include "brew/ggiw/ggiw.hpp"
-#include "brew/ggiw_orientation/ggiw_orientation.hpp"
-#include "brew/trajectory_gaussian/trajectory_gaussian.hpp"
-#include "brew/trajectory_ggiw/trajectory_ggiw.hpp"
-#include "brew/trajectory_ggiw_orientation/trajectory_ggiw_orientation.hpp"
-#include "brew/clustering/dbscan.hpp"
+#include "brew/models/mixture.hpp"
+#include "brew/models/gaussian.hpp"
+#include "brew/models/ggiw.hpp"
+#include "brew/models/trajectory_window.hpp"
+#include "brew/models/ggiw_orientation.hpp"
+#include "brew/filters/ekf.hpp"
+#include "brew/filters/ukf.hpp"
+#include "brew/filters/ggiw_ekf.hpp"
+#include "brew/filters/ggiw_orientation_ekf.hpp"
+#include "brew/filters/trajectory_gaussian_ekf.hpp"
+#include "brew/filters/trajectory_ggiw_ekf.hpp"
+#include "brew/filters/trajectory_ggiw_orientation_ekf.hpp"
+#include "brew/multiObjectTrackers/phd.hpp"
+#include "brew/multiObjectTrackers/mbm_base.hpp"
+#include "brew/multiObjectTrackers/cphd.hpp"
+#include "brew/multiObjectTrackers/glmb.hpp"
+#include "brew/multiObjectTrackers/jglmb.hpp"
+#include "brew/multiObjectTrackers/mbm.hpp"
+#include "brew/multiObjectTrackers/pmbm.hpp"
+#include "brew/models/merge/gaussian.hpp"
+#include "brew/utils/fusion/gaussian_gci.hpp"
+#include "brew/utils/fusion/arithmetic_average.hpp"
+#include "brew/utils/fusion/prune.hpp"
+#include "brew/utils/fusion/cap.hpp"
+#include "brew/utils/clustering/dbscan.hpp"
+#include "brew/models/merge/ggiw.hpp"
+#include "brew/utils/fusion/ggiw_gci.hpp"
+#include "brew/models/merge/ggiw_orientation.hpp"
+#include "brew/utils/fusion/ggiw_orientation_gci.hpp"
+#include "brew/models/trajectory_gaussian.hpp"
+#include "brew/models/merge/trajectory_gaussian.hpp"
+#include "brew/utils/fusion/trajectory_gaussian_gci.hpp"
+#include "brew/models/trajectory_ggiw.hpp"
+#include "brew/models/merge/trajectory_ggiw.hpp"
+#include "brew/utils/fusion/trajectory_ggiw_gci.hpp"
+#include "brew/models/trajectory_ggiw_orientation.hpp"
+#include "brew/models/merge/trajectory_ggiw_orientation.hpp"
+#include "brew/utils/fusion/trajectory_ggiw_orientation_gci.hpp"
 #include <Eigen/Dense>
 #include <random>
 #include <vector>
@@ -32,14 +51,14 @@
 
 #ifdef BREW_ENABLE_PLOTTING
 #include <matplot/matplot.h>
-#include <brew/desktop/plot_utils/plot_options.hpp>
-#include <brew/desktop/plot_utils/color_palette.hpp>
-#include <brew/desktop/plot_utils/plot_gaussian.hpp>
-#include <brew/desktop/plot_utils/plot_ggiw.hpp>
-#include <brew/desktop/plot_utils/plot_trajectory_gaussian.hpp>
-#include <brew/desktop/plot_utils/plot_trajectory_ggiw.hpp>
-#include <brew/desktop/plot_utils/plot_ggiw_orientation.hpp>
-#include <brew/desktop/plot_utils/plot_trajectory_ggiw_orientation.hpp>
+#include "brew/utils/plot_utils/plot_options.hpp"
+#include "brew/utils/plot_utils/color_palette.hpp"
+#include "brew/utils/plot_utils/plot_gaussian.hpp"
+#include "brew/utils/plot_utils/plot_ggiw.hpp"
+#include "brew/utils/plot_utils/plot_trajectory_gaussian.hpp"
+#include "brew/utils/plot_utils/plot_trajectory_ggiw.hpp"
+#include "brew/utils/plot_utils/plot_ggiw_orientation.hpp"
+#include "brew/utils/plot_utils/plot_trajectory_ggiw_orientation.hpp"
 #include <filesystem>
 #include <map>
 #endif
@@ -433,7 +452,7 @@ inline Eigen::VectorXd extract_position(const T& component) {
 
 template <typename T>
 inline double closest_estimate_error(
-    const models::Mixture<T>& estimates,
+    const brew::models::Mixture<T>& estimates,
     const Eigen::VectorXd& truth_pos)
 {
     double min_err = std::numeric_limits<double>::infinity();
@@ -597,10 +616,10 @@ inline std::unique_ptr<filters::TrajectoryGGIWEKF<>> make_trajectory_ggiw_ekf(
     return ekf;
 }
 
-inline std::unique_ptr<models::Mixture<models::Gaussian<>>>
+inline std::unique_ptr<brew::models::Mixture<brew::models::Gaussian<>>>
 make_gm_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
@@ -609,17 +628,17 @@ make_gm_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Gaussian<>>(b1, birth_cov), weight);
+        std::make_unique<brew::models::Gaussian<>>(b1, birth_cov), weight);
     birth->add_component(
-        std::make_unique<models::Gaussian<>>(b2, birth_cov), weight);
+        std::make_unique<brew::models::Gaussian<>>(b2, birth_cov), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::GGIW<>>>
+inline std::unique_ptr<brew::models::Mixture<brew::models::GGIW<>>>
 make_ggiw_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::GGIW<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::GGIW<>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -627,17 +646,17 @@ make_ggiw_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::GGIW<>>(10.0, 1.0, b1, b_cov, 10.0, b_V), weight);
+        std::make_unique<brew::models::GGIW<>>(10.0, 1.0, b1, b_cov, 10.0, b_V), weight);
     birth->add_component(
-        std::make_unique<models::GGIW<>>(10.0, 1.0, b2, b_cov, 10.0, b_V), weight);
+        std::make_unique<brew::models::GGIW<>>(10.0, 1.0, b2, b_cov, 10.0, b_V), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::GGIWOrientation<>>>
+inline std::unique_ptr<brew::models::Mixture<brew::models::GGIWOrientation<>>>
 make_ggiw_orientation_birth(double weight = 0.1)
 {
-    auto birth = std::make_unique<models::Mixture<models::GGIWOrientation<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::GGIWOrientation<>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -645,17 +664,17 @@ make_ggiw_orientation_birth(double weight = 0.1)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::GGIWOrientation<>>(10.0, 1.0, b1, b_cov, 10.0, b_V), weight);
+        std::make_unique<brew::models::GGIWOrientation<>>(10.0, 1.0, b1, b_cov, 10.0, b_V), weight);
     birth->add_component(
-        std::make_unique<models::GGIWOrientation<>>(10.0, 1.0, b2, b_cov, 10.0, b_V), weight);
+        std::make_unique<brew::models::GGIWOrientation<>>(10.0, 1.0, b2, b_cov, 10.0, b_V), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::TrajectoryGaussian<>>>
+inline std::unique_ptr<brew::models::Mixture<brew::models::TrajectoryGaussian<>>>
 make_trajectory_gaussian_birth(double weight = 0.1, int window = kTrajWindow)
 {
-    auto birth = std::make_unique<models::Mixture<models::TrajectoryGaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::TrajectoryGaussian<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
@@ -664,17 +683,17 @@ make_trajectory_gaussian_birth(double weight = 0.1, int window = kTrajWindow)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TrajectoryGaussian<>>(4, models::Gaussian<>(b1, birth_cov), window), weight);
+        std::make_unique<brew::models::TrajectoryGaussian<>>(4, brew::models::Gaussian<>(b1, birth_cov), window), weight);
     birth->add_component(
-        std::make_unique<models::TrajectoryGaussian<>>(4, models::Gaussian<>(b2, birth_cov), window), weight);
+        std::make_unique<brew::models::TrajectoryGaussian<>>(4, brew::models::Gaussian<>(b2, birth_cov), window), weight);
 
     return birth;
 }
 
-inline std::unique_ptr<models::Mixture<models::TrajectoryGGIW<>>>
+inline std::unique_ptr<brew::models::Mixture<brew::models::TrajectoryGGIW<>>>
 make_trajectory_ggiw_birth(double weight = 0.1, int window = kTrajWindow)
 {
-    auto birth = std::make_unique<models::Mixture<models::TrajectoryGGIW<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::TrajectoryGGIW<>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -682,11 +701,11 @@ make_trajectory_ggiw_birth(double weight = 0.1, int window = kTrajWindow)
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TrajectoryGGIW<>>(
-            4, models::GGIW<>(10.0, 1.0, b1, b_cov, 10.0, b_V), window), weight);
+        std::make_unique<brew::models::TrajectoryGGIW<>>(
+            4, brew::models::GGIW<>(10.0, 1.0, b1, b_cov, 10.0, b_V), window), weight);
     birth->add_component(
-        std::make_unique<models::TrajectoryGGIW<>>(
-            4, models::GGIW<>(10.0, 1.0, b2, b_cov, 10.0, b_V), window), weight);
+        std::make_unique<brew::models::TrajectoryGGIW<>>(
+            4, brew::models::GGIW<>(10.0, 1.0, b2, b_cov, 10.0, b_V), window), weight);
 
     return birth;
 }
@@ -712,10 +731,10 @@ inline std::unique_ptr<filters::TrajectoryGGIWOrientationEKF<>> make_trajectory_
     return ekf;
 }
 
-inline std::unique_ptr<models::Mixture<models::TrajectoryGGIWOrientation<>>>
+inline std::unique_ptr<brew::models::Mixture<brew::models::TrajectoryGGIWOrientation<>>>
 make_trajectory_ggiw_orientation_birth(double weight = 0.1, int window = kTrajWindow)
 {
-    auto birth = std::make_unique<models::Mixture<models::TrajectoryGGIWOrientation<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::TrajectoryGGIWOrientation<>>>();
     Eigen::MatrixXd b_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd b_V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
 
@@ -723,11 +742,11 @@ make_trajectory_ggiw_orientation_birth(double weight = 0.1, int window = kTrajWi
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::TrajectoryGGIWOrientation<>>(
-            4, models::GGIWOrientation<>(10.0, 1.0, b1, b_cov, 10.0, b_V), window), weight);
+        std::make_unique<brew::models::TrajectoryGGIWOrientation<>>(
+            4, brew::models::GGIWOrientation<>(10.0, 1.0, b1, b_cov, 10.0, b_V), window), weight);
     birth->add_component(
-        std::make_unique<models::TrajectoryGGIWOrientation<>>(
-            4, models::GGIWOrientation<>(10.0, 1.0, b2, b_cov, 10.0, b_V), window), weight);
+        std::make_unique<brew::models::TrajectoryGGIWOrientation<>>(
+            4, brew::models::GGIWOrientation<>(10.0, 1.0, b2, b_cov, 10.0, b_V), window), weight);
 
     return birth;
 }
@@ -738,24 +757,24 @@ template <typename M> struct rfs_types_for;
         using PHD = NS::PHD<>;   using CPHD = NS::CPHD<>;  using MBM = NS::MBM<>; \
         using PMBM = NS::PMBM<>; using GLMB = NS::GLMB<>;  using JGLMB = NS::JGLMB<>; \
     };
-BREW_RFS_TYPES_FOR(models::Gaussian<>, gaussian)
-BREW_RFS_TYPES_FOR(models::GGIW<>, ggiw)
-BREW_RFS_TYPES_FOR(models::GGIWOrientation<>, ggiw_orientation)
-BREW_RFS_TYPES_FOR(models::TrajectoryGaussian<>, trajectory_gaussian)
-BREW_RFS_TYPES_FOR(models::TrajectoryGGIW<>, trajectory_ggiw)
-BREW_RFS_TYPES_FOR(models::TrajectoryGGIWOrientation<>, trajectory_ggiw_orientation)
+BREW_RFS_TYPES_FOR(brew::models::Gaussian<>, gaussian)
+BREW_RFS_TYPES_FOR(brew::models::GGIW<>, ggiw)
+BREW_RFS_TYPES_FOR(brew::models::GGIWOrientation<>, ggiw_orientation)
+BREW_RFS_TYPES_FOR(brew::models::TrajectoryGaussian<>, trajectory_gaussian)
+BREW_RFS_TYPES_FOR(brew::models::TrajectoryGGIW<>, trajectory_ggiw)
+BREW_RFS_TYPES_FOR(brew::models::TrajectoryGGIWOrientation<>, trajectory_ggiw_orientation)
 #undef BREW_RFS_TYPES_FOR
 
 template <typename T>
 inline typename rfs_types_for<T>::PHD make_phd(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<models::Mixture<T>> birth,
+    std::unique_ptr<brew::models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     typename rfs_types_for<T>::PHD phd;
     phd.set_filter(std::move(filter));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<models::Mixture<T>>());
+    phd.set_intensity(std::make_unique<brew::models::Mixture<T>>());
     phd.set_prob_detection(params.p_detect);
     phd.set_prob_survive(params.p_survive);
     phd.set_clutter_rate(params.clutter_rate);
@@ -767,7 +786,7 @@ inline typename rfs_types_for<T>::PHD make_phd(
     phd.set_gate_threshold(25.0);
 
     if constexpr (is_extended_distribution_v<T>) {
-        phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+        phd.set_cluster_object(std::make_shared<utils::clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
 
@@ -777,13 +796,13 @@ inline typename rfs_types_for<T>::PHD make_phd(
 template <typename T>
 inline typename rfs_types_for<T>::CPHD make_cphd(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<models::Mixture<T>> birth,
+    std::unique_ptr<brew::models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     typename rfs_types_for<T>::CPHD cphd;
     cphd.set_filter(std::move(filter));
     cphd.set_birth_model(std::move(birth));
-    cphd.set_intensity(std::make_unique<models::Mixture<T>>());
+    cphd.set_intensity(std::make_unique<brew::models::Mixture<T>>());
     cphd.set_prob_detection(params.p_detect);
     cphd.set_prob_survive(params.p_survive);
     cphd.set_clutter_rate(params.clutter_rate);
@@ -797,7 +816,7 @@ inline typename rfs_types_for<T>::CPHD make_cphd(
     cphd.set_poisson_birth_cardinality(0.1);
 
     if constexpr (is_extended_distribution_v<T>) {
-        cphd.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+        cphd.set_cluster_object(std::make_shared<utils::clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
 
@@ -805,13 +824,13 @@ inline typename rfs_types_for<T>::CPHD make_cphd(
 }
 
 template <typename T>
-inline std::vector<std::pair<std::unique_ptr<models::Mixture<T>>, double>>
-legacy_birth_to_terms(std::unique_ptr<models::Mixture<T>> birth)
+inline std::vector<std::pair<std::unique_ptr<brew::models::Mixture<T>>, double>>
+legacy_birth_to_terms(std::unique_ptr<brew::models::Mixture<T>> birth)
 {
-    std::vector<std::pair<std::unique_ptr<models::Mixture<T>>, double>> terms;
+    std::vector<std::pair<std::unique_ptr<brew::models::Mixture<T>>, double>> terms;
     if (!birth) return terms;
     for (std::size_t i = 0; i < birth->size(); ++i) {
-        auto mix = std::make_unique<models::Mixture<T>>();
+        auto mix = std::make_unique<brew::models::Mixture<T>>();
         mix->add_component(birth->component(i).clone_typed(), 1.0);
         terms.emplace_back(std::move(mix), birth->weight(i));
     }
@@ -821,7 +840,7 @@ legacy_birth_to_terms(std::unique_ptr<models::Mixture<T>> birth)
 template <typename T>
 inline typename rfs_types_for<T>::MBM make_mbm(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<models::Mixture<T>> birth,
+    std::unique_ptr<brew::models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     typename rfs_types_for<T>::MBM mbm;
@@ -839,7 +858,7 @@ inline typename rfs_types_for<T>::MBM make_mbm(
     mbm.set_k_best(5);
 
     if constexpr (is_extended_distribution_v<T>) {
-        mbm.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+        mbm.set_cluster_object(std::make_shared<utils::clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
 
@@ -849,13 +868,13 @@ inline typename rfs_types_for<T>::MBM make_mbm(
 template <typename T>
 inline typename rfs_types_for<T>::PMBM make_pmbm(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<models::Mixture<T>> birth,
+    std::unique_ptr<brew::models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     typename rfs_types_for<T>::PMBM pmbm;
     pmbm.set_filter(std::move(filter));
     pmbm.set_birth_model(std::move(birth));
-    pmbm.set_poisson_intensity(std::make_unique<models::Mixture<T>>());
+    pmbm.set_poisson_intensity(std::make_unique<brew::models::Mixture<T>>());
     pmbm.set_prob_detection(params.p_detect);
     pmbm.set_prob_survive(params.p_survive);
     pmbm.set_clutter_rate(params.clutter_rate);
@@ -872,7 +891,7 @@ inline typename rfs_types_for<T>::PMBM make_pmbm(
     pmbm.set_k_best(5);
 
     if constexpr (is_extended_distribution_v<T>) {
-        pmbm.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+        pmbm.set_cluster_object(std::make_shared<utils::clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
 
@@ -882,7 +901,7 @@ inline typename rfs_types_for<T>::PMBM make_pmbm(
 template <typename T>
 inline typename rfs_types_for<T>::GLMB make_glmb(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<models::Mixture<T>> birth,
+    std::unique_ptr<brew::models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     typename rfs_types_for<T>::GLMB glmb;
@@ -900,7 +919,7 @@ inline typename rfs_types_for<T>::GLMB make_glmb(
     glmb.set_req_upd(100);
 
     if constexpr (is_extended_distribution_v<T>) {
-        glmb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+        glmb.set_cluster_object(std::make_shared<utils::clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
 
@@ -910,7 +929,7 @@ inline typename rfs_types_for<T>::GLMB make_glmb(
 template <typename T>
 inline typename rfs_types_for<T>::JGLMB make_jglmb(
     std::unique_ptr<filters::Filter<T>> filter,
-    std::unique_ptr<models::Mixture<T>> birth,
+    std::unique_ptr<brew::models::Mixture<T>> birth,
     const ScenarioParams& params)
 {
     typename rfs_types_for<T>::JGLMB jglmb;
@@ -926,7 +945,7 @@ inline typename rfs_types_for<T>::JGLMB make_jglmb(
     jglmb.set_k_best(5);
 
     if constexpr (is_extended_distribution_v<T>) {
-        jglmb.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+        jglmb.set_cluster_object(std::make_shared<utils::clustering::DBSCAN>(
             params.dbscan_epsilon, params.dbscan_min_pts));
     }
 
@@ -950,7 +969,7 @@ inline void accumulate_plot_step(
     const ScenarioData& scenario,
     int k,
     const Eigen::MatrixXd& meas,
-    const models::Mixture<T>& estimates)
+    const brew::models::Mixture<T>& estimates)
 {
     for (std::size_t t = 0; t < scenario.targets.size(); ++t) {
         const auto& tgt = scenario.targets[t];
@@ -1008,7 +1027,7 @@ inline void plot_track_histories(
             tx.push_back(s(pos_x));
             ty.push_back(s(pos_y));
         }
-        auto c = brew::plot_utils::lines_color(color_idx++);
+        auto c = brew::utils::plot_utils::lines_color(color_idx++);
         auto tl = ax->plot(tx, ty);
         tl->color({c[0], c[1], c[2], c[3]});
         tl->line_width(2.0f);
@@ -1020,20 +1039,20 @@ inline void plot_distribution_2d(
     matplot::axes_handle ax,
     const T& dist,
     const std::vector<int>& plt_inds,
-    const brew::plot_utils::Color& color)
+    const brew::utils::plot_utils::Color& color)
 {
     if constexpr (has_get_last_state<T>::value && is_orientation_type<T>::value) {
-        brew::plot_utils::plot_trajectory_ggiw_orientation_2d(ax, dist, plt_inds, color);
+        brew::utils::plot_utils::plot_trajectory_ggiw_orientation_2d(ax, dist, plt_inds, color);
     } else if constexpr (has_get_last_state<T>::value && is_ggiw_type<T>::value) {
-        brew::plot_utils::plot_trajectory_ggiw_2d(ax, dist, plt_inds, color);
+        brew::utils::plot_utils::plot_trajectory_ggiw_2d(ax, dist, plt_inds, color);
     } else if constexpr (has_get_last_state<T>::value) {
-        brew::plot_utils::plot_trajectory_gaussian_2d(ax, dist, plt_inds, color);
+        brew::utils::plot_utils::plot_trajectory_gaussian_2d(ax, dist, plt_inds, color);
     } else if constexpr (is_orientation_type<T>::value) {
-        brew::plot_utils::plot_ggiw_orientation_2d(ax, dist, plt_inds, color);
+        brew::utils::plot_utils::plot_ggiw_orientation_2d(ax, dist, plt_inds, color);
     } else if constexpr (is_ggiw_type<T>::value) {
-        brew::plot_utils::plot_ggiw_2d(ax, dist, plt_inds, color);
+        brew::utils::plot_utils::plot_ggiw_2d(ax, dist, plt_inds, color);
     } else {
-        brew::plot_utils::plot_gaussian_2d(ax, dist, plt_inds, color, 2.0, 0.3f);
+        brew::utils::plot_utils::plot_gaussian_2d(ax, dist, plt_inds, color, 2.0, 0.3f);
     }
 }
 
@@ -1045,7 +1064,7 @@ inline void plot_all_extracted(
 {
     for (const auto& mix_ptr : extracted) {
         for (std::size_t i = 0; i < mix_ptr->size(); ++i) {
-            auto c = brew::plot_utils::lines_color(static_cast<int>(i));
+            auto c = brew::utils::plot_utils::lines_color(static_cast<int>(i));
             plot_distribution_2d(ax, mix_ptr->component(i), plt_inds, c);
         }
     }
@@ -1060,7 +1079,7 @@ inline void plot_final_extracted(
     if (extracted.empty()) return;
     const auto& mix_ptr = extracted.back();
     for (std::size_t i = 0; i < mix_ptr->size(); ++i) {
-        auto c = brew::plot_utils::lines_color(static_cast<int>(i));
+        auto c = brew::utils::plot_utils::lines_color(static_cast<int>(i));
         plot_distribution_2d(ax, mix_ptr->component(i), plt_inds, c);
     }
 }
@@ -1137,7 +1156,7 @@ inline void plot_cardinality_comparison(
     ax->title(title);
     ax->xlabel("Time step");
     ax->ylabel("Cardinality");
-    brew::plot_utils::save_figure(fig, output_dir() + "/" + filename);
+    brew::utils::plot_utils::save_figure(fig, output_dir() + "/" + filename);
 }
 
 #endif

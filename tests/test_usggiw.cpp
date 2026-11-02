@@ -1,5 +1,10 @@
 #include <gtest/gtest.h>
-#include "brew/usggiw/usggiw.hpp"
+#include "brew/models/usggiw.hpp"
+#include "brew/filters/usggiw_ekf.hpp"
+#include "brew/models/merge/usggiw.hpp"
+#include "brew/utils/fusion/usggiw_gci.hpp"
+#include "brew/multiObjectTrackers/phd.hpp"
+#include "brew/multiObjectTrackers/glmb.hpp"
 
 using Model = brew::models::USGGIW<>;
 using Filter = brew::filters::USGGIWEKF<>;
@@ -17,7 +22,7 @@ static Eigen::Vector3d lonlat(double longitude, double latitude) {
 
 static Eigen::Matrix4d finite_difference_transition_jacobian(
     const Eigen::Vector3d& direction, const Eigen::Vector2d& velocity, double dt) {
-    const auto nominal = brew::usggiw::propagate(direction, velocity, dt);
+    const auto nominal = brew::utils::sphere::propagate(direction, velocity, dt);
     Eigen::Matrix4d F;
     constexpr double step = 1e-4;
     for (int column = 0; column < 4; ++column) {
@@ -27,16 +32,16 @@ static Eigen::Matrix4d finite_difference_transition_jacobian(
             const Eigen::Vector2d position_delta = sign * perturbation.head<2>();
             const Eigen::Vector2d velocity_delta = sign * perturbation.tail<2>();
             const Eigen::Vector3d perturbed_direction =
-                brew::usggiw::apply_position_error(direction, position_delta);
+                brew::utils::sphere::apply_position_error(direction, position_delta);
             const Eigen::Vector2d perturbed_velocity =
-                brew::usggiw::transport_matrix(direction, perturbed_direction)
+                brew::utils::sphere::transport_matrix(direction, perturbed_direction)
                 * (velocity + velocity_delta);
-            const auto result = brew::usggiw::propagate(
+            const auto result = brew::utils::sphere::propagate(
                 perturbed_direction, perturbed_velocity, dt);
             Eigen::Vector4d error;
-            error.head<2>() = brew::usggiw::local_error(
+            error.head<2>() = brew::utils::sphere::local_error(
                 nominal.direction, result.direction);
-            error.tail<2>() = brew::usggiw::transport_matrix(
+            error.tail<2>() = brew::utils::sphere::transport_matrix(
                 result.direction, nominal.direction) * result.velocity
                 - nominal.velocity;
             return error;
@@ -49,16 +54,16 @@ static Eigen::Matrix4d finite_difference_transition_jacobian(
 TEST(USGGIW, ExponentialAndLogarithmAreInverse) {
     const Eigen::Vector3d direction = Eigen::Vector3d(0.3, -0.4, 0.8).normalized();
     const Eigen::Vector2d error(0.21, -0.13);
-    const Eigen::Vector3d displaced = brew::usggiw::apply_position_error(direction, error);
-    EXPECT_TRUE(brew::usggiw::local_error(direction, displaced).isApprox(error, 1e-12));
+    const Eigen::Vector3d displaced = brew::utils::sphere::apply_position_error(direction, error);
+    EXPECT_TRUE(brew::utils::sphere::local_error(direction, displaced).isApprox(error, 1e-12));
 }
 
 TEST(USGGIW, ParallelTransportPreservesTangentMetric) {
     const Eigen::Vector3d from = Eigen::Vector3d(0.7, 0.2, 0.4).normalized();
-    const Eigen::Vector3d to = brew::usggiw::apply_position_error(from, {0.4, -0.2});
-    const Eigen::Matrix2d T = brew::usggiw::transport_matrix(from, to);
+    const Eigen::Vector3d to = brew::utils::sphere::apply_position_error(from, {0.4, -0.2});
+    const Eigen::Matrix2d T = brew::utils::sphere::transport_matrix(from, to);
     EXPECT_TRUE((T.transpose() * T).isApprox(Eigen::Matrix2d::Identity(), 1e-12));
-    EXPECT_TRUE((brew::usggiw::transport_matrix(to, from) * T)
+    EXPECT_TRUE((brew::utils::sphere::transport_matrix(to, from) * T)
                     .isApprox(Eigen::Matrix2d::Identity(), 1e-12));
 }
 
@@ -75,7 +80,7 @@ TEST(USGGIW, TransportedConstantVelocityJacobianApproximatesStormGeodesic) {
                           const Eigen::Vector2d& velocity) {
         constexpr double dt = 16.0;
         const Eigen::Matrix4d local_cv =
-            brew::usggiw::transition_jacobian(direction, velocity, dt);
+            brew::utils::sphere::transition_jacobian(direction, velocity, dt);
         const Eigen::Matrix4d geodesic =
             finite_difference_transition_jacobian(direction, velocity, dt);
         const double relative_error = (local_cv - geodesic).norm() / geodesic.norm();
@@ -95,11 +100,11 @@ TEST(USGGIW, TransportedConstantVelocityJacobianNeglectsCurvatureCoupling) {
     const Eigen::Vector3d direction = lonlat(0.7, -0.35);
     const Eigen::Vector2d velocity(0.003, -0.002);
     constexpr double dt = 16.0;
-    const auto propagated = brew::usggiw::propagate(direction, velocity, dt);
+    const auto propagated = brew::utils::sphere::propagate(direction, velocity, dt);
     const Eigen::Matrix2d transport =
-        brew::usggiw::propagation_extent_transport(direction, propagated);
+        brew::utils::sphere::propagation_extent_transport(direction, propagated);
 
-    const Eigen::Matrix4d F = brew::usggiw::transition_jacobian(
+    const Eigen::Matrix4d F = brew::utils::sphere::transition_jacobian(
         direction, velocity, dt, propagated);
 
     EXPECT_TRUE((F.topLeftCorner<2, 2>().isApprox(transport, 1e-12)));
@@ -109,7 +114,7 @@ TEST(USGGIW, TransportedConstantVelocityJacobianNeglectsCurvatureCoupling) {
 }
 
 TEST(USGGIW, TransportedConstantVelocityJacobianAtZeroSpeed) {
-    const Eigen::Matrix4d F = brew::usggiw::transition_jacobian(
+    const Eigen::Matrix4d F = brew::utils::sphere::transition_jacobian(
         lonlat(-0.2, 0.4), Eigen::Vector2d::Zero(), 3.5);
     Eigen::Matrix4d expected = Eigen::Matrix4d::Identity();
     expected.topRightCorner<2, 2>() = 3.5 * Eigen::Matrix2d::Identity();
@@ -120,18 +125,18 @@ TEST(USGGIW, VelocityUsesEastNorthTangentBasis) {
     const Eigen::Vector3d direction = lonlat(0.4, 0.3);
     const Eigen::Vector2d velocity(0.02, -0.01);
     const double dt = 5.0;
-    const auto propagated = brew::usggiw::propagate(direction, velocity, dt);
-    EXPECT_TRUE(brew::usggiw::local_error(direction, propagated.direction)
+    const auto propagated = brew::utils::sphere::propagate(direction, velocity, dt);
+    EXPECT_TRUE(brew::utils::sphere::local_error(direction, propagated.direction)
                     .isApprox(dt * velocity, 1e-12));
-    const Eigen::Matrix2d T = brew::usggiw::transport_matrix(
+    const Eigen::Matrix2d T = brew::utils::sphere::transport_matrix(
         direction, propagated.direction);
     EXPECT_TRUE(propagated.velocity.isApprox(T * velocity, 1e-12));
-    EXPECT_TRUE(brew::usggiw::propagation_extent_transport(direction, propagated)
+    EXPECT_TRUE(brew::utils::sphere::propagation_extent_transport(direction, propagated)
                     .isApprox(T, 1e-12));
 }
 
 TEST(USGGIW, PositiveLatitudeRateMovesNorth) {
-    const auto propagated = brew::usggiw::propagate(
+    const auto propagated = brew::utils::sphere::propagate(
         lonlat(-0.7, 0.2), Eigen::Vector2d(0.0, 0.03), 2.0);
     EXPECT_NEAR(propagated.direction.z(), std::sin(0.26), 1e-12);
 }
@@ -139,8 +144,8 @@ TEST(USGGIW, PositiveLatitudeRateMovesNorth) {
 TEST(USGGIW, StateResetTransportsPositionAndVelocityCoordinates) {
     const Eigen::Vector3d from = lonlat(-0.4, 0.2);
     const Eigen::Vector3d to = lonlat(0.5, -0.1);
-    const Eigen::Matrix4d G = brew::usggiw::state_transport_matrix(from, to);
-    const Eigen::Matrix2d T = brew::usggiw::transport_matrix(from, to);
+    const Eigen::Matrix4d G = brew::utils::sphere::state_transport_matrix(from, to);
+    const Eigen::Matrix2d T = brew::utils::sphere::transport_matrix(from, to);
     EXPECT_TRUE((G.topLeftCorner<2, 2>().isApprox(T, 1e-15)));
     EXPECT_TRUE((G.bottomRightCorner<2, 2>().isApprox(T, 1e-15)));
     EXPECT_TRUE((G.topRightCorner<2, 2>().isZero(1e-15)));
@@ -161,7 +166,7 @@ TEST(USGGIW, CorrectionUsesTangentInnovation) {
     Filter filter;
     filter.set_measurement_noise(1e-4 * Eigen::Matrix2d::Identity());
     auto predicted = make_model(Eigen::Vector3d::UnitX(), Eigen::Vector2d::Zero());
-    Eigen::Vector3d z = brew::usggiw::apply_position_error(
+    Eigen::Vector3d z = brew::utils::sphere::apply_position_error(
         Eigen::Vector3d::UnitX(), {0.05, -0.03});
     auto result = filter.correct(z, predicted);
     EXPECT_GT(result.distribution.direction().dot(z), predicted.direction().dot(z));
@@ -178,7 +183,7 @@ TEST(USGGIW, CorrectionUpdatesAngularVelocity) {
     auto predicted = make_model(Eigen::Vector3d::UnitX(), Eigen::Vector2d::Zero());
     predicted.covariance().topRightCorner<2, 2>() = 0.05 * Eigen::Matrix2d::Identity();
     predicted.covariance().bottomLeftCorner<2, 2>() = 0.05 * Eigen::Matrix2d::Identity();
-    Eigen::Vector3d z = brew::usggiw::apply_position_error(
+    Eigen::Vector3d z = brew::utils::sphere::apply_position_error(
         Eigen::Vector3d::UnitX(), {0.04, 0.02});
     auto result = filter.correct(z, predicted);
     EXPECT_GT(result.distribution.angular_velocity().norm(), 0.0);
@@ -189,11 +194,11 @@ TEST(USGGIW, PointSetLikelihoodUsesScatter) {
     filter.set_measurement_noise(1e-4 * Eigen::Matrix2d::Identity());
     const auto predicted = make_model(Eigen::Vector3d::UnitX(), Eigen::Vector2d::Zero());
     Eigen::Matrix<double, 3, 2> compact;
-    compact.col(0) = brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {0.01, 0.0});
-    compact.col(1) = brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {-0.01, 0.0});
+    compact.col(0) = brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {0.01, 0.0});
+    compact.col(1) = brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {-0.01, 0.0});
     Eigen::Matrix<double, 3, 2> dispersed;
-    dispersed.col(0) = brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {0.2, 0.0});
-    dispersed.col(1) = brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {-0.2, 0.0});
+    dispersed.col(0) = brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {0.2, 0.0});
+    dispersed.col(1) = brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {-0.2, 0.0});
     const auto compact_result = filter.correct(
         Eigen::Map<const Eigen::VectorXd>(compact.data(), compact.size()), predicted);
     const auto dispersed_result = filter.correct(
@@ -215,7 +220,7 @@ TEST(USGGIW, CorrectionTransformsCentroidAndScatterIntoExtentScale) {
              -0.01,  0.03, 0.02;
     Eigen::Matrix<double, 3, 3> measurements;
     for (int column = 0; column < measurements.cols(); ++column)
-        measurements.col(column) = brew::usggiw::apply_position_error(
+        measurements.col(column) = brew::utils::sphere::apply_position_error(
             predicted.direction(), errors.col(column));
 
     const Eigen::Vector2d centroid = errors.rowwise().mean();
@@ -248,7 +253,7 @@ TEST(USGGIW, CorrectionTransformsCentroidAndScatterIntoExtentScale) {
 
     const auto result = filter.correct(
         Eigen::Map<const Eigen::VectorXd>(measurements.data(), measurements.size()), predicted);
-    const Eigen::Matrix2d reset = brew::usggiw::transport_matrix(
+    const Eigen::Matrix2d reset = brew::utils::sphere::transport_matrix(
         predicted.direction(), result.distribution.direction());
     const Eigen::Matrix2d expected_scale = reset
         * (predicted.V() + transformed_scatter + transformed_centroid)
@@ -266,7 +271,7 @@ TEST(USGGIW, MergeIsContinuousAcrossDateLine) {
         {-std::cos(eps), std::sin(eps), 0.0}, {0.1, 0.0})), 0.5);
     mix.add_component(std::make_unique<Model>(make_model(
         {-std::cos(eps), -std::sin(eps), 0.0}, {0.1, 0.0})), 0.5);
-    brew::usggiw::merge(mix, 25.0);
+    brew::models::merge(mix, 25.0);
     ASSERT_EQ(mix.size(), 1);
     EXPECT_LT(mix.component(0).direction().x(), -0.99);
     EXPECT_NEAR(mix.component(0).direction().y(), 0.0, 1e-6);
@@ -274,11 +279,11 @@ TEST(USGGIW, MergeIsContinuousAcrossDateLine) {
 
 TEST(USGGIW, MergeDirectionIsNormalizedWeightedResultant) {
     brew::models::Mixture<Model> mix;
-    const Eigen::Vector3d first = brew::usggiw::apply_position_error(
+    const Eigen::Vector3d first = brew::utils::sphere::apply_position_error(
         Eigen::Vector3d::UnitX(), {-0.04, 0.02});
-    const Eigen::Vector3d second = brew::usggiw::apply_position_error(
+    const Eigen::Vector3d second = brew::utils::sphere::apply_position_error(
         Eigen::Vector3d::UnitX(), {0.01, -0.03});
-    const Eigen::Vector3d third = brew::usggiw::apply_position_error(
+    const Eigen::Vector3d third = brew::utils::sphere::apply_position_error(
         Eigen::Vector3d::UnitX(), {0.05, 0.01});
     const Eigen::Vector3d expected =
         (0.2 * first + 0.3 * second + 0.5 * third).normalized();
@@ -289,7 +294,7 @@ TEST(USGGIW, MergeDirectionIsNormalizedWeightedResultant) {
     mix.add_component(std::make_unique<Model>(make_model(
         third, Eigen::Vector2d::Zero())), 0.5);
 
-    brew::usggiw::merge(mix, 25.0);
+    brew::models::merge(mix, 25.0);
 
     ASSERT_EQ(mix.size(), 1);
     EXPECT_TRUE(mix.component(0).direction().isApprox(expected, 1e-12));
@@ -309,7 +314,7 @@ TEST(USGGIW, MergePreservesGammaRateMeanAndExpectedExtent) {
     second.V() = 16.0 * Eigen::Matrix2d::Identity();
     mix.add_component(std::make_unique<Model>(first), 0.25);
     mix.add_component(std::make_unique<Model>(second), 0.75);
-    brew::usggiw::merge(mix, 1.0);
+    brew::models::merge(mix, 1.0);
     ASSERT_EQ(mix.size(), 1);
     EXPECT_NEAR(mix.component(0).alpha() / mix.component(0).beta(), 5.0, 1e-12);
     const Eigen::Matrix2d expected_extent = mix.component(0).V()
@@ -320,11 +325,11 @@ TEST(USGGIW, MergePreservesGammaRateMeanAndExpectedExtent) {
 TEST(USGGIW, GciFusesDirectionsInTangentSpace) {
     brew::models::Mixture<Model> a, b;
     a.add_component(std::make_unique<Model>(make_model(
-        brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {-0.02, 0.0}), {0.0, 0.0})), 1.0);
+        brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {-0.02, 0.0}), {0.0, 0.0})), 1.0);
     b.add_component(std::make_unique<Model>(make_model(
-        brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {0.02, 0.0}), {0.0, 0.0})), 1.0);
+        brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {0.02, 0.0}), {0.0, 0.0})), 1.0);
     std::vector<const brew::models::Mixture<Model>*> sources{&a, &b};
-    auto fused = brew::usggiw::gci(sources, {0.5, 0.5});
+    auto fused = brew::utils::fusion::gci(sources, {0.5, 0.5});
     ASSERT_EQ(fused.size(), 1);
     EXPECT_GT(fused.component(0).direction().x(), 0.999);
 }
@@ -332,19 +337,19 @@ TEST(USGGIW, GciFusesDirectionsInTangentSpace) {
 TEST(USGGIW, GciIsInvariantToSourceOrder) {
     brew::models::Mixture<Model> first, second, third;
     auto first_model = make_model(
-        brew::usggiw::apply_position_error(
+        brew::utils::sphere::apply_position_error(
             Eigen::Vector3d::UnitX(), {-0.08, 0.03}),
         {0.003, -0.002});
     first_model.covariance() = Eigen::DiagonalMatrix<double, 4>(
         0.008, 0.012, 0.002, 0.003).toDenseMatrix();
     auto second_model = make_model(
-        brew::usggiw::apply_position_error(
+        brew::utils::sphere::apply_position_error(
             Eigen::Vector3d::UnitX(), {0.02, -0.05}),
         {-0.001, 0.004});
     second_model.covariance() = Eigen::DiagonalMatrix<double, 4>(
         0.015, 0.009, 0.004, 0.002).toDenseMatrix();
     auto third_model = make_model(
-        brew::usggiw::apply_position_error(
+        brew::utils::sphere::apply_position_error(
             Eigen::Vector3d::UnitX(), {0.11, 0.04}),
         {0.002, 0.001});
     third_model.covariance() = Eigen::DiagonalMatrix<double, 4>(
@@ -357,9 +362,9 @@ TEST(USGGIW, GciIsInvariantToSourceOrder) {
         &first, &second, &third};
     std::vector<const brew::models::Mixture<Model>*> reverse{
         &third, &second, &first};
-    const auto fused_forward = brew::usggiw::gci(
+    const auto fused_forward = brew::utils::fusion::gci(
         forward, {0.2, 0.3, 0.5});
-    const auto fused_reverse = brew::usggiw::gci(
+    const auto fused_reverse = brew::utils::fusion::gci(
         reverse, {0.5, 0.3, 0.2});
 
     ASSERT_EQ(fused_forward.size(), 1);
@@ -380,7 +385,7 @@ TEST(USGGIW, ComponentCorrectionUpdatesStateAndParameters) {
     filter.set_ci_weight(0.5);
     auto predicted = make_model(Eigen::Vector3d::UnitX(), {0.0, 0.0});
     auto measurement = make_model(
-        brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {0.04, -0.02}), {0.02, -0.01});
+        brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {0.04, -0.02}), {0.02, -0.01});
     measurement.alpha() = 18.0;
     measurement.beta() = 3.0;
     measurement.v() = 16.0;
@@ -399,7 +404,7 @@ TEST(USGGIW, PhdUpdatesAndMergesComponents) {
     Filter filter;
     filter.set_process_noise(1e-5 * Eigen::Matrix4d::Identity());
     filter.set_measurement_noise(1e-4 * Eigen::Matrix2d::Identity());
-    brew::usggiw::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::USGGIW<>, Eigen::Dynamic> phd;
     phd.set_filter(filter.clone());
     brew::models::Mixture<Model> intensity;
     intensity.add_component(std::make_unique<Model>(make_model(
@@ -413,8 +418,8 @@ TEST(USGGIW, PhdUpdatesAndMergesComponents) {
     phd.set_merge_threshold(25.0);
     phd.predict(0, 1.0);
     Eigen::MatrixXd measurements(3, 2);
-    measurements.col(0) = brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {0.01, 0.0});
-    measurements.col(1) = brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {-0.01, 0.0});
+    measurements.col(0) = brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {0.01, 0.0});
+    measurements.col(1) = brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {-0.01, 0.0});
     phd.correct(measurements);
     phd.cleanup();
     ASSERT_GT(phd.intensity().size(), 0);
@@ -424,7 +429,7 @@ TEST(USGGIW, PhdUpdatesAndMergesComponents) {
 
 TEST(USGGIW, PhdRetainsDetectedTargetWithZeroGeneratedMeasurements) {
     Filter filter;
-    brew::usggiw::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::USGGIW<>, Eigen::Dynamic> phd;
     phd.set_filter(filter.clone());
     brew::models::Mixture<Model> intensity;
     intensity.add_component(std::make_unique<Model>(make_model(
@@ -440,7 +445,7 @@ TEST(USGGIW, PhdRetainsDetectedTargetWithZeroGeneratedMeasurements) {
 TEST(USGGIW, GlmbPreservesLabelThroughMissedDetection) {
     Filter filter;
     filter.set_process_noise(1e-5 * Eigen::Matrix4d::Identity());
-    brew::usggiw::GLMB<> glmb;
+    brew::multiObjectTrackers::GLMB<brew::models::USGGIW<>, Eigen::Dynamic> glmb;
     glmb.set_filter(filter.clone());
     glmb.set_prob_detection(0.9);
     glmb.set_prob_survive(0.999);
@@ -454,7 +459,7 @@ TEST(USGGIW, GlmbPreservesLabelThroughMissedDetection) {
     glmb.set_birth_model(birth.clone(), 0.99);
     glmb.predict(0, 1.0);
     Eigen::MatrixXd z(3, 1);
-    z.col(0) = brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {0.01, 0.0});
+    z.col(0) = brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {0.01, 0.0});
     glmb.correct(z);
     glmb.cleanup();
     ASSERT_EQ(glmb.extracted_mixtures().back()->size(), 1u);
@@ -478,7 +483,7 @@ TEST(USGGIW, GlmbPreservesLabelThroughMissedDetection) {
 TEST(USGGIW, GlmbComponentUpdateRetainsLabel) {
     Filter filter;
     filter.set_ci_weight(0.5);
-    brew::usggiw::GLMB<> glmb;
+    brew::multiObjectTrackers::GLMB<brew::models::USGGIW<>, Eigen::Dynamic> glmb;
     glmb.set_filter(filter.clone());
     glmb.set_prob_detection(0.95);
     glmb.set_prob_survive(0.999);
@@ -495,7 +500,7 @@ TEST(USGGIW, GlmbComponentUpdateRetainsLabel) {
     glmb.predict(0, 1.0);
     brew::models::Mixture<Model> report;
     report.add_component(std::make_unique<Model>(make_model(
-        brew::usggiw::apply_position_error(Eigen::Vector3d::UnitX(), {0.02, -0.01}), {0.01, 0.0})), 1.0);
+        brew::utils::sphere::apply_position_error(Eigen::Vector3d::UnitX(), {0.02, -0.01}), {0.01, 0.0})), 1.0);
     glmb.set_measurement_components(report);
     Eigen::MatrixXd z(3, 1);
     z.col(0) = report.component(0).direction();
@@ -507,6 +512,6 @@ TEST(USGGIW, GlmbComponentUpdateRetainsLabel) {
 }
 
 TEST(USGGIW, GeographicPolesAreSingular) {
-    EXPECT_THROW(brew::usggiw::east_axis(Eigen::Vector3d::UnitZ()), std::domain_error);
-    EXPECT_THROW(brew::usggiw::east_axis(-Eigen::Vector3d::UnitZ()), std::domain_error);
+    EXPECT_THROW(brew::utils::sphere::east_axis(Eigen::Vector3d::UnitZ()), std::domain_error);
+    EXPECT_THROW(brew::utils::sphere::east_axis(-Eigen::Vector3d::UnitZ()), std::domain_error);
 }

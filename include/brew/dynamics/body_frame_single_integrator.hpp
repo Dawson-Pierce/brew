@@ -1,7 +1,7 @@
 #pragma once
 
 #include "brew/dynamics/nonlinear_dynamics.hpp"
-#include "brew/assert.hpp"
+#include "brew/utils/assert.hpp"
 #include <cmath>
 
 namespace brew::dynamics {

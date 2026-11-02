@@ -31,6 +31,7 @@ add_executable(brew_tests
     test_trajectory_ekf.cpp
     test_merge.cpp
     test_phd.cpp
+    test_generic_rfs.cpp
     test_gaussian_concrete.cpp
     test_packages_concrete.cpp
     test_fusion.cpp
@@ -57,6 +58,22 @@ target_link_libraries(brew_tests PRIVATE
 )
 
 gtest_discover_tests(brew_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(brew_intent_tests test_intent.cpp)
+target_link_libraries(brew_intent_tests PRIVATE brew)
+add_test(NAME brew_intent_tests COMMAND brew_intent_tests)
+
+add_executable(brew_categorical_intent_tests test_categorical_intent.cpp)
+target_link_libraries(brew_categorical_intent_tests PRIVATE brew)
+add_test(NAME brew_categorical_intent_tests COMMAND brew_categorical_intent_tests)
+
+add_executable(brew_impulse_dynamics_tests test_impulse_dynamics.cpp)
+target_link_libraries(brew_impulse_dynamics_tests PRIVATE brew)
+add_test(NAME brew_impulse_dynamics_tests COMMAND brew_impulse_dynamics_tests)
+
+add_executable(brew_constructor_config_tests test_constructor_config.cpp)
+target_link_libraries(brew_constructor_config_tests PRIVATE brew)
+add_test(NAME brew_constructor_config_tests COMMAND brew_constructor_config_tests)
 
 if(BREW_ENABLE_PLOTTING)
     add_executable(test_math_utils test_math_utils.cpp)

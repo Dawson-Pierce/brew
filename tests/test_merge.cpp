@@ -1,24 +1,24 @@
 #include <gtest/gtest.h>
-#include "brew/gaussian/merge.hpp"
-#include "brew/ggiw/merge.hpp"
-#include "brew/iggiw/merge.hpp"
-#include "brew/trajectory_gaussian/merge.hpp"
-#include "brew/trajectory_ggiw/merge.hpp"
+#include "brew/models/merge/gaussian.hpp"
+#include "brew/models/merge/ggiw.hpp"
+#include "brew/models/merge/iggiw.hpp"
+#include "brew/models/merge/trajectory_gaussian.hpp"
+#include "brew/models/merge/trajectory_ggiw.hpp"
 #include <cmath>
 
 using namespace brew;
 
 TEST(MergeGaussian, TwoClose) {
-    models::Mixture<models::Gaussian<>> mix;
+    brew::models::Mixture<brew::models::Gaussian<>> mix;
     Eigen::VectorXd m1(2), m2(2);
     m1 << 0.0, 0.0;
     m2 << 0.1, 0.1;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<models::Gaussian<>>(m1, cov), 0.5);
-    mix.add_component(std::make_unique<models::Gaussian<>>(m2, cov), 0.3);
+    mix.add_component(std::make_unique<brew::models::Gaussian<>>(m1, cov), 0.5);
+    mix.add_component(std::make_unique<brew::models::Gaussian<>>(m2, cov), 0.3);
 
-    gaussian::merge(mix, 4.0);
+    brew::models::merge(mix, 4.0);
 
     EXPECT_EQ(mix.size(), 1u);
 
@@ -28,32 +28,32 @@ TEST(MergeGaussian, TwoClose) {
 }
 
 TEST(MergeGaussian, TwoFar) {
-    models::Mixture<models::Gaussian<>> mix;
+    brew::models::Mixture<brew::models::Gaussian<>> mix;
     Eigen::VectorXd m1(2), m2(2);
     m1 << 0.0, 0.0;
     m2 << 100.0, 100.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<models::Gaussian<>>(m1, cov), 0.5);
-    mix.add_component(std::make_unique<models::Gaussian<>>(m2, cov), 0.3);
+    mix.add_component(std::make_unique<brew::models::Gaussian<>>(m1, cov), 0.5);
+    mix.add_component(std::make_unique<brew::models::Gaussian<>>(m2, cov), 0.3);
 
-    gaussian::merge(mix, 4.0);
+    brew::models::merge(mix, 4.0);
 
     EXPECT_EQ(mix.size(), 2u);
 }
 
 TEST(MergeGGIW, TwoClose) {
-    models::Mixture<models::GGIW<>> mix;
+    brew::models::Mixture<brew::models::GGIW<>> mix;
     Eigen::VectorXd m1(4), m2(4);
     m1 << 0.0, 0.0, 1.0, 0.0;
     m2 << 0.1, 0.1, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<models::GGIW<>>(10.0, 5.0, m1, cov, 10.0, V), 0.6);
-    mix.add_component(std::make_unique<models::GGIW<>>(12.0, 6.0, m2, cov, 11.0, V), 0.4);
+    mix.add_component(std::make_unique<brew::models::GGIW<>>(10.0, 5.0, m1, cov, 10.0, V), 0.6);
+    mix.add_component(std::make_unique<brew::models::GGIW<>>(12.0, 6.0, m2, cov, 11.0, V), 0.4);
 
-    ggiw::merge(mix, 4.0);
+    brew::models::merge(mix, 4.0);
 
     EXPECT_EQ(mix.size(), 1u);
     EXPECT_NEAR(mix.weight(0), 1.0, 1e-10);
@@ -61,16 +61,16 @@ TEST(MergeGGIW, TwoClose) {
 
 TEST(MergeTrajectoryGaussian, SameSize) {
     constexpr int W = 5;
-    models::Mixture<models::TrajectoryGaussian<>> mix;
+    brew::models::Mixture<brew::models::TrajectoryGaussian<>> mix;
     Eigen::VectorXd m1(4), m2(4);
     m1 << 0.0, 0.0, 1.0, 0.0;
     m2 << 0.1, 0.1, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
 
-    mix.add_component(std::make_unique<models::TrajectoryGaussian<>>(4, models::Gaussian<>(m1, cov), W), 0.5);
-    mix.add_component(std::make_unique<models::TrajectoryGaussian<>>(4, models::Gaussian<>(m2, cov), W), 0.3);
+    mix.add_component(std::make_unique<brew::models::TrajectoryGaussian<>>(4, brew::models::Gaussian<>(m1, cov), W), 0.5);
+    mix.add_component(std::make_unique<brew::models::TrajectoryGaussian<>>(4, brew::models::Gaussian<>(m2, cov), W), 0.3);
 
-    trajectory_gaussian::merge(mix, 4.0);
+    brew::models::merge(mix, 4.0);
 
     EXPECT_EQ(mix.size(), 1u);
     EXPECT_NEAR(mix.weight(0), 0.8, 1e-10);
@@ -84,17 +84,17 @@ TEST(MergeTrajectoryGaussian, SameSize) {
 
 TEST(MergeTrajectoryGGIW, SameSize) {
     constexpr int W = 5;
-    models::Mixture<models::TrajectoryGGIW<>> mix;
+    brew::models::Mixture<brew::models::TrajectoryGGIW<>> mix;
     Eigen::VectorXd m1(4), m2(4);
     m1 << 0.0, 0.0, 1.0, 0.0;
     m2 << 0.1, 0.1, 1.0, 0.0;
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    mix.add_component(std::make_unique<models::TrajectoryGGIW<>>(4, models::GGIW<>(10.0, 5.0, m1, cov, 10.0, V), W), 0.5);
-    mix.add_component(std::make_unique<models::TrajectoryGGIW<>>(4, models::GGIW<>(12.0, 6.0, m2, cov, 11.0, V), W), 0.3);
+    mix.add_component(std::make_unique<brew::models::TrajectoryGGIW<>>(4, brew::models::GGIW<>(10.0, 5.0, m1, cov, 10.0, V), W), 0.5);
+    mix.add_component(std::make_unique<brew::models::TrajectoryGGIW<>>(4, brew::models::GGIW<>(12.0, 6.0, m2, cov, 11.0, V), W), 0.3);
 
-    trajectory_ggiw::merge(mix, 4.0);
+    brew::models::merge(mix, 4.0);
 
     EXPECT_EQ(mix.size(), 1u);
     EXPECT_NEAR(mix.weight(0), 0.8, 1e-10);
@@ -105,16 +105,16 @@ TEST(MergeTrajectoryGGIW, SameSize) {
 }
 
 TEST(MergeIGGIW, PreservesInverseGammaMoments) {
-    models::Mixture<models::IGGIW<>> mix;
+    brew::models::Mixture<brew::models::IGGIW<>> mix;
     Eigen::VectorXd mean = Eigen::VectorXd::Zero(4);
     Eigen::MatrixXd covariance = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 20.0 * Eigen::MatrixXd::Identity(2, 2);
-    mix.add_component(std::make_unique<models::IGGIW<>>(
+    mix.add_component(std::make_unique<brew::models::IGGIW<>>(
         5.0, 8.0, mean, covariance, 12.0, V), 0.25);
-    mix.add_component(std::make_unique<models::IGGIW<>>(
+    mix.add_component(std::make_unique<brew::models::IGGIW<>>(
         7.0, 12.0, mean, covariance, 12.0, V), 0.75);
 
-    iggiw::merge(mix, 1.0);
+    brew::models::merge(mix, 1.0);
 
     ASSERT_EQ(mix.size(), 1u);
     const auto& merged = mix.component(0);

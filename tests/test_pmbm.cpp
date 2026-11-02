@@ -1,6 +1,19 @@
 #include <gtest/gtest.h>
-#include "brew/gaussian/gaussian.hpp"
-#include "brew/gaussian/filters/ekf.hpp"
+#include "brew/models/gaussian.hpp"
+#include "brew/filters/ekf.hpp"
+#include "brew/multiObjectTrackers/phd.hpp"
+#include "brew/multiObjectTrackers/mbm_base.hpp"
+#include "brew/multiObjectTrackers/cphd.hpp"
+#include "brew/multiObjectTrackers/glmb.hpp"
+#include "brew/multiObjectTrackers/jglmb.hpp"
+#include "brew/multiObjectTrackers/mbm.hpp"
+#include "brew/multiObjectTrackers/pmbm.hpp"
+#include "brew/models/merge/gaussian.hpp"
+#include "brew/utils/fusion/gaussian_gci.hpp"
+#include "brew/utils/fusion/arithmetic_average.hpp"
+#include "brew/utils/fusion/prune.hpp"
+#include "brew/utils/fusion/cap.hpp"
+#include "brew/utils/clustering/dbscan.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
@@ -19,15 +32,15 @@ TEST(PMBM, GaussianPredictCorrectCleanup) {
     }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
     Eigen::VectorXd birth_mean(4);
     birth_mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd birth_cov = 10.0 * Eigen::MatrixXd::Identity(4, 4);
-    birth->add_component(std::make_unique<models::Gaussian<>>(birth_mean, birth_cov), 0.1);
+    birth->add_component(std::make_unique<brew::models::Gaussian<>>(birth_mean, birth_cov), 0.1);
 
-    auto poisson = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto poisson = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
 
-    gaussian::PMBM<> pmbm;
+    brew::multiObjectTrackers::PMBM<brew::models::Gaussian<>, Eigen::Dynamic> pmbm;
     pmbm.set_filter(std::move(ekf));
     pmbm.set_birth_model(std::move(birth));
     pmbm.set_poisson_intensity(std::move(poisson));
@@ -72,14 +85,14 @@ TEST(PMBM, Clone) {
     H(0, 0) = 1.0; H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
     Eigen::VectorXd m(4);
     m.setZero();
-    birth->add_component(std::make_unique<models::Gaussian<>>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
+    birth->add_component(std::make_unique<brew::models::Gaussian<>>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
 
-    auto poisson = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto poisson = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
 
-    gaussian::PMBM<> pmbm;
+    brew::multiObjectTrackers::PMBM<brew::models::Gaussian<>, Eigen::Dynamic> pmbm;
     pmbm.set_filter(std::move(ekf));
     pmbm.set_birth_model(std::move(birth));
     pmbm.set_poisson_intensity(std::move(poisson));
@@ -101,17 +114,17 @@ TEST(PMBM, PoissonSpawnsNewTracks) {
     }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
     Eigen::MatrixXd birth_cov = 100.0 * Eigen::MatrixXd::Identity(4, 4);
     Eigen::VectorXd b1(4), b2(4);
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
-    birth->add_component(std::make_unique<models::Gaussian<>>(b1, birth_cov), 0.1);
-    birth->add_component(std::make_unique<models::Gaussian<>>(b2, birth_cov), 0.1);
+    birth->add_component(std::make_unique<brew::models::Gaussian<>>(b1, birth_cov), 0.1);
+    birth->add_component(std::make_unique<brew::models::Gaussian<>>(b2, birth_cov), 0.1);
 
-    auto poisson = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto poisson = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
 
-    gaussian::PMBM<> pmbm;
+    brew::multiObjectTrackers::PMBM<brew::models::Gaussian<>, Eigen::Dynamic> pmbm;
     pmbm.set_filter(std::move(ekf));
     pmbm.set_birth_model(std::move(birth));
     pmbm.set_poisson_intensity(std::move(poisson));

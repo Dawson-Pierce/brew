@@ -17,45 +17,45 @@ protected:
 
 TEST_F(GGIWTracking, Comparison) {
 
-    auto phd = test::make_phd<models::GGIW<>>(
+    auto phd = test::make_phd<brew::models::GGIW<>>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto phd_result = test::run_tracking<decltype(phd), models::GGIW<>>(
+    auto phd_result = test::run_tracking<decltype(phd), brew::models::GGIW<>>(
         phd, scenario, "GGIW PHD Tracking", 10.0, 5);
     EXPECT_GE(phd_result.converged_steps, 10)
         << "GGIW PHD should track both extended targets";
 
-    auto cphd = test::make_cphd<models::GGIW<>>(
+    auto cphd = test::make_cphd<brew::models::GGIW<>>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto cphd_result = test::run_tracking_cphd<decltype(cphd), models::GGIW<>>(
+    auto cphd_result = test::run_tracking_cphd<decltype(cphd), brew::models::GGIW<>>(
         cphd, scenario, "GGIW CPHD Tracking", 10.0, 5);
 
     EXPECT_GE(cphd_result.converged_steps, 0)
         << "GGIW CPHD should not crash";
 
-    auto mbm = test::make_mbm<models::GGIW<>>(
+    auto mbm = test::make_mbm<brew::models::GGIW<>>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto mbm_result = test::run_tracking<decltype(mbm), models::GGIW<>>(
+    auto mbm_result = test::run_tracking<decltype(mbm), brew::models::GGIW<>>(
         mbm, scenario, "GGIW MBM Tracking", 10.0, 5);
     EXPECT_GE(mbm_result.converged_steps, 10)
         << "GGIW MBM should track both extended targets";
 
-    auto pmbm = test::make_pmbm<models::GGIW<>>(
+    auto pmbm = test::make_pmbm<brew::models::GGIW<>>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto pmbm_result = test::run_tracking<decltype(pmbm), models::GGIW<>>(
+    auto pmbm_result = test::run_tracking<decltype(pmbm), brew::models::GGIW<>>(
         pmbm, scenario, "GGIW PMBM Tracking", 10.0, 5);
     EXPECT_GE(pmbm_result.converged_steps, 10)
         << "GGIW PMBM should track both extended targets";
 
-    auto glmb = test::make_glmb<models::GGIW<>>(
+    auto glmb = test::make_glmb<brew::models::GGIW<>>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto glmb_result = test::run_tracking<decltype(glmb), models::GGIW<>>(
+    auto glmb_result = test::run_tracking<decltype(glmb), brew::models::GGIW<>>(
         glmb, scenario, "GGIW GLMB Tracking", 10.0, 5);
     EXPECT_GE(glmb_result.converged_steps, 10)
         << "GGIW GLMB should track both extended targets";
 
-    auto jglmb = test::make_jglmb<models::GGIW<>>(
+    auto jglmb = test::make_jglmb<brew::models::GGIW<>>(
         test::make_ggiw_ekf(scenario), test::make_ggiw_birth(0.1), params);
-    auto jglmb_result = test::run_tracking<decltype(jglmb), models::GGIW<>>(
+    auto jglmb_result = test::run_tracking<decltype(jglmb), brew::models::GGIW<>>(
         jglmb, scenario, "GGIW JGLMB Tracking", 10.0, 5);
     EXPECT_GE(jglmb_result.converged_steps, 10)
         << "GGIW JGLMB should track both extended targets";
@@ -82,7 +82,7 @@ TEST_F(GGIWTracking, Comparison) {
     auto ax6 = test::comparison_subplot(fig, 2, 3, 5);
     test::populate_estimator_axes(ax6, jglmb, jglmb_result.plot_data, "JGLMB");
 
-    brew::plot_utils::save_figure(fig, test::output_dir() + "/ggiw_comparison.png");
+    brew::utils::plot_utils::save_figure(fig, test::output_dir() + "/ggiw_comparison.png");
 
     test::plot_cardinality_comparison(scenario, cphd_result.cardinality,
         "GGIW CPHD - Estimated Cardinality", "ggiw_cphd_cardinality.png");

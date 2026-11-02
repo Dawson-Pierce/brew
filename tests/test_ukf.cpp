@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "brew/gaussian/filters/ukf.hpp"
-#include "brew/gaussian/filters/ekf.hpp"
+#include "brew/filters/ukf.hpp"
+#include "brew/filters/ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 #include "brew/dynamics/coordinated_turn.hpp"
 #include <algorithm>

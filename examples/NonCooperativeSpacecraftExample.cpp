@@ -9,17 +9,30 @@
 // ============================================================
 
 #include "brew/dynamics/single_integrator.hpp"
-#include "brew/template_pose/template_pose_model.hpp"
-#include "brew/shared/mixture.hpp"
-#include "brew/template_pose/filters/tm_ekf.hpp"
-#include "brew/template_pose/template_pose.hpp"
-#include "brew/shared/fusion/prune.hpp"
-#include "brew/clustering/dbscan.hpp"
-#include "brew/template_matching/point_cloud.hpp"
-#include "brew/template_matching/point_to_plane_icp.hpp"
-#include "brew/template_matching/pca_icp.hpp"
-#include "brew/template_matching/template_library.hpp"
-#include "brew/desktop/measurement_sampling/measurement_sampling.hpp"
+#include "brew/models/template_pose.hpp"
+#include "brew/models/mixture.hpp"
+#include "brew/filters/tm_ekf.hpp"
+#include "brew/filters/imm_tm_ekf.hpp"
+#include "brew/models/pointing_firing_model.hpp"
+#include "brew/filters/intent_filter.hpp"
+#include "brew/multiObjectTrackers/phd.hpp"
+#include "brew/multiObjectTrackers/mbm_base.hpp"
+#include "brew/multiObjectTrackers/cphd.hpp"
+#include "brew/multiObjectTrackers/glmb.hpp"
+#include "brew/multiObjectTrackers/jglmb.hpp"
+#include "brew/multiObjectTrackers/mbm.hpp"
+#include "brew/multiObjectTrackers/pmbm.hpp"
+#include "brew/models/merge/template_pose.hpp"
+#include "brew/utils/fusion/template_pose_gci.hpp"
+#include "brew/utils/fusion/arithmetic_average.hpp"
+#include "brew/utils/fusion/prune.hpp"
+#include "brew/utils/fusion/cap.hpp"
+#include "brew/utils/clustering/dbscan.hpp"
+#include "brew/utils/registration/point_cloud.hpp"
+#include "brew/utils/registration/point_to_plane_icp.hpp"
+#include "brew/utils/registration/pca_icp.hpp"
+#include "brew/utils/registration/template_library.hpp"
+#include "brew/utils/measurement_sampling/measurement_sampling.hpp"
 
 #include <Eigen/Dense>
 #include <random>
@@ -33,9 +46,9 @@
 
 #ifdef BREW_ENABLE_PLOTTING
 #include <matplot/matplot.h>
-#include <brew/desktop/plot_utils/plot_options.hpp>
-#include <brew/desktop/plot_utils/color_palette.hpp>
-#include <brew/desktop/plot_utils/plot_point_cloud.hpp>
+#include "brew/utils/plot_utils/plot_options.hpp"
+#include "brew/utils/plot_utils/color_palette.hpp"
+#include "brew/utils/plot_utils/plot_point_cloud.hpp"
 #endif
 
 using namespace brew;
@@ -383,23 +396,23 @@ int main(int argc, char* argv[]) {
 
     const std::string output_dir = config.visualization.output_dir;
 
-    auto lib = std::make_shared<template_matching::TemplateLibrary>();
+    auto lib = std::make_shared<utils::registration::TemplateLibrary>();
     std::vector<Eigen::MatrixXd> body_triangles;
     std::vector<Eigen::Vector3d> template_centroids;
 
     for (const auto& tspec : config.templates) {
 
-        auto dense = measurement_sampling::sample_stl_vsp(
+        auto dense = utils::measurement_sampling::sample_stl_vsp(
             tspec.file, tspec.num_dense_points);
         Eigen::Vector3d centroid = dense.points().rowwise().mean();
 
-        auto cloud_raw = measurement_sampling::sample_stl_vsp(
+        auto cloud_raw = utils::measurement_sampling::sample_stl_vsp(
             tspec.file, tspec.num_template_points);
         cloud_raw.points().colwise() -= centroid;
         int id = lib->add(std::move(cloud_raw));
 
         Eigen::MatrixXd tris =
-            measurement_sampling::load_stl_triangles_vsp(tspec.file);
+            utils::measurement_sampling::load_stl_triangles_vsp(tspec.file);
         tris.colwise() -= centroid;
         body_triangles.push_back(std::move(tris));
         template_centroids.push_back(centroid);
@@ -410,12 +423,12 @@ int main(int argc, char* argv[]) {
 
     auto dyn = std::make_shared<dynamics::SingleIntegrator<>>(3);
 
-    template_matching::IcpParams icp_params;
+    utils::registration::IcpParams icp_params;
     icp_params.max_iterations = config.icp.max_iterations;
     icp_params.tolerance      = config.icp.tolerance;
     icp_params.sigma_sq       = config.icp.sigma_sq;
 
-    auto inner_icp = std::make_shared<template_matching::PointToPlaneIcp>();
+    auto inner_icp = std::make_shared<utils::registration::PointToPlaneIcp>();
     inner_icp->set_params(icp_params);
 
     auto ekf = std::make_unique<filters::TmEkf<>>();
@@ -462,7 +475,7 @@ int main(int argc, char* argv[]) {
             meas_candidates, meas_points, cos_vis_thresh);
     }
 
-    auto birth = std::make_unique<models::Mixture<models::TemplatePose<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::TemplatePose<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Zero(9, 9);
     birth_cov.topLeftCorner(3, 3)     = config.birth.cov_position
                                         * Eigen::Matrix3d::Identity();
@@ -476,15 +489,15 @@ int main(int argc, char* argv[]) {
 
     for (int id = 0; id < lib->size(); ++id) {
         birth->add_component(
-            std::make_unique<models::TemplatePose<>>(
+            std::make_unique<brew::models::TemplatePose<>>(
                 b_mean, birth_cov, id, pos_indices),
             w_b);
     }
 
-    template_pose::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::TemplatePose<>, Eigen::Dynamic> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<models::Mixture<models::TemplatePose<>>>());
+    phd.set_intensity(std::make_unique<brew::models::Mixture<brew::models::TemplatePose<>>>());
     phd.set_prob_detection(config.phd.prob_detection);
     phd.set_prob_survive(config.phd.prob_survive);
     phd.set_clutter_rate(config.phd.clutter_rate);
@@ -494,7 +507,7 @@ int main(int argc, char* argv[]) {
     phd.set_max_components(config.phd.max_components);
     phd.set_extract_threshold(config.phd.extract_threshold);
     phd.set_gate_threshold(config.phd.gate_threshold);
-    phd.set_cluster_object(std::make_shared<clustering::DBSCAN>(
+    phd.set_cluster_object(std::make_shared<utils::clustering::DBSCAN>(
         config.clustering.epsilon,
         config.clustering.min_points));
 
@@ -647,7 +660,7 @@ int main(int argc, char* argv[]) {
                     wx.push_back(std::nan("")); wy.push_back(std::nan(""));
                     wz.push_back(std::nan(""));
                 }
-                auto c = brew::plot_utils::lines_color(static_cast<int>(i));
+                auto c = brew::utils::plot_utils::lines_color(static_cast<int>(i));
                 auto wl = ax->plot3(wx, wy, wz);
                 wl->color(c);
                 wl->line_width(0.3f);
@@ -688,7 +701,7 @@ int main(int argc, char* argv[]) {
 
             std::string fname = output_dir + "/step_"
                 + std::to_string(k) + ".png";
-            brew::plot_utils::save_figure(fig, fname);
+            brew::utils::plot_utils::save_figure(fig, fname);
             std::cout << "  -> saved " << fname << "\n";
         }
 #endif

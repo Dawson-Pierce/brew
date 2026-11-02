@@ -1,7 +1,20 @@
 #include <gtest/gtest.h>
-#include "brew/shared/elementary_symmetric.hpp"
-#include "brew/gaussian/gaussian.hpp"
-#include "brew/gaussian/filters/ekf.hpp"
+#include "brew/utils/elementary_symmetric.hpp"
+#include "brew/models/gaussian.hpp"
+#include "brew/filters/ekf.hpp"
+#include "brew/multiObjectTrackers/phd.hpp"
+#include "brew/multiObjectTrackers/mbm_base.hpp"
+#include "brew/multiObjectTrackers/cphd.hpp"
+#include "brew/multiObjectTrackers/glmb.hpp"
+#include "brew/multiObjectTrackers/jglmb.hpp"
+#include "brew/multiObjectTrackers/mbm.hpp"
+#include "brew/multiObjectTrackers/pmbm.hpp"
+#include "brew/models/merge/gaussian.hpp"
+#include "brew/utils/fusion/gaussian_gci.hpp"
+#include "brew/utils/fusion/arithmetic_average.hpp"
+#include "brew/utils/fusion/prune.hpp"
+#include "brew/utils/fusion/cap.hpp"
+#include "brew/utils/clustering/dbscan.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 #include <random>
 
@@ -9,7 +22,7 @@ using namespace brew;
 
 TEST(ElementarySymmetric, EmptyVector) {
     Eigen::VectorXd z(0);
-    auto esf = multi_target::elementary_symmetric_functions(z);
+    auto esf = utils::elementary_symmetric_functions(z);
     ASSERT_EQ(esf.size(), 1);
     EXPECT_DOUBLE_EQ(esf(0), 1.0);
 }
@@ -17,7 +30,7 @@ TEST(ElementarySymmetric, EmptyVector) {
 TEST(ElementarySymmetric, SingleElement) {
     Eigen::VectorXd z(1);
     z << 3.0;
-    auto esf = multi_target::elementary_symmetric_functions(z);
+    auto esf = utils::elementary_symmetric_functions(z);
     ASSERT_EQ(esf.size(), 2);
     EXPECT_DOUBLE_EQ(esf(0), 1.0);
     EXPECT_DOUBLE_EQ(esf(1), 3.0);
@@ -27,7 +40,7 @@ TEST(ElementarySymmetric, ThreeElements) {
 
     Eigen::VectorXd z(3);
     z << 1.0, 2.0, 3.0;
-    auto esf = multi_target::elementary_symmetric_functions(z);
+    auto esf = utils::elementary_symmetric_functions(z);
     ASSERT_EQ(esf.size(), 4);
     EXPECT_DOUBLE_EQ(esf(0), 1.0);
     EXPECT_DOUBLE_EQ(esf(1), 6.0);
@@ -39,8 +52,8 @@ TEST(ElementarySymmetric, ESFExcluding) {
 
     Eigen::VectorXd z(3);
     z << 1.0, 2.0, 3.0;
-    auto esf_full = multi_target::elementary_symmetric_functions(z);
-    auto esf_minus = multi_target::esf_excluding(esf_full, 2.0);
+    auto esf_full = utils::elementary_symmetric_functions(z);
+    auto esf_minus = utils::esf_excluding(esf_full, 2.0);
 
     ASSERT_EQ(esf_minus.size(), 3);
     EXPECT_DOUBLE_EQ(esf_minus(0), 1.0);
@@ -49,11 +62,11 @@ TEST(ElementarySymmetric, ESFExcluding) {
 }
 
 TEST(ElementarySymmetric, FallingFactorial) {
-    EXPECT_DOUBLE_EQ(multi_target::falling_factorial(5, 0), 1.0);
-    EXPECT_DOUBLE_EQ(multi_target::falling_factorial(5, 1), 5.0);
-    EXPECT_DOUBLE_EQ(multi_target::falling_factorial(5, 2), 20.0);
-    EXPECT_DOUBLE_EQ(multi_target::falling_factorial(5, 3), 60.0);
-    EXPECT_DOUBLE_EQ(multi_target::falling_factorial(5, 5), 120.0);
+    EXPECT_DOUBLE_EQ(utils::falling_factorial(5, 0), 1.0);
+    EXPECT_DOUBLE_EQ(utils::falling_factorial(5, 1), 5.0);
+    EXPECT_DOUBLE_EQ(utils::falling_factorial(5, 2), 20.0);
+    EXPECT_DOUBLE_EQ(utils::falling_factorial(5, 3), 60.0);
+    EXPECT_DOUBLE_EQ(utils::falling_factorial(5, 5), 120.0);
 }
 
 TEST(CPHD, GaussianPredictCorrectCleanup) {
@@ -68,15 +81,15 @@ TEST(CPHD, GaussianPredictCorrectCleanup) {
     ekf->set_process_noise(G * (0.1 * Eigen::MatrixXd::Identity(G.cols(), G.cols())) * G.transpose());
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
     Eigen::VectorXd birth_mean(4);
     birth_mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd birth_cov = 10.0 * Eigen::MatrixXd::Identity(4, 4);
-    birth->add_component(std::make_unique<models::Gaussian<>>(birth_mean, birth_cov), 0.1);
+    birth->add_component(std::make_unique<brew::models::Gaussian<>>(birth_mean, birth_cov), 0.1);
 
     auto intensity = birth->clone();
 
-    gaussian::CPHD<> cphd;
+    brew::multiObjectTrackers::CPHD<brew::models::Gaussian<>, Eigen::Dynamic> cphd;
     cphd.set_filter(std::move(ekf));
     cphd.set_birth_model(std::move(birth));
     cphd.set_intensity(std::move(intensity));
@@ -123,15 +136,15 @@ TEST(CPHD, Clone) {
     H(0, 0) = 1.0; H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
     Eigen::VectorXd m(4);
     m.setZero();
-    birth->add_component(std::make_unique<models::Gaussian<>>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
+    birth->add_component(std::make_unique<brew::models::Gaussian<>>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
 
-    gaussian::CPHD<> cphd;
+    brew::multiObjectTrackers::CPHD<brew::models::Gaussian<>, Eigen::Dynamic> cphd;
     cphd.set_filter(std::move(ekf));
     cphd.set_birth_model(std::move(birth));
-    cphd.set_intensity(std::make_unique<models::Mixture<models::Gaussian<>>>());
+    cphd.set_intensity(std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>());
     cphd.set_poisson_cardinality(0.5);
     cphd.set_poisson_birth_cardinality(0.1);
 
@@ -144,9 +157,9 @@ TEST(CPHD, ZeroPoissonRateAndZeroSurvivalAreWellDefined) {
     ekf->set_dynamics(std::make_shared<dynamics::SingleIntegrator<>>(1));
     ekf->set_process_noise(Eigen::Matrix2d::Zero());
 
-    gaussian::CPHD<> cphd;
+    brew::multiObjectTrackers::CPHD<brew::models::Gaussian<>, Eigen::Dynamic> cphd;
     cphd.set_filter(std::move(ekf));
-    cphd.set_intensity(std::make_unique<models::Mixture<models::Gaussian<>>>());
+    cphd.set_intensity(std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>());
     cphd.set_poisson_cardinality(2.0);
     cphd.set_poisson_birth_cardinality(0.0);
     cphd.set_prob_survive(0.0);
@@ -172,20 +185,20 @@ TEST(CPHD, CardinalityConvergence) {
     }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
     Eigen::MatrixXd birth_cov = Eigen::MatrixXd::Identity(4, 4);
     birth_cov(0, 0) = 100.0; birth_cov(1, 1) = 100.0;
     birth_cov(2, 2) = 10.0; birth_cov(3, 3) = 10.0;
     Eigen::VectorXd b1(4), b2(4);
     b1 << 0.0, 0.0, 0.0, 0.0;
     b2 << 50.0, 0.0, 0.0, 0.0;
-    birth->add_component(std::make_unique<models::Gaussian<>>(b1, birth_cov), 0.05);
-    birth->add_component(std::make_unique<models::Gaussian<>>(b2, birth_cov), 0.05);
+    birth->add_component(std::make_unique<brew::models::Gaussian<>>(b1, birth_cov), 0.05);
+    birth->add_component(std::make_unique<brew::models::Gaussian<>>(b2, birth_cov), 0.05);
 
-    gaussian::CPHD<> cphd;
+    brew::multiObjectTrackers::CPHD<brew::models::Gaussian<>, Eigen::Dynamic> cphd;
     cphd.set_filter(std::move(ekf));
     cphd.set_birth_model(std::move(birth));
-    cphd.set_intensity(std::make_unique<models::Mixture<models::Gaussian<>>>());
+    cphd.set_intensity(std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>());
     cphd.set_prob_detection(0.95);
     cphd.set_prob_survive(0.99);
     cphd.set_clutter_rate(1.0);

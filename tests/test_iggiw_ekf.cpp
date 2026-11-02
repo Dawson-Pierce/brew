@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/iggiw/filters/iggiw_ekf.hpp"
+#include "brew/filters/iggiw_ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
@@ -29,7 +29,7 @@ TEST_F(IGGIWEKFTest, PredictDecay) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * (2.0 * 2 + 2.0 + 2.0) * Eigen::MatrixXd::Identity(2, 2);
 
-    models::IGGIW<> iggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::IGGIW<> iggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     filter.set_intensity_forgetting_factor(1.0);
     filter.set_intensity_growth(1.0);
@@ -53,7 +53,7 @@ TEST_F(IGGIWEKFTest, PredictDecayShrinksToward1) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 50.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::IGGIW<> iggiw(10.0, 9.0, mean, cov, 10.0, V);
+    brew::models::IGGIW<> iggiw(10.0, 9.0, mean, cov, 10.0, V);
 
     filter.set_intensity_forgetting_factor(0.5);
     filter.set_intensity_growth(1.0);
@@ -78,7 +78,7 @@ TEST_F(IGGIWEKFTest, CorrectWeightedMeasurements) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 50.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::IGGIW<> iggiw(10.0, 5.0, mean, cov, 20.0, V);
+    brew::models::IGGIW<> iggiw(10.0, 5.0, mean, cov, 20.0, V);
     filter.set_eta(1.0);
     filter.set_omega(5.0);
     filter.set_lambda(4.0);
@@ -109,7 +109,7 @@ TEST_F(IGGIWEKFTest, CorrectSingleUnweighted) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 50.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::IGGIW<> iggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::IGGIW<> iggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     Eigen::VectorXd meas(2);
     meas << 0.1, 0.1;
@@ -125,7 +125,7 @@ TEST_F(IGGIWEKFTest, CorrectRejectsNonPositiveWeights) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 50.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::IGGIW<> iggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::IGGIW<> iggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     Eigen::VectorXd meas(3);
     meas << 0.1, 0.1, 0.0;
@@ -138,7 +138,7 @@ TEST_F(IGGIWEKFTest, Gate) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::IGGIW<> iggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::IGGIW<> iggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     Eigen::VectorXd meas_close(3);
     meas_close << 0.1, 0.1, 1.0;

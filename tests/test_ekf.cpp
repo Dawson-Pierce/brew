@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "brew/gaussian/filters/ekf.hpp"
+#include "brew/filters/ekf.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew::filters;

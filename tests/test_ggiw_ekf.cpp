@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "brew/ggiw/filters/ggiw_ekf.hpp"
-#include "brew/ggiw/merge.hpp"
-#include "brew/ggiw/multi_target/phd.hpp"
+#include "brew/filters/ggiw_ekf.hpp"
+#include "brew/models/merge/ggiw.hpp"
+#include "brew/multiObjectTrackers/phd.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
@@ -31,7 +31,7 @@ TEST_F(GGIWEKFTest, PredictDecay) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 5.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
     filter.set_temporal_decay(1.0);
     filter.set_forgetting_factor(1.0);
 
@@ -52,7 +52,7 @@ TEST_F(GGIWEKFTest, CorrectAndLikelihood) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 50.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     Eigen::VectorXd meas(2);
     meas << 0.1, 0.1;
@@ -78,7 +78,7 @@ TEST_F(GGIWEKFTest, Gate) {
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(4, 4);
     Eigen::MatrixXd V = 10.0 * Eigen::MatrixXd::Identity(2, 2);
 
-    models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
 
     Eigen::VectorXd meas_close(2);
     meas_close << 0.1, 0.1;
@@ -95,7 +95,7 @@ TEST_F(GGIWEKFTest, NonzeroMeasurementNoiseTransformsExtentStatistics) {
     Eigen::Vector4d mean = Eigen::Vector4d::Zero();
     Eigen::Matrix4d cov = Eigen::Matrix4d::Identity();
     Eigen::Matrix2d V = 8.0 * Eigen::Matrix2d::Identity();
-    models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
+    brew::models::GGIW<> ggiw(10.0, 5.0, mean, cov, 10.0, V);
     filter.set_measurement_noise(2.0 * Eigen::Matrix2d::Identity());
 
     Eigen::VectorXd packed(4);
@@ -114,10 +114,10 @@ TEST_F(GGIWEKFTest, ComponentCorrectionUsesCovarianceIntersection) {
     Eigen::Vector4d predicted_mean = Eigen::Vector4d::Zero();
     Eigen::Vector4d report_mean;
     report_mean << 2.0, 0.0, 4.0, 0.0;
-    models::GGIW<> predicted(
+    brew::models::GGIW<> predicted(
         4.0, 2.0, predicted_mean, 2.0 * Eigen::Matrix4d::Identity(),
         10.0, 4.0 * Eigen::Matrix2d::Identity());
-    models::GGIW<> report(
+    brew::models::GGIW<> report(
         8.0, 4.0, report_mean, 4.0 * Eigen::Matrix4d::Identity(),
         14.0, 16.0 * Eigen::Matrix2d::Identity());
     filter.set_ci_weight(0.5);
@@ -136,16 +136,16 @@ TEST_F(GGIWEKFTest, ComponentCorrectionUsesCovarianceIntersection) {
 }
 
 TEST(GGIWMerge, PreservesMixtureMoments) {
-    models::Mixture<models::GGIW<>> mix;
+    brew::models::Mixture<brew::models::GGIW<>> mix;
     Eigen::Matrix2d P = Eigen::Matrix2d::Identity();
     Eigen::Matrix2d V1 = 4.0 * Eigen::Matrix2d::Identity();
     Eigen::Matrix2d V2 = 16.0 * Eigen::Matrix2d::Identity();
-    mix.add_component(std::make_unique<models::GGIW<>>(
+    mix.add_component(std::make_unique<brew::models::GGIW<>>(
         4.0, 2.0, Eigen::Vector2d(0.0, 0.0), P, 10.0, V1), 0.25);
-    mix.add_component(std::make_unique<models::GGIW<>>(
+    mix.add_component(std::make_unique<brew::models::GGIW<>>(
         18.0, 3.0, Eigen::Vector2d(2.0, 0.0), P, 14.0, V2), 0.75);
 
-    ggiw::merge(mix, 25.0);
+    brew::models::merge(mix, 25.0);
 
     ASSERT_EQ(mix.size(), 1u);
     EXPECT_TRUE(mix.component(0).mean().isApprox(Eigen::Vector2d(1.5, 0.0), 1e-12));
@@ -160,10 +160,10 @@ TEST(GGIWMerge, PreservesMixtureMoments) {
 
 TEST(GGIWPHD, RetainsDetectedTargetWithZeroGeneratedMeasurements) {
     filters::GGIWEKF<> filter;
-    ggiw::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::GGIW<>, Eigen::Dynamic> phd;
     phd.set_filter(filter.clone());
-    models::Mixture<models::GGIW<>> intensity;
-    intensity.add_component(std::make_unique<models::GGIW<>>(
+    brew::models::Mixture<brew::models::GGIW<>> intensity;
+    intensity.add_component(std::make_unique<brew::models::GGIW<>>(
         10.0, 2.0, Eigen::Vector2d::Zero(), Eigen::Matrix2d::Identity(),
         10.0, 4.0 * Eigen::Matrix2d::Identity()), 0.8);
     phd.set_intensity(intensity.clone());

@@ -1,7 +1,19 @@
 #include <gtest/gtest.h>
-#include "brew/gaussian/gaussian.hpp"
-#include "brew/gaussian/multi_target/phd.hpp"
-#include "brew/gaussian/filters/ekf.hpp"
+#include "brew/models/gaussian.hpp"
+#include "brew/filters/ekf.hpp"
+#include "brew/multiObjectTrackers/phd.hpp"
+#include "brew/multiObjectTrackers/mbm_base.hpp"
+#include "brew/multiObjectTrackers/cphd.hpp"
+#include "brew/multiObjectTrackers/glmb.hpp"
+#include "brew/multiObjectTrackers/jglmb.hpp"
+#include "brew/multiObjectTrackers/mbm.hpp"
+#include "brew/multiObjectTrackers/pmbm.hpp"
+#include "brew/models/merge/gaussian.hpp"
+#include "brew/utils/fusion/gaussian_gci.hpp"
+#include "brew/utils/fusion/arithmetic_average.hpp"
+#include "brew/utils/fusion/prune.hpp"
+#include "brew/utils/fusion/cap.hpp"
+#include "brew/utils/clustering/dbscan.hpp"
 #include "brew/dynamics/single_integrator.hpp"
 
 using namespace brew;
@@ -22,15 +34,15 @@ TEST(PHD, GaussianPredictCorrectCleanup) {
     }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
     Eigen::VectorXd birth_mean(4);
     birth_mean << 0.0, 0.0, 0.0, 0.0;
     Eigen::MatrixXd birth_cov = 10.0 * Eigen::MatrixXd::Identity(4, 4);
-    birth->add_component(std::make_unique<models::Gaussian<>>(birth_mean, birth_cov), 0.1);
+    birth->add_component(std::make_unique<brew::models::Gaussian<>>(birth_mean, birth_cov), 0.1);
 
     auto intensity = birth->clone();
 
-    gaussian::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::Gaussian<>, Eigen::Dynamic> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::move(intensity));
@@ -70,15 +82,15 @@ TEST(PHD, Clone) {
     H(0, 0) = 1.0; H(1, 1) = 1.0;
     ekf->set_measurement_jacobian(H);
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
     Eigen::VectorXd m(4);
     m.setZero();
-    birth->add_component(std::make_unique<models::Gaussian<>>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
+    birth->add_component(std::make_unique<brew::models::Gaussian<>>(m, Eigen::MatrixXd::Identity(4, 4)), 0.1);
 
-    gaussian::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::Gaussian<>, Eigen::Dynamic> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
-    phd.set_intensity(std::make_unique<models::Mixture<models::Gaussian<>>>());
+    phd.set_intensity(std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>());
 
     auto cloned = phd.clone();
     ASSERT_NE(cloned, nullptr);
@@ -98,14 +110,14 @@ TEST(GaussianPHDConcrete, PredictCorrectCleanup) {
     }
     ekf->set_measurement_noise(1.0 * Eigen::MatrixXd::Identity(2, 2));
 
-    auto birth = std::make_unique<models::Mixture<models::Gaussian<>>>();
+    auto birth = std::make_unique<brew::models::Mixture<brew::models::Gaussian<>>>();
     Eigen::VectorXd birth_mean(4);
     birth_mean << 0.0, 0.0, 0.0, 0.0;
     birth->add_component(
-        std::make_unique<models::Gaussian<>>(birth_mean, 10.0 * Eigen::MatrixXd::Identity(4, 4)), 0.1);
+        std::make_unique<brew::models::Gaussian<>>(birth_mean, 10.0 * Eigen::MatrixXd::Identity(4, 4)), 0.1);
     auto intensity = birth->clone();
 
-    gaussian::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::Gaussian<>, Eigen::Dynamic> phd;
     phd.set_filter(std::move(ekf));
     phd.set_birth_model(std::move(birth));
     phd.set_intensity(std::move(intensity));

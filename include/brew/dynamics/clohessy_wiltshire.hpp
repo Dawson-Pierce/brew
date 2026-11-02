@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-#include "brew/assert.hpp"
+#include "brew/utils/assert.hpp"
 #include "brew/dynamics/linear_dynamics.hpp"
 
 namespace brew::dynamics {

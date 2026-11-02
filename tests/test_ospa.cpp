@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "brew/metrics/ospa.hpp"
+#include "brew/utils/metrics/ospa.hpp"
 
-using namespace brew::metrics;
+using namespace brew::utils::metrics;
 
 TEST(OSPA, IdenticalSetsZeroDistance) {
     std::vector<Eigen::VectorXd> est, truth;

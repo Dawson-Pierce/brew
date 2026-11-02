@@ -1,7 +1,7 @@
 #pragma once
 
 #include "linear_dynamics.hpp"
-#include "brew/assert.hpp"
+#include "brew/utils/assert.hpp"
 
 namespace brew::dynamics {
 

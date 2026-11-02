@@ -1,13 +1,13 @@
 #include <gtest/gtest.h>
-#include "brew/assignment/hungarian.hpp"
-#include "brew/assignment/murty.hpp"
-#include "brew/assignment/gibbs.hpp"
+#include "brew/utils/assignment/hungarian.hpp"
+#include "brew/utils/assignment/murty.hpp"
+#include "brew/utils/assignment/gibbs.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <vector>
 
-using namespace brew::assignment;
+using namespace brew::utils::assignment;
 
 namespace {
 

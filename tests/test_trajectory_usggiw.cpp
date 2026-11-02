@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
-#include "brew/trajectory_usggiw/trajectory_usggiw.hpp"
+#include "brew/models/trajectory_usggiw.hpp"
+#include "brew/filters/trajectory_usggiw_ekf.hpp"
+#include "brew/multiObjectTrackers/phd.hpp"
+#include "brew/models/merge/trajectory_usggiw.hpp"
 
 using Inner = brew::models::USGGIW<>;
 using Trajectory = brew::models::TrajectoryUSGGIW<>;
@@ -30,7 +33,7 @@ TEST(TrajectoryUSGGIW, ComponentCorrectionUsesReportState) {
     Trajectory trajectory(4, make_spherical_state(
         Eigen::Vector3d::UnitX(), truth_rate), 4);
     trajectory = filter.predict(1.0, trajectory);
-    const Eigen::Vector3d truth = brew::usggiw::propagate(
+    const Eigen::Vector3d truth = brew::utils::sphere::propagate(
         Eigen::Vector3d::UnitX(), truth_rate, 1.0).direction;
     Inner report = make_spherical_state(truth, Eigen::Vector2d(0.02, -0.01));
     const auto corrected = filter.correct_component(report, trajectory).distribution;
@@ -48,7 +51,7 @@ TEST(TrajectoryUSGGIW, ComponentCorrectionUpdatesRetainedTrajectory) {
     trajectory = filter.predict(1.0, trajectory);
     const Eigen::Vector3d retained_before = trajectory.history_at(0).direction();
     Inner report = make_spherical_state(
-        brew::usggiw::apply_position_error(
+        brew::utils::sphere::apply_position_error(
             trajectory.current().direction(), {0.02, -0.01}),
         trajectory.current().angular_velocity());
 
@@ -76,7 +79,7 @@ TEST(TrajectoryUSGGIW, MergePreservesLongerStoredHistory) {
     brew::models::Mixture<Trajectory> mixture;
     mixture.add_component(mature, 0.2);
     mixture.add_component(recent, 0.8);
-    brew::trajectory_usggiw::merge(mixture, 1.0);
+    brew::models::merge(mixture, 1.0);
 
     ASSERT_EQ(mixture.size(), 1u);
     EXPECT_EQ(mixture.component(0).state_history_directions().cols(), mature_history);
@@ -90,7 +93,7 @@ TEST(TrajectoryUSGGIW, PhdCoastsAndReacquiresAcrossUnobservedWindow) {
     filter.set_measurement_noise(1e-5 * Eigen::Matrix2d::Identity());
     filter.set_ci_weight(0.5);
 
-    brew::trajectory_usggiw::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::TrajectoryUSGGIW<>, Eigen::Dynamic> phd;
     phd.set_filter(filter.clone());
     phd.set_prob_detection(0.9);
     phd.set_prob_survive(1.0);
@@ -113,7 +116,7 @@ TEST(TrajectoryUSGGIW, PhdCoastsAndReacquiresAcrossUnobservedWindow) {
     Eigen::Vector3d truth = Eigen::Vector3d::UnitX();
     Eigen::Vector2d truth_velocity = velocity;
     for (int frame = 0; frame < 20; ++frame) {
-        const auto propagated = brew::usggiw::propagate(truth, truth_velocity, 1.0);
+        const auto propagated = brew::utils::sphere::propagate(truth, truth_velocity, 1.0);
         truth = propagated.direction;
         truth_velocity = propagated.velocity;
         phd.predict(frame, 1.0);
@@ -124,7 +127,7 @@ TEST(TrajectoryUSGGIW, PhdCoastsAndReacquiresAcrossUnobservedWindow) {
     }
 
     Inner report = make_spherical_state(
-        brew::usggiw::apply_position_error(truth, {0.005, -0.003}), truth_velocity);
+        brew::utils::sphere::apply_position_error(truth, {0.005, -0.003}), truth_velocity);
     brew::models::Mixture<Inner> reports;
     reports.add_component(report, 1.0);
     Eigen::MatrixXd visible_observer(3, 1);
@@ -134,7 +137,7 @@ TEST(TrajectoryUSGGIW, PhdCoastsAndReacquiresAcrossUnobservedWindow) {
     Eigen::MatrixXd measurement(3, 1);
     measurement.col(0) = report.direction();
     phd.predict(20, 1.0);
-    const auto propagated = brew::usggiw::propagate(truth, truth_velocity, 1.0);
+    const auto propagated = brew::utils::sphere::propagate(truth, truth_velocity, 1.0);
     truth = propagated.direction;
     truth_velocity = propagated.velocity;
     phd.correct(measurement);
@@ -152,7 +155,7 @@ TEST(TrajectoryUSGGIW, RepeatedCoverageFromOneRingCountsOnce) {
     Filter filter;
     filter.set_process_noise(Eigen::Matrix4d::Zero());
 
-    brew::trajectory_usggiw::PHD<> phd;
+    brew::multiObjectTrackers::PHD<brew::models::TrajectoryUSGGIW<>, Eigen::Dynamic> phd;
     phd.set_filter(filter.clone());
     phd.set_prob_detection(0.2);
     phd.set_prob_survive(1.0);
