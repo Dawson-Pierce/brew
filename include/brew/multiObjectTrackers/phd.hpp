@@ -174,6 +174,12 @@ public:
                 accepted[i] = distance < gate_threshold_;
             }
             filter_->expand_gates(accepted, priors);
+            std::vector<const T*> gated;
+            for (std::size_t i = 0; i < priors.size(); ++i)
+                if (accepted[i]) gated.push_back(priors[i]);
+            std::vector<typename Filter::LogCorrectionResult> corrections;
+            if (!component_mode) corrections = filter_->correct_batch_with_log(packed, gated);
+            std::size_t correction_index = 0;
             std::vector<std::unique_ptr<T>> states;
             std::vector<double> weights, prior_weights, linear_weights;
             bool logarithmic = filter_->log_domain_correction();
@@ -181,7 +187,7 @@ public:
                 if (!accepted[i]) continue;
                 const double prior_weight = intensity_->weight(i);
                 if (!component_mode) {
-                    auto [update, log_likelihood] = filter_->correct_with_log(packed, *priors[i]);
+                    auto [update, log_likelihood] = std::move(corrections[correction_index++]);
                     states.push_back(update.distribution.clone_typed());
                     const double linear = prior_weight * update.likelihood;
                     linear_weights.push_back(linear);

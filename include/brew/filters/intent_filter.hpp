@@ -55,6 +55,13 @@ public:
         intent_.correct_branch(result.first.distribution, predicted);
         return result;
     }
+    std::vector<LogCorrectionResult> correct_batch_with_log(
+            const MeasVector& measurement, const std::vector<const Dist*>& priors) const override {
+        auto result = primary_->correct_batch_with_log(measurement, priors);
+        for (std::size_t i = 0; i < result.size(); ++i)
+            intent_.correct_branch(result[i].first.distribution, *priors[i]);
+        return result;
+    }
     double gate(const MeasVector& measurement, const Dist& predicted) const override {
         return primary_->gate(measurement, predicted);
     }

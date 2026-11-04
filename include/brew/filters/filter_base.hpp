@@ -92,6 +92,15 @@ public:
         return {std::move(result), log_likelihood};
     }
 
+    // Joint preparation may share measurement representations across hypotheses.
+    virtual std::vector<LogCorrectionResult> correct_batch_with_log(
+            const MeasVector& measurement, const std::vector<const Dist*>& priors) const {
+        std::vector<LogCorrectionResult> result;
+        result.reserve(priors.size());
+        for (const auto* prior : priors) result.push_back(correct_with_log(measurement, *prior));
+        return result;
+    }
+
     [[nodiscard]] virtual double gate(
         const MeasVector& measurement,
         const Dist& predicted) const = 0;

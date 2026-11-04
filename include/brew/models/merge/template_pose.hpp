@@ -55,6 +55,9 @@ void merge(models::Mixture<models::TemplatePose<Scalar, D>, N>& mix, double thre
             if (mix.component(i).template_id() != ref_templ_id) continue;
             if (mix.component(i).mode_id() != mix.component(ref).mode_id()) continue;
             if (mix.component(i).impulse_branch() != mix.component(ref).impulse_branch()) continue;
+            // A birth has no preceding interval; retain it separately until prediction.
+            if ((mix.component(i).impulse_parent() < 0)
+                != (mix.component(ref).impulse_parent() < 0)) continue;
 
             const Eigen::VectorXd d = mix.component(i).mean() - mix.component(ref).mean();
 

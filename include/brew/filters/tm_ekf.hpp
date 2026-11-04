@@ -86,44 +86,30 @@ public:
         }
     }
     void adjust_log_weights(std::vector<std::unique_ptr<Dist>>& states,
-            const std::vector<double>& prior_weights, std::vector<double>& log_weights) const override {
-    // Split each parent's surface-score mass using predictive pose evidence.
-    // The Bernoulli prior is already in the two prediction weights.
-    for (std::size_t i = 0; i < states.size(); ++i) {
-        const int parent = states[i]->impulse_parent();
-        if (parent < 0) continue;
-        double max_log = -std::numeric_limits<double>::infinity();
-        double parent_weight = 0.0;
-        double log_zero = -std::numeric_limits<double>::infinity();
-        double log_positive = -std::numeric_limits<double>::infinity();
-        double observation = std::numeric_limits<double>::quiet_NaN();
-        double variance = std::numeric_limits<double>::quiet_NaN();
-        for (std::size_t j = 0; j < states.size(); ++j) {
-            if (states[j]->impulse_parent() != parent) continue;
-            const double evidence = states[j]->impulse_log_likelihood();
-            max_log = std::max(max_log, evidence);
-            parent_weight += prior_weights[j];
-            if (states[j]->impulse_branch() == 0) log_zero = evidence;
-            if (states[j]->impulse_branch() == 1) {
-                log_positive = evidence;
-                observation = states[j]->impulse_observation();
-                variance = states[j]->impulse_variance();
+            const std::vector<double>&, std::vector<double>&) const override {
+        // Correction already includes each parent's predictive evidence. Share
+        // sibling evidence for the marginal firing report without renormalizing it.
+        for (auto& state : states) {
+            const int parent = state->impulse_parent();
+            if (parent < 0) continue;
+            double log_zero = -std::numeric_limits<double>::infinity();
+            double log_positive = -std::numeric_limits<double>::infinity();
+            double observation = std::numeric_limits<double>::quiet_NaN();
+            double variance = std::numeric_limits<double>::quiet_NaN();
+            for (const auto& sibling : states) {
+                if (sibling->impulse_parent() != parent) continue;
+                if (sibling->impulse_branch() == 0)
+                    log_zero = sibling->impulse_log_likelihood();
+                if (sibling->impulse_branch() == 1) {
+                    log_positive = sibling->impulse_log_likelihood();
+                    observation = sibling->impulse_observation();
+                    variance = sibling->impulse_variance();
+                }
             }
+            state->set_impulse_branch_evidence(log_zero, log_positive);
+            state->set_impulse_evidence(observation, variance);
         }
-        if (parent_weight <= 0.0 || !std::isfinite(max_log)) continue;
-        double evidence_sum = 0.0;
-        for (std::size_t j = 0; j < states.size(); ++j) {
-            if (states[j]->impulse_parent() == parent)
-                evidence_sum += prior_weights[j]
-                    * std::exp(states[j]->impulse_log_likelihood() - max_log);
-        }
-        const double log_normalizer = max_log + std::log(evidence_sum / parent_weight);
-        log_weights[i] += states[i]->impulse_log_likelihood() - log_normalizer;
-        states[i]->set_impulse_branch_evidence(log_zero, log_positive);
-        states[i]->set_impulse_evidence(observation, variance);
-    }
-    for (auto& state : states) update_firing_report(*state);
-
+        for (auto& state : states) update_firing_report(*state);
     }
 
     [[nodiscard]] std::unique_ptr<Base> clone() const override {
@@ -162,6 +148,7 @@ public:
             const dynamics::ImpulseModel&, int branch, int parent) const override {
         auto predicted = predict_branch(dt, previous, branch);
         predicted.set_impulse_branch(branch, parent);
+        update_firing_report(predicted);
         return predicted;
     }
 
@@ -245,23 +232,80 @@ public:
     }
 
     [[nodiscard]] LogCorrectionResult correct_with_log(
-        const typename Base::MeasVector& measurement,
-        const Dist& predicted) const override {
+            const typename Base::MeasVector& measurement, const Dist& predicted) const override {
+        const auto cloud = measurement_cloud(measurement);
+        const auto registered = register_cloud(cloud, predicted);
+        last_icp_iterations_ = registered.iterations;
+        return correct_registered(predicted, registered, surface_score(cloud, predicted.template_id(), registered));
+    }
 
+    std::vector<LogCorrectionResult> correct_batch_with_log(
+            const typename Base::MeasVector& measurement,
+            const std::vector<const Dist*>& priors) const override {
+        const auto cloud = measurement_cloud(measurement);
+        using Registration = utils::registration::IcpPseudoMeasurement;
+        std::unordered_map<int, std::vector<std::pair<Registration, double>>> candidates;
+        // Every gated hypothesis contributes a registration start. Birth and
+        // continuation priors then compete using the same set of fitted poses.
+        for (const auto* prior : priors) {
+            auto fit = register_cloud(cloud, *prior);
+            auto& fits = candidates[prior->template_id()];
+            const bool duplicate = std::any_of(fits.begin(), fits.end(), [&](const auto& item) {
+                return (item.first.t-fit.t).norm() < 1e-9 && (item.first.R-fit.R).norm() < 1e-9;
+            });
+            if (!duplicate) fits.emplace_back(fit, surface_score(cloud, prior->template_id(), fit));
+        }
+        std::vector<std::vector<LogCorrectionResult>> evaluated;
+        for (const auto* prior : priors) {
+            std::vector<LogCorrectionResult> alternatives;
+            for (const auto& [fit, score] : candidates.at(prior->template_id())) {
+                auto registered = fit;
+                registered.R_ref = prior->needs_pca_alignment() ? fit.R : prior->rotation();
+                alternatives.push_back(correct_registered(*prior, registered, score));
+            }
+            evaluated.push_back(std::move(alternatives));
+        }
+        std::vector<LogCorrectionResult> result;
+        for (std::size_t i = 0; i < priors.size(); ++i) {
+            std::size_t best = 0;
+            double best_score = -std::numeric_limits<double>::infinity();
+            for (std::size_t k = 0; k < evaluated[i].size(); ++k) {
+                double score = evaluated[i][k].second;
+                if (priors[i]->impulse_parent() >= 0) {
+                    score = -std::numeric_limits<double>::infinity();
+                    for (std::size_t j = 0; j < priors.size(); ++j) {
+                        if (priors[j]->impulse_parent() != priors[i]->impulse_parent()) continue;
+                        const double probability = priors[j]->impulse_branch() == 1
+                            ? impulse_probability() : 1.0-impulse_probability();
+                        score = utils::firing_detail::log_add(score,
+                            std::log(probability) + evaluated[j][k].second);
+                    }
+                }
+                if (score > best_score) { best_score = score; best = k; }
+            }
+            // Keep siblings on one registered pose, selected by their marginal
+            // predictive score. This is a dominant-mode approximation, not a sum
+            // over duplicate ICP convergence points.
+            last_icp_iterations_ = candidates.at(priors[i]->template_id())[best].first.iterations;
+            result.push_back(evaluated[i][best]);
+        }
+        return result;
+    }
+
+private:
+    utils::registration::PointCloud measurement_cloud(const typename Base::MeasVector& measurement) const {
         BREW_ASSERT(icp_runner_.ready(), "TmEkf: ICP and template library must be set");
+        BREW_ASSERT(measurement.size() > 0 && measurement.size() % 3 == 0,
+            "TmEkf: measurement must contain one or more packed 3D points");
+        return utils::registration::PointCloud(Eigen::Map<const Eigen::MatrixXd>(
+            measurement.data(), 3, measurement.size()/3));
+    }
 
+    utils::registration::IcpPseudoMeasurement register_cloud(
+            const utils::registration::PointCloud& meas_cloud, const Dist& predicted) const {
         constexpr int d = 3;
-        const int n_trans = predicted.trans_dim();
-        const int n_rot = predicted.rot_dim();
         const int n_aug = predicted.aug_dim();
         const auto& pos_idx = predicted.pos_indices();
-
-        const int M = static_cast<int>(measurement.size()) / d;
-        BREW_ASSERT(M > 0 && measurement.size() % d == 0,
-            "TmEkf: measurement must contain one or more packed 3D points");
-        Eigen::MatrixXd meas_mat = Eigen::Map<const Eigen::MatrixXd>(measurement.data(), d, M);
-        utils::registration::PointCloud meas_cloud(meas_mat);
-
         // Sibling impulse branches must use the same registration initialization.
         // Remove only the positive branch's nominal impulse increment here.
         Eigen::Vector3d registration_position = predicted.position();
@@ -275,8 +319,25 @@ public:
         const auto psm = icp_runner_.run(
             meas_cloud, predicted.template_id(),
             predicted.rotation(), registration_position, predicted.needs_pca_alignment());
-        last_icp_iterations_ = psm.iterations;
+        return psm;
 
+    }
+
+    double surface_score(const utils::registration::PointCloud& cloud, int template_id,
+            const utils::registration::IcpPseudoMeasurement& fit) const {
+        return std::isfinite(fit.log_likelihood) ? icp_runner_.surface_log_likelihood(
+            cloud, template_id, fit.R, fit.t,
+            surface_sigma_sq_, surface_outlier_probability_, surface_outlier_volume_)
+            : -std::numeric_limits<double>::infinity();
+    }
+
+    LogCorrectionResult correct_registered(const Dist& predicted,
+            const utils::registration::IcpPseudoMeasurement& psm, double log_surface) const {
+        constexpr int d = 3;
+        const int n_trans = predicted.trans_dim();
+        const int n_rot = predicted.rot_dim();
+        const int n_aug = predicted.aug_dim();
+        const auto& pos_idx = predicted.pos_indices();
         Eigen::MatrixXd H_pos = Eigen::MatrixXd::Zero(d, n_trans);
         for (int i = 0; i < d; ++i) {
             H_pos(i, pos_idx[i]) = 1.0;
@@ -297,7 +358,7 @@ public:
         R_pose.topRightCorner<3, 3>().setZero();
         R_pose.bottomLeftCorner<3, 3>().setZero();
         R_pose.bottomRightCorner<3, 3>() = icp_runner_.pose_rotation_covariance(
-            predicted.template_id(), psm.R, predicted.position().norm(),
+            predicted.template_id(), psm.R, psm.t.norm(),
             pose_point_sigma_sq_, pose_angular_pitch_, pose_return_cap_);
 
         Eigen::MatrixXd P = predicted.covariance();
@@ -352,17 +413,13 @@ public:
             log_pose_evidence += 0.5 * observation * observation / observation_variance
                 + log_magnitude_mass;
         }
-        corrected.set_impulse_log_likelihood(log_pose_evidence);
-
-        // Siblings share the registration score. Their predictive pose evidence
-        // allocates the parent's detection mass between impulse hypotheses.
-        const double log_L = std::isfinite(psm.log_likelihood)
-            ? icp_runner_.surface_log_likelihood(
-                meas_cloud, predicted.template_id(),
-                predicted.impulse_parent() >= 0 ? psm.R : corrected.rotation(),
-                predicted.impulse_parent() >= 0 ? psm.t : corrected.position(),
-                surface_sigma_sq_, surface_outlier_probability_, surface_outlier_volume_)
-            : -std::numeric_limits<double>::infinity();
+        // Integrate a local Gaussian approximation of the surface likelihood
+        // against the predicted pose. Its curvature volume makes the integral
+        // approach the surface peak as prior uncertainty tends to zero.
+        const double log_pose_volume = 0.5 * (m_dim * std::log(2.0 * M_PI)
+            + R_pose.ldlt().vectorD().array().log().sum());
+        const double log_L = log_surface + log_pose_evidence + log_pose_volume;
+        corrected.set_impulse_log_likelihood(log_L);
         const double likelihood = std::isfinite(log_L)
             ? std::exp(std::clamp(log_L, -700.0, 700.0)) : 0.0;
 
@@ -370,6 +427,7 @@ public:
         return {{std::move(corrected), likelihood}, log_L};
     }
 
+public:
     [[nodiscard]] double gate(
         const typename Base::MeasVector& measurement,
         const Dist& predicted) const override {
@@ -446,7 +504,7 @@ public:
     // Report inference uses the same physical prior as the primary recursion.
     // It does not modify state moments, measurement likelihoods, or RFS weights.
     void update_firing_report(Dist& current) const {
-        if (impulse_max() <= 0.0) { current.set_firing({}); return; }
+        if (impulse_max() <= 0.0 || current.impulse_parent() < 0) { current.set_firing({}); return; }
         using namespace utils::firing_detail;
         auto report = firing_prior(impulse_probability(), impulse_max());
         if (std::isfinite(current.impulse_observation())) {

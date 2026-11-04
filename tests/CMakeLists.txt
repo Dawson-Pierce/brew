@@ -75,6 +75,10 @@ add_executable(brew_constructor_config_tests test_constructor_config.cpp)
 target_link_libraries(brew_constructor_config_tests PRIVATE brew)
 add_test(NAME brew_constructor_config_tests COMMAND brew_constructor_config_tests)
 
+add_executable(brew_tm_evidence_tests test_tm_evidence.cpp)
+target_link_libraries(brew_tm_evidence_tests PRIVATE brew)
+add_test(NAME brew_tm_evidence_tests COMMAND brew_tm_evidence_tests)
+
 if(BREW_ENABLE_PLOTTING)
     add_executable(test_math_utils test_math_utils.cpp)
     target_link_libraries(test_math_utils PRIVATE brew GTest::gtest_main)

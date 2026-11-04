@@ -101,7 +101,7 @@ int main() {
     motion->set_impulse_model(brew::dynamics::ImpulseModel(impulse, Eigen::Vector3d::UnitX(), {3,4,5}, true));
     configured_primary.set_dynamics(motion);
     const auto missed_birth = configured_primary.missed_detection(pose(100), .8, 1.);
-    close(missed_birth[0].distribution.firing().impulse_probability, impulse.probability);
+    assert(std::isnan(missed_birth[0].distribution.firing().impulse_probability));
     Estimator estimator;
     estimator.hypotheses = test_hypotheses();
     auto first = pose(100);
@@ -111,10 +111,12 @@ int main() {
     auto cloned = first.clone_typed();
     assert(cloned->augmentation<brew::models::CategoricalIntent>().probabilities == first.augmentation<brew::models::CategoricalIntent>().probabilities);
     auto second = first;
+    second.set_impulse_branch(0, 0);
     second.set_impulse_evidence(0.1, 1e-5);
     configured_primary.update_firing_report(second);
     estimator.correct(second, &first);
     auto shared_first = pose(100), shared_second = pose(100);
+    shared_second.set_impulse_branch(0, 0);
     shared_second.set_impulse_evidence(.1, 1e-5);
     configured.correct(shared_first, nullptr);
     configured_primary.update_firing_report(shared_second);
